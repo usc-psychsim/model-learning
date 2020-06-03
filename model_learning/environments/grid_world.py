@@ -73,10 +73,6 @@ class GridWorld(object):
         action = agent.addAction({'verb': 'move', 'action': 'nowhere'})
         tree = makeTree(noChangeMatrix(x))
         self.world.setDynamics(x, action, tree)
-        # TODO is this needed?
-        tree = makeTree(noChangeMatrix(y))
-        self.world.setDynamics(y, action, tree)
-        self.agent_actions[agent.name].append(action)
 
         # move right
         action = agent.addAction({'verb': 'move', 'action': 'right'})
