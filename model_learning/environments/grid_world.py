@@ -5,7 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARETDOWNBASE
-from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey
+from psychsim.action import ActionSet
+from psychsim.agent import Agent
+from psychsim.world import World
+from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet
 from model_learning.util.plot import distinct_colors
 from model_learning.trajectories import generate_trajectories
 
@@ -49,33 +52,50 @@ POLICY_MARKER_COLOR = 'dimgrey'
 
 
 class GridWorld(object):
-    def __init__(self, world, width, height):
+    def __init__(self, world, width, height, name=''):
+        """
+        Creates a new gridworld.
+        :param World world: the PsychSim world associated with this gridworld.
+        :param int width: the number of horizontal cells.
+        :param int height: the number of vertical cells.
+        :param str name: the name of this gridworld, used as a suffix for features, actions, etc.
+        """
         self.world = world
         self.width = width
         self.height = height
+        self.name = name
+
         self.agent_actions = {}
 
     def add_agent_dynamics(self, agent):
-
+        """
+        Adds the PsychSim action dynamics for the given agent to move in this gridworld.
+        The 4 cardinal movement actions plus a stay-still/no-op action is added.
+        Also registers those actions for later usage.
+        :param Agent agent: the agent to which add the action movement dynamics.
+        :rtype: list[ActionSet]
+        :return: a list containing the agent's newly created actions.
+        """
         assert agent.name not in self.agent_actions, \
             'An agent was already registered with the name \'{}\''.format(agent.name)
         self.agent_actions[agent.name] = []
 
         # creates agent's location feature
         x = self.world.defineState(
-            agent.name, X_FEATURE, int, 0, self.width - 1, '{}\'s horizontal location'.format(agent.name))
+            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, '{}\'s horizontal location'.format(agent.name))
         self.world.setFeature(x, 0)
         y = self.world.defineState(
-            agent.name, Y_FEATURE, int, 0, self.height - 1, '{}\'s vertical location'.format(agent.name))
+            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, '{}\'s vertical location'.format(agent.name))
         self.world.setFeature(y, 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op)
         action = agent.addAction({'verb': 'move', 'action': 'nowhere'})
         tree = makeTree(noChangeMatrix(x))
         self.world.setDynamics(x, action, tree)
+        self.agent_actions[agent.name].append(action)
 
         # move right
-        action = agent.addAction({'verb': 'move', 'action': 'right'})
+        action = agent.addAction({'verb': 'move' + self.name, 'action': 'right'})
         tree = makeTree({'if': thresholdRow(x, self.width - 1),  # if loc is right border
                          True: noChangeMatrix(x),  # stay still
                          False: incrementMatrix(x, 1)})  # else move right
@@ -83,7 +103,7 @@ class GridWorld(object):
         self.agent_actions[agent.name].append(action)
 
         # move left
-        action = agent.addAction({'verb': 'move', 'action': 'left'})
+        action = agent.addAction({'verb': 'move' + self.name, 'action': 'left'})
         tree = makeTree({'if': thresholdRow(x, 1),  # if loc is not left border
                          True: incrementMatrix(x, -1),  # move left
                          False: noChangeMatrix(x)})  # else stay still
@@ -91,7 +111,7 @@ class GridWorld(object):
         self.agent_actions[agent.name].append(action)
 
         # move up
-        action = agent.addAction({'verb': 'move', 'action': 'up'})
+        action = agent.addAction({'verb': 'move' + self.name, 'action': 'up'})
         tree = makeTree({'if': thresholdRow(y, self.height - 1),  # if loc is up border
                          True: noChangeMatrix(y),  # stay still
                          False: incrementMatrix(y, 1)})  # else move right
@@ -99,30 +119,58 @@ class GridWorld(object):
         self.agent_actions[agent.name].append(action)
 
         # move down
-        action = agent.addAction({'verb': 'move', 'action': 'down'})
+        action = agent.addAction({'verb': 'move' + self.name, 'action': 'down'})
         tree = makeTree({'if': thresholdRow(y, 1),  # if loc is not bottom border
                          True: incrementMatrix(y, -1),  # move down
                          False: noChangeMatrix(y)})  # else stay still
         self.world.setDynamics(y, action, tree)
         self.agent_actions[agent.name].append(action)
 
-    @staticmethod
-    def get_location_features(agent):
-        x = stateKey(agent.name, X_FEATURE)
-        y = stateKey(agent.name, Y_FEATURE)
+        return self.agent_actions[agent.name]
+
+    def get_location_features(self, agent):
+        """
+        Gets the agent's (X,Y) features in the gridworld.
+        :param Agent agent: the agent for which to get the location features.
+        :rtype: (str,str)
+        :return: a tuple containing the (X, Y) agent features.
+        """
+        x = stateKey(agent.name, X_FEATURE + self.name)
+        y = stateKey(agent.name, Y_FEATURE + self.name)
         return x, y
 
-    def generate_trajectories(self, n_trajectories, trajectory_length, agent, horizon,
-                              init_feats=None, model=None, selection=None, seed=0):
-
+    def generate_trajectories(self, n_trajectories, trajectory_length, agent,
+                              init_feats=None, model=None, horizon=None, selection=None, seed=0):
+        """
+        Generates a number of fixed-length agent trajectories/traces/paths (state-action pairs).
+        :param int n_trajectories: the number of trajectories to be generated.
+        :param int trajectory_length: the length of the generated trajectories.
+        :param Agent agent: the agent for which to record the actions.
+        :param list[list] init_feats: a list of initial feature states from which to randomly initialize the
+        trajectories. Each item is a list of feature values in the same order of `features`. If `None`, then features
+        will be initialized uniformly at random according to their domain.
+        :param str model: the agent model used to generate the trajectories.
+        :param int horizon: the agent's planning horizon.
+        :param str selection: the action selection criterion, to untie equal-valued actions.
+        :param int seed: the seed used to initialize the random number generator.
+        :rtype: list[list[VectorDistributionSet, ActionSet]]
+        :return: the generated agent trajectories.
+        """
         # get relevant features for this world (x-y location)
         x, y = self.get_location_features(agent)
 
-        # generate trajectories
-        return generate_trajectories(self.world, agent, n_trajectories, trajectory_length,
+        # generate trajectories starting from random locations in the gridworld
+        return generate_trajectories(agent, n_trajectories, trajectory_length,
                                      [x, y], init_feats, model, horizon, selection, seed)
 
     def get_all_states(self, agent):
+        """
+        Collects all PsychSim world states that the given agent can be in according to the gridworld's locations.
+        Other PsychSim features *are not* changed, i.e., the agent does not perform any actions.
+        :param Agent agent: the agent for which to get the states.
+        :rtype: list[VectorDistributionSet]
+        :return: a list of PsychSim states in the left-right, bottom-up order.
+        """
         old_state = copy.deepcopy(self.world.state)
         states = []
 
@@ -138,15 +186,19 @@ class GridWorld(object):
         return states
 
     def print_trajectories_cmd_line(self, trajectories):
+        """
+        Prints the given trajectories to the command-line.
+        :param list[list[VectorDistributionSet, ActionSet]] trajectories: the set of trajectories to save, containing
+        several sequences of state-action pairs.
+        :return:
+        """
         if len(trajectories) == 0 or len(trajectories[0]) == 0:
             return
 
         name = trajectories[0][0][1]['subject']
-        x = stateKey(name, X_FEATURE)
-        y = stateKey(name, Y_FEATURE)
-
-        # initial checks
         assert name in self.world.agents, 'Agent \'{}\' does not exist in the world!'.format(name)
+
+        x, y = self.get_location_features(self.world.agents[name])
         assert x in self.world.variables, 'Agent \'{}\' does not have x location feature'.format(name)
         assert y in self.world.variables, 'Agent \'{}\' does not have y location feature'.format(name)
 
@@ -248,8 +300,11 @@ class GridWorld(object):
             return
 
         name = trajectories[0][0][1]['subject']
-        x = stateKey(name, X_FEATURE)
-        y = stateKey(name, Y_FEATURE)
+        assert name in self.world.agents, 'Agent \'{}\' does not exist in the world!'.format(name)
+
+        x, y = self.get_location_features(self.world.agents[name])
+        assert x in self.world.variables, 'Agent \'{}\' does not have x location feature'.format(name)
+        assert y in self.world.variables, 'Agent \'{}\' does not have y location feature'.format(name)
 
         plt.figure()
         ax = plt.gca()

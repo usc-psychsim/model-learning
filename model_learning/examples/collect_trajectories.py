@@ -17,6 +17,7 @@ ENV_SIZE = 10
 
 AGENT_NAME = 'Agent'
 HORIZON = 3
+RATIONALITY = 1 / 0.1  # inverse temperature
 SELECTION = 'distribution'  # stochastic over all actions
 
 NUM_TRAJECTORIES = 20
@@ -31,7 +32,9 @@ if __name__ == '__main__':
     # create world and agent
     world = World()
     agent = world.addAgent(AGENT_NAME)
+    # agent.setAttribute('selection', SELECTION)
     agent.setAttribute('horizon', HORIZON)
+    agent.setAttribute('rationality', RATIONALITY)
 
     # create grid-world and add world dynamics to agent
     env = GridWorld(world, ENV_SIZE, ENV_SIZE)
@@ -47,7 +50,7 @@ if __name__ == '__main__':
 
     # generate trajectories using agent's policy
     print('Generating trajectories...')
-    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent, HORIZON, selection=SELECTION)
+    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent, selection=SELECTION)
     env.print_trajectories_cmd_line(trajectories)
     env.plot_trajectories(trajectories, os.path.join(OUTPUT_DIR, 'trajectories.png'))
 

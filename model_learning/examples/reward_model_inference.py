@@ -98,15 +98,17 @@ if __name__ == '__main__':
     true_model = get_true_model_name(agent)
 
     # agent's models
-    agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=.8, selection=MODEL_SELECTION)
+    agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
 
-    agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=.8, selection=MODEL_SELECTION)
+    agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
     agent.setReward(maximizeFeature(x, agent.name), 1., MAXIMIZE_LOC_MODEL)
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
 
     if INCLUDE_RANDOM_MODEL:
-        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.8, selection=MODEL_SELECTION)
+        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
+        
+    model_names = [name for name in agent.models.keys() if name != true_model]
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,
@@ -117,18 +119,24 @@ if __name__ == '__main__':
     observer.omega = {key for key in world.state.keys()
                       if key not in {modelKey(agent.name), modelKey(observer.name)}}  # rewardKey(agent.name),
 
-    random.seed(0)
+    # generates trajectory
+    logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
+    trajectory = env.generate_trajectories(
+        1, NUM_STEPS, agent, [[world.getFeature(x, unique=True), world.getFeature(y, unique=True)]])[0]
+    env.plot_trajectories([trajectory], os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
-    model_names = [name for name in agent.models.keys() if name != true_model]
+    # gets and prints beliefs
     probs = np.zeros((NUM_STEPS, len(model_names)))
+    for t, sa in enumerate(trajectory):
+        state, action = sa
 
-    for t in range(NUM_STEPS):
         logging.info('===============================================')
-        logging.info('{}.\tlocation: ({},{})'.format(t, world.getValue(x), world.getValue(y)))
+        logging.info('{}.\tlocation: ({},{})'.format(
+            t, world.getFeature(x, state, unique=True), world.getFeature(y, state, unique=True)))
 
-        beliefs = observer.getBelief()
+        beliefs = observer.getBelief(state)
         assert len(beliefs) == 1  # Because we are dealing with a known-identity agent
-        belief = next(iter(observer.getBelief().values()))
+        belief = next(iter(beliefs.values()))
         model_dist = world.getFeature(modelKey(agent.name), belief)
         for model in model_dist.domain():
             probs[t, model_names.index(model)] = model_dist[model]
@@ -136,13 +144,7 @@ if __name__ == '__main__':
         logging.info('Observer models agent as:')
         logging.info(model_dist)
 
-        decision = agent.decide()
-        action = decision[world.getValue(modelKey(agent.name))]['action']
-        if isinstance(action, Distribution):
-            action = random.choices(action.domain(), action.values())[0]
         logging.info(action)
-
-        world.step(action)
 
     # create and save inference evolution plot
     _plot_evolution(probs.T)
