@@ -8,7 +8,8 @@ from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARET
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.world import World
-from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet
+from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
+    KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
 from model_learning.trajectories import generate_trajectories
 
@@ -52,6 +53,11 @@ POLICY_MARKER_COLOR = 'dimgrey'
 
 
 class GridWorld(object):
+    """
+    Represents a simple gridworld environment in which agents can move in the 4 cardinal directions or stay in the same
+    location.
+    """
+
     def __init__(self, world, width, height, name=''):
         """
         Creates a new gridworld.
@@ -139,6 +145,41 @@ class GridWorld(object):
         y = stateKey(agent.name, Y_FEATURE + self.name)
         return x, y
 
+    def get_location_plane(self, agent, locs, comp=0):
+        """
+        Gets a PsychSim plane for the given agent that can be used to compare it's current location against the given
+        set of locations. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
+        Also, comparison uses logical OR, i.e., it verifies against *any* of the given locations.
+        :param Agent agent: the agent for which to get the comparison plane.
+        :param list[(int,int)] locs: a list of target XY coordinate tuples.
+        :param int comp: the comparison to be made (0:'==', 1:'>', 2:'<').
+        :rtype: KeyedPlane
+        :return: the plane corresponding to comparing the agent's location against the given coordinates.
+        """
+        x_feat = stateKey(agent.name, X_FEATURE + self.name)
+        y_feat = stateKey(agent.name, Y_FEATURE + self.name)
+        loc_values = {self.xy_to_idx(x, y) for x, y in locs}
+        return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}), loc_values, comp)
+
+    def idx_to_xy(self, i):
+        """
+        Converts the given location index to XY coordinates. Indexes are taken from the left-right, bottom-up order.
+        :param int i: the index of the location.
+        :rtype: (int, int)
+        :return: a tuple containing the XY coordinates corresponding to the given location index.
+        """
+        return i % self.width, i // self.width
+
+    def xy_to_idx(self, x, y):
+        """
+        Converts the given XY coordinates to a location index. Indexes are taken from the left-right, bottom-up order.
+        :param int x: the location's X coordinate.
+        :param int y: the location's Y coordinate.
+        :rtype: int
+        :return: an integer corresponding to the given coordinates' location index.
+        """
+        return x + y * self.width
+
     def generate_trajectories(self, n_trajectories, trajectory_length, agent,
                               init_feats=None, model=None, horizon=None, selection=None, seed=0):
         """
@@ -163,6 +204,19 @@ class GridWorld(object):
         return generate_trajectories(agent, n_trajectories, trajectory_length,
                                      [x, y], init_feats, model, horizon, selection, seed)
 
+    def set_achieve_locations_reward(self, agent, locs, weight):
+        """
+        Sets a reward to the agent such that if its current location is equal to one of the given locations it will
+        receive the given value. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
+        :param Agent agent: the agent for which to get set the reward.
+        :param list[(int,int)] locs: a list of target XY coordinate tuples.
+        :param float weight: the weight/value associated with this reward.
+        :return:
+        """
+        return agent.setReward(makeTree({'if': self.get_location_plane(agent, locs),
+                                         True: setToConstantMatrix(rewardKey(agent.name), 1.),
+                                         False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight)
+
     def get_all_states(self, agent):
         """
         Collects all PsychSim world states that the given agent can be in according to the gridworld's locations.
@@ -171,6 +225,8 @@ class GridWorld(object):
         :rtype: list[VectorDistributionSet]
         :return: a list of PsychSim states in the left-right, bottom-up order.
         """
+        assert agent.world == self.world, 'Agent\'s world different from the environment\'s world!'
+
         old_state = copy.deepcopy(self.world.state)
         states = []
 

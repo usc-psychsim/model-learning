@@ -4,7 +4,7 @@ from psychsim.helper_functions import get_true_model_name
 from psychsim.reward import maximizeFeature
 from psychsim.world import World
 from model_learning import get_policy
-from model_learning.environments.grid_world import GridWorld
+from model_learning.environments.gridworld import GridWorld
 from model_learning.util.io import create_clear_dir
 
 __author__ = 'Pedro Sequeira'

@@ -1,14 +1,13 @@
 import os
 import logging
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 from psychsim.probability import Distribution
 from psychsim.world import World
 from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey
-from psychsim.reward import achieveFeatureValue, maximizeFeature
+from psychsim.reward import maximizeFeature
 from psychsim.helper_functions import get_true_model_name
-from model_learning.environments.grid_world import GridWorld
+from model_learning.environments.gridworld import GridWorld
 from model_learning.util.io import create_clear_dir
 
 __author__ = 'Pedro Sequeira'
@@ -81,8 +80,7 @@ if __name__ == '__main__':
 
     # set true reward function (achieve middle location)
     x, y = env.get_location_features(agent)
-    agent.setReward(achieveFeatureValue(x, 4, agent.name), 1.)
-    agent.setReward(achieveFeatureValue(y, 4, agent.name), 1.)
+    env.set_achieve_locations_reward(agent, [(4, 4)], 1.)
 
     world.setOrder([{agent.name}])
 
@@ -107,7 +105,7 @@ if __name__ == '__main__':
     if INCLUDE_RANDOM_MODEL:
         agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
-        
+
     model_names = [name for name in agent.models.keys() if name != true_model]
 
     # observer has uniform prior distribution over possible agent models
