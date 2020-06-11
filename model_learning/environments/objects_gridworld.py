@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-
-from psychsim.pwl import andRow
 from psychsim.world import World
 from psychsim.agent import Agent
 from model_learning.environments.gridworld import GridWorld
@@ -68,6 +66,26 @@ class ObjectsGridWorld(GridWorld):
                 inner_circle = plt.Circle((loc[0] + .5, loc[1] + .5), 0.1, color=obj_colors[color[1]])
                 ax.add_artist(outer_circle)
                 ax.add_artist(inner_circle)
+
+    def get_loc_feature_matrix(self, outer=True, inner=True):
+        """
+        Gets a matrix containing boolean features for the presence of object colors in each indexed location in the
+        environment, where a feature is `1` if there is an object of the corresponding color in that location, `0`
+        otherwise. Location index is given in a left-right, bottom-up order.
+        :param bool outer: whether to include features for the presence of objects' outer colors.
+        :param bool inner: whether to include features for the presence of objects' inner colors.
+        :rtype: np.ndarray
+        :return: an array of shape (width*height, num_colors*(outer+inner)) containing the color features for each
+        environment location.
+        """
+        feat_matrix = np.zeros((self.width * self.height, self.num_colors * (outer + inner)))
+        for loc, color in self.objects.items():
+            idx = self.xy_to_idx(*loc)
+            if outer:
+                feat_matrix[idx][color[0]] = 1.
+            if inner:
+                feat_matrix[idx][color[1]] = 1.
+        return feat_matrix
 
     def set_linear_color_reward(self, agent, weights_outer, weights_inner=None):
         """
