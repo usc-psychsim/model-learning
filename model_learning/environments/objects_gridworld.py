@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -82,9 +83,29 @@ class ObjectsGridWorld(GridWorld):
         for loc, color in self.objects.items():
             idx = self.xy_to_idx(*loc)
             if outer:
-                feat_matrix[idx][color[0]] = 1.
+                feat_matrix[idx, color[0]] = 1.
             if inner:
-                feat_matrix[idx][color[1]] = 1.
+                feat_matrix[idx, self.num_colors + color[1]] = 1.
+        return feat_matrix
+
+    def get_dist_feature_matrix(self, outer=True, inner=True):
+        outer_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
+        inner_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
+        for loc in itertools.product(range(self.width), range(self.height)):
+            x, y = loc
+            for obj_loc, color in self.objects.items():
+                dist = np.linalg.norm(np.array(loc) - obj_loc)
+                outer_dists[x, y, color[0]] = min(outer_dists[x, y, color[0]], dist)
+                inner_dists[x, y, color[1]] = min(inner_dists[x, y, color[1]], dist)
+
+        feat_matrix = np.zeros((self.width * self.height, self.num_colors * (outer + inner)))
+        for x, y in itertools.product(range(self.width), range(self.height)):
+            idx = self.xy_to_idx(x, y)
+            for color in range(self.num_colors):
+                if outer:
+                    feat_matrix[idx, color] = outer_dists[x, y, color]
+                if inner:
+                    feat_matrix[idx, self.num_colors + color] = inner_dists[x, y, color]
         return feat_matrix
 
     def set_linear_color_reward(self, agent, weights_outer, weights_inner=None):

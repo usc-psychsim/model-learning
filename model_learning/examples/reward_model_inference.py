@@ -106,7 +106,7 @@ if __name__ == '__main__':
         agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
 
-    model_names = [name for name in agent.models.keys() if name != true_model]
+    model_names = [name.title().replace('_', ' ') for name in agent.models.keys() if name != true_model]
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,

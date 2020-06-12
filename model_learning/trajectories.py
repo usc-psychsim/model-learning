@@ -53,13 +53,13 @@ def generate_trajectories(agent, n_trajectories, trajectory_length,
 
         # for each step, takes action and registers state-action pairs
         for i in range(trajectory_length):
-            decision = agent.decide(world.state, horizon, None, model, selection,None)
+            decision = agent.decide(world.state, horizon, None, model, selection, None)
             action = decision[world.getFeature(modelKey(agent.name), unique=True)]['action']
             if isinstance(action, Distribution):
                 action = rng.choices(action.domain(), action.values())[0]
 
             trajectory.append((copy.deepcopy(world.state), action))
-            world.step(action)
+            world.step(action, select=True)
 
         trajectories.append(trajectory)
 
