@@ -3,7 +3,6 @@ import logging
 import numpy as np
 import multiprocessing as mp
 from typing import Callable
-from model_learning.util.math import min_max_scale
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_true_model_name

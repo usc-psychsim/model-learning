@@ -15,17 +15,17 @@ __email__ = 'pedrodbs@gmail.com'
 __description__ = ''
 
 # env params
-ENV_SIZE = 5  # 10
-NUM_OBJECTS = 10  # 25
+ENV_SIZE = 10
+NUM_OBJECTS = 25
 NUM_COLORS = 5
-ENV_SEED = 0
+ENV_SEED = 1
 
 # expert params
 EXPERT_NAME = 'Expert'
 EXPERT_THETA = [0.5, -0.4, 0.1, 0., 0.]
 EXPERT_RATIONALITY = 1 / 0.1  # inverse temperature
 EXPERT_SELECTION = 'random'
-EXPERT_SEED = 0
+EXPERT_SEED = 1
 NUM_TRAJECTORIES = 20
 TRAJ_LENGTH = 10  # 15
 
@@ -33,11 +33,11 @@ TRAJ_LENGTH = 10  # 15
 NORM_THETA = True
 LEARNING_RATE = 0.1  # 0.01
 MAX_EPOCHS = 200
-THRESHOLD = 1e-2
-LEARNING_SEED = 0
+THRESHOLD = 1e-3
+LEARNING_SEED = 1
 
 # common params
-HORIZON = 2  # 3
+HORIZON = 3
 PARALLEL = True
 
 OUTPUT_DIR = 'output/examples/linear-reward-learning'
