@@ -1,7 +1,7 @@
 import os
 import logging
 import numpy as np
-import matplotlib.pyplot as plt
+from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
 from psychsim.world import World
 from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey
@@ -40,24 +40,8 @@ SHOW = True
 INCLUDE_RANDOM_MODEL = True
 
 
-def _plot_evolution(probs):
-    plt.figure()
-
-    for i, model_name in enumerate(model_names):
-        plt.plot(probs[i], label=model_name)
-
-    plt.title('Evolution of Model Inference', fontweight='bold', fontsize=12)
-    plt.xlabel('Time', fontweight='bold')
-    plt.ylabel('Model probability', fontweight='bold')
-    plt.xlim([0, NUM_STEPS])
-    plt.legend()
-
-    file_name = os.path.join(OUTPUT_DIR, 'inference.png')
-    plt.savefig(file_name, pad_inches=0, bbox_inches='tight')
-    logging.info('Saved model inference evolution plot to:\n\t{}'.format(file_name))
-    if SHOW:
-        plt.show()
-    plt.close()
+def _get_fancy_name(name):
+    return name.title().replace('_', ' ')
 
 
 if __name__ == '__main__':
@@ -106,7 +90,7 @@ if __name__ == '__main__':
         agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
 
-    model_names = [name.title().replace('_', ' ') for name in agent.models.keys() if name != true_model]
+    model_names = [_get_fancy_name(name) for name in agent.models.keys() if name != true_model]
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,
@@ -137,7 +121,7 @@ if __name__ == '__main__':
         belief = next(iter(beliefs.values()))
         model_dist = world.getFeature(modelKey(agent.name), belief)
         for model in model_dist.domain():
-            probs[t, model_names.index(model)] = model_dist[model]
+            probs[t, model_names.index(_get_fancy_name(model))] = model_dist[model]
 
         logging.info('Observer models agent as:')
         logging.info(model_dist)
@@ -145,4 +129,5 @@ if __name__ == '__main__':
         logging.info(action)
 
     # create and save inference evolution plot
-    _plot_evolution(probs.T)
+    plot_evolution(probs.T, model_names, 'Evolution of Model Inference', None,
+                   os.path.join(OUTPUT_DIR, 'inference.png'), 'Time', 'Model Probability', True)

@@ -11,7 +11,7 @@ from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
-from model_learning.trajectories import generate_trajectories
+from model_learning import generate_trajectories
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -180,8 +180,8 @@ class GridWorld(object):
         """
         return x + y * self.width
 
-    def generate_trajectories(self, n_trajectories, trajectory_length, agent,
-                              init_feats=None, model=None, horizon=None, selection=None, seed=0):
+    def generate_trajectories(self, n_trajectories, trajectory_length, agent, init_feats=None,
+                              model=None, horizon=None, selection=None, processes=-1, seed=0):
         """
         Generates a number of fixed-length agent trajectories/traces/paths (state-action pairs).
         :param int n_trajectories: the number of trajectories to be generated.
@@ -193,6 +193,7 @@ class GridWorld(object):
         :param str model: the agent model used to generate the trajectories.
         :param int horizon: the agent's planning horizon.
         :param str selection: the action selection criterion, to untie equal-valued actions.
+        :param int processes: number of processes to use. `<=0` indicates all cores available, `1` uses single process.
         :param int seed: the seed used to initialize the random number generator.
         :rtype: list[list[VectorDistributionSet, ActionSet]]
         :return: the generated agent trajectories.
@@ -202,20 +203,21 @@ class GridWorld(object):
 
         # generate trajectories starting from random locations in the gridworld
         return generate_trajectories(agent, n_trajectories, trajectory_length,
-                                     [x, y], init_feats, model, horizon, selection, seed)
+                                     [x, y], init_feats, model, horizon, selection, processes, seed)
 
-    def set_achieve_locations_reward(self, agent, locs, weight):
+    def set_achieve_locations_reward(self, agent, locs, weight, model=None):
         """
         Sets a reward to the agent such that if its current location is equal to one of the given locations it will
         receive the given value. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
         :param Agent agent: the agent for which to get set the reward.
         :param list[(int,int)] locs: a list of target XY coordinate tuples.
         :param float weight: the weight/value associated with this reward.
+        :param str model: the agent's model on which to set the reward.
         :return:
         """
         return agent.setReward(makeTree({'if': self.get_location_plane(agent, locs),
                                          True: setToConstantMatrix(rewardKey(agent.name), 1.),
-                                         False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight)
+                                         False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight, model)
 
     def get_all_states(self, agent):
         """
@@ -228,14 +230,15 @@ class GridWorld(object):
         assert agent.world == self.world, 'Agent\'s world different from the environment\'s world!'
 
         old_state = copy.deepcopy(self.world.state)
-        states = []
+        states = [None] * self.width * self.height
 
         # iterate through all agent positions and copy world state
         x, y = self.get_location_features(agent)
         for x_i, y_i in itertools.product(range(self.width), range(self.height)):
             self.world.setFeature(x, x_i)
             self.world.setFeature(y, y_i)
-            states.append(copy.deepcopy(self.world.state))
+            idx = self.xy_to_idx(x_i, y_i)
+            states[idx] = copy.deepcopy(self.world.state)
 
         # undo world state
         self.world.state = old_state
@@ -323,14 +326,14 @@ class GridWorld(object):
         self._plot(value_func, title, cmap)
 
         # then plot max actions for each state
-        for i, xy in enumerate(itertools.product(range(self.width), range(self.height))):
-            x, y = xy
+        for x, y in itertools.product(range(self.width), range(self.height)):
+            idx = self.xy_to_idx(x, y)
 
             # plot marker (arrow) for each action, control alpha according to probability
             for a in range(policy.shape[1]):
                 x_inc, y_inc, marker = MARKERS_INC[a]
                 plt.plot(x + x_inc, y + y_inc, marker=marker, c=POLICY_MARKER_COLOR, mew=0.5, mec='0',
-                         alpha=policy[i, a])
+                         alpha=policy[idx, a])
 
         plt.savefig(file_name, pad_inches=0, bbox_inches='tight')
         logging.info('Saved policy \'{}\' plot to:\n\t{}'.format(title, file_name))

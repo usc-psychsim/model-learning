@@ -45,6 +45,13 @@ class ObjectsGridWorld(GridWorld):
             color = rng.randint(num_colors)
             self.objects[(x, y)] = (color, color) if single_color else (color, rng.randint(num_colors))
 
+        # gets locations indexed by color
+        self.inner_locs = [[] for _ in range(self.num_colors)]
+        self.outer_locs = [[] for _ in range(self.num_colors)]
+        for loc, color in self.objects.items():
+            self.inner_locs[color[0]].append(loc)
+            self.outer_locs[color[1]].append(loc)
+
     def _plot(self, val_func=None, title='Environment', cmap=None):
 
         super()._plot(val_func, title, cmap)
@@ -89,6 +96,15 @@ class ObjectsGridWorld(GridWorld):
         return feat_matrix
 
     def get_dist_feature_matrix(self, outer=True, inner=True):
+        """
+        Gets a matrix containing numerical features denoting the distance to the nearest object inner or outer color
+        from each indexed location in the environment. Location index is given in a left-right, bottom-up order.
+        :param bool outer: whether to include features for the nearest distance to objects' outer colors.
+        :param bool inner: whether to include features for the nearest distance to objects' inner colors.
+        :rtype: np.ndarray
+        :return: an array of shape (width*height, num_colors*(outer+inner)) containing the color features for each
+        environment location.
+        """
         outer_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
         inner_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
         for loc in itertools.product(range(self.width), range(self.height)):
@@ -108,7 +124,7 @@ class ObjectsGridWorld(GridWorld):
                     feat_matrix[idx, self.num_colors + color] = inner_dists[x, y, color]
         return feat_matrix
 
-    def set_linear_color_reward(self, agent, weights_outer, weights_inner=None):
+    def set_linear_color_reward(self, agent, weights_outer, weights_inner=None, model=None):
         """
         Sets a reward to the agent that is a linear combination of the given weights associated with each object color.
         In other words, when the agent is collocated with some object, the received reward will be proportional to the
@@ -116,6 +132,7 @@ class ObjectsGridWorld(GridWorld):
         :param Agent agent: the agent for which to get set the reward.
         :param np.ndarray or list[float] weights_outer: the reward weights associated with each object's outer color.
         :param np.ndarray or list[float] weights_inner: the reward weights associated with each object's inner color.
+        :param str model: the agent's model on which to set the reward.
         :return:
         """
 
@@ -125,15 +142,8 @@ class ObjectsGridWorld(GridWorld):
         assert weights_inner is None or len(weights_inner) == self.num_colors, \
             'Weight vectors should have length {}.'.format(self.num_colors)
 
-        # gets locations indexed by color
-        inner_locs = [[] for _ in range(self.num_colors)]
-        outer_locs = [[] for _ in range(self.num_colors)]
-        for loc, color in self.objects.items():
-            inner_locs[color[0]].append(loc)
-            outer_locs[color[1]].append(loc)
-
         # sets the corresponding weight for each object location
         for color in range(self.num_colors):
-            self.set_achieve_locations_reward(agent, outer_locs[color], weights_outer[color])
+            self.set_achieve_locations_reward(agent, self.outer_locs[color], weights_outer[color], model)
             if weights_inner is not None:
-                self.set_achieve_locations_reward(agent, inner_locs[color], weights_inner[color])
+                self.set_achieve_locations_reward(agent, self.inner_locs[color], weights_inner[color], model)
