@@ -1,13 +1,13 @@
 import copy
 import logging
 import numpy as np
-import multiprocessing as mp
 from typing import Callable
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
+from model_learning.util import get_pool_and_map
 from model_learning.algorithms import ModelLearningAlgorithm
 
 __author__ = 'Pedro Sequeira'
@@ -16,6 +16,7 @@ __email__ = 'pedrodbs@gmail.com'
 # stats names
 REWARD_WEIGHTS_STR = 'Weights'
 FEATURE_COUNT_DIFF_STR = 'Feature Count Diff.'
+THETA_STR = 'Optimal Weight Vector'
 
 
 def _gen_trajectory(args):
@@ -97,11 +98,15 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         if len(trajectories) == 0:
             return np.zeros(self.num_features)
 
-        # gets all states in the trajectories and get feature counts in parallel
+        pool, map_func = get_pool_and_map(self.processes, False)
+
+        # gets all states in the trajectories and get feature counts
         states = [s for trajectory in trajectories for s, _ in trajectory]
-        with mp.Pool(self.processes if self.processes > 0 else None) as pool:
-            empirical_fc = np.sum(pool.map(self.feature_func, states), axis=0)
-            return (empirical_fc / len(trajectories)) if len(trajectories) > 0 else empirical_fc
+        all_fcs = list(map_func(self.feature_func, states))
+        empirical_fc = np.sum(all_fcs, axis=0)
+        if pool is not None:
+            pool.close()
+        return (empirical_fc / len(trajectories)) if len(trajectories) > 0 else empirical_fc
 
     def _generate_max_ent_trajectories(self, trajectories):
         """
@@ -112,9 +117,13 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         :rtype: list[list[VectorDistributionSet, Distribution]]
         :return: stochastic trajectories generated using the max. entropy principle, i.e., a distribution over paths.
         """
-        # generates each trajectory in parallel
-        with mp.Pool(self.processes if self.processes > 0 else None) as pool:
-            return pool.map(_gen_trajectory, [(self.agent, t[0][0], len(t)) for t in trajectories])
+        pool, map_func = get_pool_and_map(self.processes, False)
+
+        # generates trajectories
+        trajectories = map_func(_gen_trajectory, [(self.agent, t[0][0], len(t)) for t in trajectories])
+        if pool is not None:
+            pool.close()
+        return trajectories
 
     def learn(self, trajectories):
         """
@@ -196,4 +205,5 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
 
         # returns model and stats dictionary
         return learned_model, {FEATURE_COUNT_DIFF_STR: np.array([diffs]),
-                               REWARD_WEIGHTS_STR: np.array(thetas).T}
+                               REWARD_WEIGHTS_STR: np.array(thetas).T,
+                               THETA_STR: theta}

@@ -1,14 +1,18 @@
+import itertools
 import logging
 import os
 import copy
 import numpy as np
+from model_learning.metrics import policy_mismatch_prob, policy_divergence
+from model_learning.util.math import min_max_scale
 from model_learning.util.plot import plot_evolution
 from psychsim.helper_functions import get_true_model_name
 from psychsim.world import World
-from model_learning import get_policy
+from model_learning import get_policy, get_action_values
 from model_learning.util.io import create_clear_dir
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
-from model_learning.algorithms.max_entropy import MaxEntRewardLearning, FEATURE_COUNT_DIFF_STR, REWARD_WEIGHTS_STR
+from model_learning.algorithms.max_entropy import MaxEntRewardLearning, FEATURE_COUNT_DIFF_STR, REWARD_WEIGHTS_STR, \
+    THETA_STR
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -58,7 +62,6 @@ def _get_feature_vector(state):
     x, y = env.get_location_features(expert)
     state = copy.deepcopy(state)
     state.collapse({x, y}, False)
-    # assert len(state.distributions[state.keyMap[x]]) == len(state.distributions[state.keyMap[y]])
 
     # collects possible locations and associated probabilities
     locs = {}
@@ -107,6 +110,24 @@ if __name__ == '__main__':
 
     world.setOrder([{expert.name}])
 
+    # gets all env states
+    states = env.get_all_states(expert)
+
+    # gets policy and value
+    logging.info('=================================')
+    logging.info('Computing expert policy & value function...')
+    expert_pi = get_policy(expert, states, selection='distribution')
+    pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in expert_pi])
+    expert_q = np.array(get_action_values(
+        expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))
+    expert_v = np.max(expert_q, axis=1)
+    env.plot_policy(pi, expert_v, os.path.join(OUTPUT_DIR, 'expert-policy.{}'.format(IMG_FORMAT)), 'Expert Policy')
+
+    # gets rewards
+    logging.info('Computing expert rewards...')
+    expert_r = min_max_scale(np.array([expert.reward(state) for state in states]))
+    env.plot_func(expert_r, os.path.join(OUTPUT_DIR, 'expert-reward.{}'.format(IMG_FORMAT)), 'Expert Rewards')
+
     # generate trajectories using expert's reward and rationality
     logging.info('=================================')
     logging.info('Generating expert trajectories...')
@@ -124,30 +145,38 @@ if __name__ == '__main__':
         -1 if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, LEARNING_SEED)
     model, stats = alg.learn(trajectories)
 
-    # plots stats
+    # saves results/stats
+    np.savetxt(os.path.join(OUTPUT_DIR, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
+               header=','.join(['Color {}'.format(i + 1) for i in range(NUM_COLORS)]), comments='')
     plot_evolution(stats[FEATURE_COUNT_DIFF_STR], ['diff'], 'Feature Count Diff. Evolution', None,
                    os.path.join(OUTPUT_DIR, 'evo-feat-diff.{}'.format(IMG_FORMAT)), 'Epoch', 'Feature Difference')
-    plot_evolution(stats[REWARD_WEIGHTS_STR], ['Color {}'.format(i) for i in range(feat_matrix.shape[1])],
+    plot_evolution(stats[REWARD_WEIGHTS_STR], ['Color {}'.format(i + 1) for i in range(feat_matrix.shape[1])],
                    'Reward Parameters Evolution', None,
                    os.path.join(OUTPUT_DIR, 'evo-rwd-weights.{}'.format(IMG_FORMAT)), 'Epoch', 'Weight')
 
-    # set model to expert for evaluation (compare to true model)
-    # expert.addModel(model['name'], **model)
-    #
-    # # gets policy and value
-    # logging.info('=================================')
-    # logging.info('Computing expert value function...')
-    # states = env.get_all_states(expert)
-    # pi = np.array([[dist[a] for a in env.agent_actions[expert.name]]
-    #                for dist in get_policy(expert, states, selection='distribution')])
-    # q = np.array([[expert.value(s, a, get_true_model_name(expert))['__EV__'] for a in env.agent_actions[expert.name]]
-    #               for s in states])
-    # v = np.max(q, axis=1)
-    # env.plot_policy(pi, v, os.path.join(OUTPUT_DIR, 'expert-policy.{}'.format(IMG_FORMAT)), 'Expert Policy')
-    #
-    # # gets rewards
-    # logging.info('Computing rewards...')
-    # r = np.array([expert.reward(state) for state in states])
-    # env.plot_func(r, os.path.join(OUTPUT_DIR, 'expert-reward.{}'.format(IMG_FORMAT)), 'Expert Rewards')
+    # set learner model to expert for evaluation (compare to true model)
+    true_model_name = get_true_model_name(expert)
+    expert.models[true_model_name] = model
+
+    # gets policy and value
+    logging.info('=================================')
+    logging.info('Computing learner policy & value function...')
+    learner_pi = get_policy(expert, states, selection='distribution')
+    pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in learner_pi])
+    learner_q = np.array(get_action_values(
+        expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))
+    learner_v = np.max(learner_q, axis=1)
+    env.plot_policy(pi, learner_v,
+                    os.path.join(OUTPUT_DIR, 'learner-policy.{}'.format(IMG_FORMAT)), 'Learner Policy')
+
+    # gets rewards
+    logging.info('Computing learner rewards...')
+    learner_r = min_max_scale(np.array([expert.reward(state) for state in states]))
+    env.plot_func(learner_r, os.path.join(OUTPUT_DIR, 'learner-reward.{}'.format(IMG_FORMAT)), 'Learner Rewards')
+
+    logging.info('=================================')
+    logging.info('Computing evaluation metrics...')
+    logging.info('Policy mismatch: {:.3f}'.format(policy_mismatch_prob(expert_pi, learner_pi)))
+    logging.info('Policy divergence: {:.3f}'.format(policy_divergence(expert_pi, learner_pi)))
 
     logging.info('\nFinished!')
