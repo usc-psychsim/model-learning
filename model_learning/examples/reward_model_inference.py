@@ -73,8 +73,8 @@ if __name__ == '__main__':
 
     # agent does not model itself and sees everything except true models and its reward
     agent.resetBelief(ignore={modelKey(observer.name)})
-    agent.omega = {key for key in world.state.keys()
-                   if key not in {modelKey(agent.name), rewardKey(agent.name), modelKey(observer.name)}}
+    agent.omega = [key for key in world.state.keys()
+                   if key not in {modelKey(agent.name), rewardKey(agent.name), modelKey(observer.name)}]
 
     # get the canonical name of the "true" agent model
     true_model = get_true_model_name(agent)
@@ -98,8 +98,8 @@ if __name__ == '__main__':
                                        for name in agent.models.keys() if name != true_model}))
 
     # observer sees everything except true models
-    observer.omega = {key for key in world.state.keys()
-                      if key not in {modelKey(agent.name), modelKey(observer.name)}}  # rewardKey(agent.name),
+    observer.omega = [key for key in world.state.keys()
+                      if key not in {modelKey(agent.name), modelKey(observer.name)}]  # rewardKey(agent.name),
 
     # generates trajectory
     logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
