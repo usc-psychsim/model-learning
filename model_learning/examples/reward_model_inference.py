@@ -30,7 +30,7 @@ MIDDLE_LOC_MODEL = 'middle_loc'
 MAXIMIZE_LOC_MODEL = 'maximize_loc'
 RANDOM_MODEL = 'zero_rwd'
 
-HORIZON = 1  # TODO > 1 gives an error
+HORIZON = 2  # TODO > 1 gives an error
 MODEL_SELECTION = 'distribution'  # TODO 'consistent' or 'random' gives an error
 AGENT_SELECTION = 'random'
 
@@ -74,21 +74,24 @@ if __name__ == '__main__':
     # agent does not model itself and sees everything except true models and its reward
     agent.resetBelief(ignore={modelKey(observer.name)})
     agent.omega = [key for key in world.state.keys()
-                   if key not in {modelKey(agent.name), rewardKey(agent.name), modelKey(observer.name)}]
+                   if key not in {rewardKey(agent.name), modelKey(observer.name)}]
 
     # get the canonical name of the "true" agent model
     true_model = get_true_model_name(agent)
 
     # agent's models
     agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
+    agent.resetBelief(model=MIDDLE_LOC_MODEL,ignore={modelKey(observer.name)})
 
     agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
     agent.setReward(maximizeFeature(x, agent.name), 1., MAXIMIZE_LOC_MODEL)
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
+    agent.resetBelief(model=MAXIMIZE_LOC_MODEL,ignore={modelKey(observer.name)})
 
     if INCLUDE_RANDOM_MODEL:
         agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
+        agent.resetBelief(model=RANDOM_MODEL,ignore={modelKey(observer.name)})
 
     model_names = [_get_fancy_name(name) for name in agent.models.keys() if name != true_model]
 
