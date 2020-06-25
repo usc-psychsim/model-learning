@@ -8,7 +8,7 @@ from model_learning.util.math import min_max_scale
 from model_learning.util.plot import plot_evolution
 from psychsim.helper_functions import get_true_model_name
 from psychsim.world import World
-from model_learning import get_policy, get_action_values
+from model_learning.planning import get_policy, get_action_values
 from model_learning.util.io import create_clear_dir
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, FEATURE_COUNT_DIFF_STR, REWARD_WEIGHTS_STR, \
@@ -143,6 +143,7 @@ if __name__ == '__main__':
     alg = MaxEntRewardLearning(
         'max-ent', expert, feat_matrix.shape[1], _get_feature_vector, _set_reward_function,
         -1 if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, LEARNING_SEED)
+    trajectories = [[(w.state, a) for w, a in t] for t in trajectories]
     model, stats = alg.learn(trajectories)
 
     # saves results/stats

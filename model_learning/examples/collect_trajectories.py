@@ -3,7 +3,7 @@ import numpy as np
 from psychsim.helper_functions import get_true_model_name
 from psychsim.reward import maximizeFeature
 from psychsim.world import World
-from model_learning import get_policy
+from model_learning.planning import get_policy
 from model_learning.environments.gridworld import GridWorld
 from model_learning.util.io import create_clear_dir
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     print('Computing value function...')
     states = env.get_all_states(agent)
     pi = np.array([[dist[a] for a in env.agent_actions[agent.name]]
-                   for dist in get_policy(agent, states, selection=SELECTION)])
+                   for dist in get_policy(agent, states, selection='distribution')])
     q = np.array([[agent.value(s, a, get_true_model_name(agent))['__EV__'] for a in env.agent_actions[agent.name]]
                   for s in states])
     v = np.max(q, axis=1)

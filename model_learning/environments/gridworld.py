@@ -11,7 +11,7 @@ from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
-from model_learning import generate_trajectories
+from model_learning.trajectory import generate_trajectories
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -195,7 +195,7 @@ class GridWorld(object):
         :param str selection: the action selection criterion, to untie equal-valued actions.
         :param int processes: number of processes to use. `<=0` indicates all cores available, `1` uses single process.
         :param int seed: the seed used to initialize the random number generator.
-        :rtype: list[list[VectorDistributionSet, ActionSet]]
+        :rtype: list[list[tuple[World, ActionSet]]]
         :return: the generated agent trajectories.
         """
         # get relevant features for this world (x-y location)
@@ -247,7 +247,7 @@ class GridWorld(object):
     def print_trajectories_cmd_line(self, trajectories):
         """
         Prints the given trajectories to the command-line.
-        :param list[list[VectorDistributionSet, ActionSet]] trajectories: the set of trajectories to save, containing
+        :param list[list[tuple[World, ActionSet]]] trajectories: the set of trajectories to save, containing
         several sequences of state-action pairs.
         :return:
         """
@@ -265,9 +265,9 @@ class GridWorld(object):
             print('-------------------------------------------')
             print('Trajectory {}:'.format(i))
             for t, sa in enumerate(trajectory):
-                state, action = sa
-                x_t = self.world.getValue(x, state)
-                y_t = self.world.getValue(y, state)
+                world, action = sa
+                x_t = world.getValue(x)
+                y_t = world.getValue(y)
                 print('{}:\t({},{}) -> {}'.format(t, x_t, y_t, action))
 
     def plot(self, file_name, title='Environment', show=False):
@@ -346,7 +346,7 @@ class GridWorld(object):
         """
         Plots the given set of trajectories over a representation of the environment.
         Utility method for 2D / gridworld environments that can have a visual representation.
-        :param list[list[VectorDistributionSet, ActionSet]] trajectories: the set of trajectories to save, containing
+        :param list[list[tuple[World, ActionSet]]] trajectories: the set of trajectories to save, containing
         several sequences of state-action pairs.
         :param str file_name: the path to the file in which to save the plot.
         :param str title: the title of the plot.
@@ -377,9 +377,9 @@ class GridWorld(object):
             xs = []
             ys = []
             for t, sa in enumerate(trajectory):
-                state, action = sa
-                x_t = self.world.getValue(x, state)
-                y_t = self.world.getValue(y, state)
+                world, action = sa
+                x_t = world.getValue(x)
+                y_t = world.getValue(y)
                 xs.append(x_t + .5)
                 ys.append(y_t + .5)
 

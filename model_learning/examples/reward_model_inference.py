@@ -1,6 +1,7 @@
 import os
 import logging
 import numpy as np
+from model_learning.inference import track_reward_model_inference
 from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -30,7 +31,7 @@ MIDDLE_LOC_MODEL = 'middle_loc'
 MAXIMIZE_LOC_MODEL = 'maximize_loc'
 RANDOM_MODEL = 'zero_rwd'
 
-HORIZON = 2  # TODO > 1 gives an error
+HORIZON = 2
 MODEL_SELECTION = 'distribution'  # TODO 'consistent' or 'random' gives an error
 AGENT_SELECTION = 'random'
 
@@ -81,24 +82,24 @@ if __name__ == '__main__':
 
     # agent's models
     agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
-    agent.resetBelief(model=MIDDLE_LOC_MODEL,ignore={modelKey(observer.name)})
+    env.set_achieve_locations_reward(agent, [(4, 4)], 1., MIDDLE_LOC_MODEL)
 
     agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
     agent.setReward(maximizeFeature(x, agent.name), 1., MAXIMIZE_LOC_MODEL)
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
-    agent.resetBelief(model=MAXIMIZE_LOC_MODEL,ignore={modelKey(observer.name)})
 
     if INCLUDE_RANDOM_MODEL:
         agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
-        agent.resetBelief(model=RANDOM_MODEL,ignore={modelKey(observer.name)})
 
-    model_names = [_get_fancy_name(name) for name in agent.models.keys() if name != true_model]
+    model_names = [name for name in agent.models.keys() if name != true_model]
+
+    for name in model_names:
+        agent.resetBelief(model=name, ignore={modelKey(observer.name)})
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,
-                         Distribution({name: 1. / (len(agent.models) - 1)
-                                       for name in agent.models.keys() if name != true_model}))
+                         Distribution({name: 1. / (len(agent.models) - 1) for name in model_names}))
 
     # observer sees everything except true models
     observer.omega = [key for key in world.state.keys()
@@ -106,31 +107,13 @@ if __name__ == '__main__':
 
     # generates trajectory
     logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
-    trajectory = env.generate_trajectories(
-        1, NUM_STEPS, agent, [[world.getFeature(x, unique=True), world.getFeature(y, unique=True)]])[0]
+    trajectory = env.generate_trajectories(1, NUM_STEPS, agent, [[0, 0]])[0]
     env.plot_trajectories([trajectory], os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
-    # gets and prints beliefs
-    probs = np.zeros((NUM_STEPS, len(model_names)))
-    for t, sa in enumerate(trajectory):
-        state, action = sa
-
-        logging.info('===============================================')
-        logging.info('{}.\tlocation: ({},{})'.format(
-            t, world.getFeature(x, state, unique=True), world.getFeature(y, state, unique=True)))
-
-        beliefs = observer.getBelief(state)
-        assert len(beliefs) == 1  # Because we are dealing with a known-identity agent
-        belief = next(iter(beliefs.values()))
-        model_dist = world.getFeature(modelKey(agent.name), belief)
-        for model in model_dist.domain():
-            probs[t, model_names.index(_get_fancy_name(model))] = model_dist[model]
-
-        logging.info('Observer models agent as:')
-        logging.info(model_dist)
-
-        logging.info(action)
+    # gets evolution of inference over reward models of the agent
+    probs = track_reward_model_inference(trajectory, model_names, agent, observer, [x, y])
 
     # create and save inference evolution plot
-    plot_evolution(probs.T, model_names, 'Evolution of Model Inference', None,
+    plot_evolution(probs.T, [_get_fancy_name(name) for name in model_names],
+                   'Evolution of Model Inference', None,
                    os.path.join(OUTPUT_DIR, 'inference.png'), 'Time', 'Model Probability', True)

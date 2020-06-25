@@ -6,7 +6,7 @@ from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
-from psychsim.pwl import VectorDistributionSet
+from psychsim.pwl import VectorDistributionSet, modelKey
 from model_learning.util import get_pool_and_map
 from model_learning.algorithms import ModelLearningAlgorithm
 
@@ -29,7 +29,8 @@ def _gen_trajectory(args):
     exp_trajectory = []
     for i in range(length):
         decision = agent.decide()
-        action = {agent.name: decision['policy']}
+        # action = {agent.name: decision['policy']}
+        action = decision[world.getFeature(modelKey(agent.name), unique=True)]['action']
         exp_trajectory.append((copy.deepcopy(world.state), action))
         world.step(action)
     return exp_trajectory
@@ -120,7 +121,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         pool, map_func = get_pool_and_map(self.processes, False)
 
         # generates trajectories
-        trajectories = map_func(_gen_trajectory, [(self.agent, t[0][0], len(t)) for t in trajectories])
+        trajectories = list(map_func(_gen_trajectory, [(self.agent, t[0][0], len(t)) for t in trajectories]))
         if pool is not None:
             pool.close()
         return trajectories
