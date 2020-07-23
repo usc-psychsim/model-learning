@@ -1,5 +1,7 @@
 import copy
 import random
+import logging
+from timeit import default_timer as timer
 from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.action import ActionSet
@@ -12,8 +14,24 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
+def _copy_world(world):
+    """
+    Creates a copy of the given world. This implementation clones the world's state and all agents' models so that
+    the dynamic world elements are maintained in this timestep copy.
+    :param World world: the original world to be copied.
+    :rtype: World
+    :return: a semi-hard copy of the given world.
+    """
+    new_world = copy.copy(world)
+    new_world.state = copy.deepcopy(world.state)
+    for name, agent in world.agents.items():
+        new_world.agents[name].modelList = copy.deepcopy(agent.modelList)
+        new_world.agents[name].models = copy.deepcopy(agent.models)
+    return new_world
+
+
 def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
-                        model=None, horizon=None, selection=None, seed=0):
+                        model=None, horizon=None, selection=None, seed=0, verbose=False):
     """
     Generates one fixed-length agent trajectory (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
@@ -27,6 +45,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
     :rtype: list[tuple[World, ActionSet]]
     :return: a list of trajectories, each containing a list of state-action pairs.
     :return:
@@ -47,20 +66,29 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
     # for each step, takes action and registers state-action pairs
     trajectory = []
+    total = 0
     for i in range(trajectory_length):
+        start = timer()
         decision = agent.decide(world.state, horizon, None, model, selection, None)
         action = decision[world.getFeature(modelKey(agent.name), unique=True)]['action']
         if isinstance(action, Distribution):
             action = rng.choices(action.domain(), action.values())[0]
 
-        trajectory.append((copy.deepcopy(world), action))
+        trajectory.append((_copy_world(world), action))
         world.step(action, select=True)
+        step_time = timer() - start
+        total += step_time
+        if verbose:
+            logging.info('Step {} took {:.2f}s (action: {})'.format(i, step_time, action))
+
+    if verbose:
+        logging.info('Total time: {:.2f}s'.format(total))
 
     return trajectory
 
 
 def generate_trajectories(agent, n_trajectories, trajectory_length, features=None, init_feats=None,
-                          model=None, horizon=None, selection=None, processes=-1, seed=0):
+                          model=None, horizon=None, selection=None, processes=-1, seed=0, verbose=False):
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
@@ -76,6 +104,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param int processes: number of processes to use. `<=0` indicates all cores available, `1` uses single process.
     :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
     :rtype: list[list[tuple[World, ActionSet]]]
     :return: a list of trajectories, each containing a list of state-action pairs.
     """
@@ -89,7 +118,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     pool, map_func = get_pool_and_map(processes, True)
     trajectories = list(map_func(
         generate_trajectory,
-        [[agent, trajectory_length, features, init_feats, model, horizon, selection, seed + t]
+        [[agent, trajectory_length, features, init_feats, model, horizon, selection, seed + t, verbose]
          for t in range(n_trajectories)]))
 
     if pool is not None:

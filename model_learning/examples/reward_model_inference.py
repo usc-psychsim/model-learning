@@ -1,6 +1,5 @@
 import os
 import logging
-import numpy as np
 from model_learning.inference import track_reward_model_inference
 from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
@@ -30,6 +29,7 @@ AGENT_NAME = 'agent'
 MIDDLE_LOC_MODEL = 'middle_loc'
 MAXIMIZE_LOC_MODEL = 'maximize_loc'
 RANDOM_MODEL = 'zero_rwd'
+MODEL_RATIONALITY = .5
 
 HORIZON = 2
 MODEL_SELECTION = 'distribution'  # TODO 'consistent' or 'random' gives an error
@@ -81,15 +81,15 @@ if __name__ == '__main__':
     true_model = get_true_model_name(agent)
 
     # agent's models
-    agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
+    agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
     env.set_achieve_locations_reward(agent, [(4, 4)], 1., MIDDLE_LOC_MODEL)
 
-    agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
+    agent.addModel(MAXIMIZE_LOC_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
     agent.setReward(maximizeFeature(x, agent.name), 1., MAXIMIZE_LOC_MODEL)
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
 
     if INCLUDE_RANDOM_MODEL:
-        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=.5, selection=MODEL_SELECTION)
+        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
         agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
 
     model_names = [name for name in agent.models.keys() if name != true_model]

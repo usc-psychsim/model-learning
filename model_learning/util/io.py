@@ -1,4 +1,6 @@
+import gzip
 import os
+import pickle
 import shutil
 
 __author__ = 'Pedro Sequeira'
@@ -52,3 +54,29 @@ def create_clear_dir(path, clear=False):
         shutil.rmtree(path)
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def save_object(obj, file_path, compress_gzip=True):
+    """
+    Saves a binary file containing the given data.
+    :param obj: the object to be saved.
+    :param str file_path: the path of the file in which to save the data.
+    :param bool compress_gzip: whether to gzip the output file.
+    :return:
+    """
+    with gzip.open(file_path, 'wb') if compress_gzip else open(file_path, 'wb') as file:
+        pickle.dump(obj, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_object(file_path):
+    """
+    Loads an object from the given file, possibly gzip compressed.
+    :param str file_path: the path to the file containing the data to be loaded.
+    :return: the data loaded from the file.
+    """
+    try:
+        with gzip.open(file_path, 'rb') as file:
+            return pickle.load(file)
+    except OSError:
+        with open(file_path, 'rb') as file:
+            return pickle.load(file)
