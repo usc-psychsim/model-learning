@@ -11,7 +11,7 @@ from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
-from model_learning.trajectory import generate_trajectories
+from model_learning.trajectory import generate_trajectories, log_trajectories
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -244,9 +244,9 @@ class GridWorld(object):
         self.world.state = old_state
         return states
 
-    def print_trajectories_cmd_line(self, trajectories):
+    def log_trajectories(self, trajectories):
         """
-        Prints the given trajectories to the command-line.
+        Prints the given trajectories to the log at the info level.
         :param list[list[tuple[World, ActionSet]]] trajectories: the set of trajectories to save, containing
         several sequences of state-action pairs.
         :return:
@@ -261,18 +261,11 @@ class GridWorld(object):
         assert x in self.world.variables, 'Agent \'{}\' does not have x location feature'.format(name)
         assert y in self.world.variables, 'Agent \'{}\' does not have y location feature'.format(name)
 
-        for i, trajectory in enumerate(trajectories):
-            print('-------------------------------------------')
-            print('Trajectory {}:'.format(i))
-            for t, sa in enumerate(trajectory):
-                world, action = sa
-                x_t = world.getValue(x)
-                y_t = world.getValue(y)
-                print('{}:\t({},{}) -> {}'.format(t, x_t, y_t, action))
+        log_trajectories(trajectories, [x, y])
 
     def plot(self, file_name, title='Environment', show=False):
         """
-        Generates ands saves a grid plot of the environment, including the number of each state.
+        Generates and saves a grid plot of the environment, including the number of each state.
         Utility method for 2D / gridworld environments that can have a visual representation.
         :param str file_name: the path to the file in which to save the plot.
         :param str title: the title of the plot.

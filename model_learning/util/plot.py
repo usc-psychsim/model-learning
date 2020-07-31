@@ -92,3 +92,12 @@ def transparent_colors(n, base_color):
     :return: an array of shape (n, 4) with colors with varying alpha in the [R, G, B, A] normalized format ([0-1]).
     """
     return np.array([base_color[:3] + [i / (n - 1)] for i in range(n)])
+
+
+def rgb_to_hex(color):
+    """
+    Converts the given RGB color in hexadecimal notation
+    :param list[float] color: the base color in the [R, G, B] normalized format ([0-1]).
+    :return:
+    """
+    return '#{:02x}{:02x}{:02x}'.format(*tuple(np.array(np.asarray(color) * 255, dtype=int)))

@@ -7,11 +7,13 @@ from psychsim.world import World
 from psychsim.action import ActionSet
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey
+from psychsim.pwl import modelKey, turnKey
 from model_learning.util import get_pool_and_map
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+TOP_LEVEL_STR = 'top_level'
 
 
 def _copy_world(world):
@@ -69,13 +71,20 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
     total = 0
     for i in range(trajectory_length):
         start = timer()
+
+        # step the world until it's this agent's turn
+        turn = world.getFeature(turnKey(agent.name), unique=True)
+        while turn != 0:
+            world.step()
+            turn = world.getFeature(turnKey(agent.name), unique=True)
+
         decision = agent.decide(world.state, horizon, None, model, selection, None)
         action = decision[world.getFeature(modelKey(agent.name), unique=True)]['action']
         if isinstance(action, Distribution):
             action = rng.choices(action.domain(), action.values())[0]
 
         trajectory.append((_copy_world(world), action))
-        world.step(action, select=True)
+        world.step(action, select=True, debug={TOP_LEVEL_STR: True})
         step_time = timer() - start
         total += step_time
         if verbose:
@@ -115,13 +124,37 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
         assert feature in world.variables, 'World does not have feature \'{}\'!'.format(feature)
 
     # generates each trajectory using a different random seed
+    start = timer()
     pool, map_func = get_pool_and_map(processes, True)
     trajectories = list(map_func(
         generate_trajectory,
         [[agent, trajectory_length, features, init_feats, model, horizon, selection, seed + t, verbose]
          for t in range(n_trajectories)]))
 
+    if verbose:
+        logging.info('Total time for generating {} trajectories: {:.2f}s'.format(n_trajectories, timer() - start))
+
     if pool is not None:
         pool.close()
 
     return trajectories
+
+
+def log_trajectories(trajectories, features):
+    """
+    Prints the given trajectories to the log at the info level.
+    :param list[list[tuple[World, ActionSet]]] trajectories: the set of trajectories to save, containing
+    several sequences of state-action pairs.
+    :param list[str] features: the state features to be printed at each step representing the state.
+    :return:
+    """
+    if len(trajectories) == 0 or len(trajectories[0]) == 0:
+        return
+
+    for i, trajectory in enumerate(trajectories):
+        logging.info('-------------------------------------------')
+        logging.info('Trajectory {}:'.format(i))
+        for t, sa in enumerate(trajectory):
+            world, action = sa
+            feat_values = [str(world.getFeature(feat, unique=True)) for feat in features]
+            logging.info('{}:\t({}) -> {}'.format(t, ', '.join(feat_values), action))

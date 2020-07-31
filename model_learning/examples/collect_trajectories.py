@@ -51,7 +51,7 @@ if __name__ == '__main__':
     # generate trajectories using agent's policy
     print('Generating trajectories...')
     trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent, selection=SELECTION)
-    env.print_trajectories_cmd_line(trajectories)
+    env.log_trajectories(trajectories)
     env.plot_trajectories(trajectories, os.path.join(OUTPUT_DIR, 'trajectories.png'))
 
     # gets policy and value
