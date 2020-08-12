@@ -16,7 +16,7 @@ __email__ = 'pedrodbs@gmail.com'
 TOP_LEVEL_STR = 'top_level'
 
 
-def _copy_world(world):
+def copy_world(world):
     """
     Creates a copy of the given world. This implementation clones the world's state and all agents' models so that
     the dynamic world elements are maintained in this timestep copy.
@@ -83,7 +83,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
         if isinstance(action, Distribution):
             action = rng.choices(action.domain(), action.values())[0]
 
-        trajectory.append((_copy_world(world), action))
+        trajectory.append((copy_world(world), action))
         world.step(action, select=True, debug={TOP_LEVEL_STR: True})
         step_time = timer() - start
         total += step_time
