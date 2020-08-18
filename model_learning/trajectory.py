@@ -32,6 +32,10 @@ def copy_world(world):
     return new_world
 
 
+# I know this is a HACK, but I'm not sure of a better way to avoid a circular import (parser_no_pre wants to import copy_world from this file)
+import sys
+sys.path.append('../atomic_domain_definitions/')
+from parser_no_pre import summarizeState
 def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
                         model=None, horizon=None, selection=None, seed=0, verbose=False):
     """
@@ -66,6 +70,13 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
         for feature, init_value in zip(features, init_values):
             world.setFeature(feature, init_value)
 
+    if verbose:
+        logging.info('----------------------------------')
+        logging.info('BEGIN TRAJECTORY')
+        logging.info('----------------------------------')
+        summarizeState(world,agent.name)
+        logging.info('----------------------------------')
+
     # for each step, takes action and registers state-action pairs
     trajectory = []
     total = 0
@@ -89,6 +100,8 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
         total += step_time
         if verbose:
             logging.info('Step {} took {:.2f}s (action: {})'.format(i, step_time, action))
+            summarizeState(world,agent.name)
+            logging.info('----------------------------------')
 
     if verbose:
         logging.info('Total time: {:.2f}s'.format(total))
