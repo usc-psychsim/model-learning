@@ -1,8 +1,8 @@
 import logging
 import numpy as np
 from psychsim.agent import Agent
+from psychsim.probability import Distribution
 from psychsim.world import World
-from psychsim.action import ActionSet
 from psychsim.pwl import modelKey
 
 __author__ = 'Pedro Sequeira'
@@ -13,7 +13,7 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
     """
     Updates and tracks the evolution of an observer agent's posterior distribution over the possible reward models of
     an "actor" agent. The inference task
-    :param list[tuple[World, ActionSet]] trajectory: the trajectory of (world, action) pairs containing the "actor"
+    :param list[tuple[World, Distribution]] trajectory: the trajectory of (world, action) pairs containing the "actor"
     agent's actions. It is assumed that agents `agent` and `observer` are present in each "world" of the trajectory so
     that we can recover the latter's distribution over reward models.
     :param list[str] models: a list of model names of the `agent` agent containing the different reward functions.
@@ -54,6 +54,6 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
         if verbose:
             logging.info('Observer models agent as:')
             logging.info(model_dist)
-            logging.info(action)
+            logging.info(action if len(action) > 1 else action.first())
 
     return probs
