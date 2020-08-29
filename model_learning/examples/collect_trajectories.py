@@ -19,6 +19,7 @@ AGENT_NAME = 'Agent'
 HORIZON = 3
 RATIONALITY = 1 / 0.1  # inverse temperature
 SELECTION = 'distribution'  # stochastic over all actions
+PRUNE_THRESHOLD = 1e-2
 
 NUM_TRAJECTORIES = 20
 TRAJ_LENGTH = 15
@@ -50,15 +51,16 @@ if __name__ == '__main__':
 
     # generate trajectories using agent's policy
     print('Generating trajectories...')
-    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent, selection=SELECTION)
-    env.log_trajectories(trajectories)
-    env.plot_trajectories(trajectories, os.path.join(OUTPUT_DIR, 'trajectories.png'))
+    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent,
+                                             selection=SELECTION, threshold=PRUNE_THRESHOLD)
+    env.log_trajectories(trajectories, agent)
+    env.plot_trajectories(trajectories, agent, os.path.join(OUTPUT_DIR, 'trajectories.png'))
 
     # gets policy and value
     print('Computing value function...')
     states = env.get_all_states(agent)
     pi = np.array([[dist[a] for a in env.agent_actions[agent.name]]
-                   for dist in get_policy(agent, states, selection='distribution')])
+                   for dist in get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD)])
     q = np.array([[agent.value(s, a, get_true_model_name(agent))['__EV__'] for a in env.agent_actions[agent.name]]
                   for s in states])
     v = np.max(q, axis=1)

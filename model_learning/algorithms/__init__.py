@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from abc import ABC, abstractmethod
 from psychsim.action import ActionSet
@@ -27,8 +28,8 @@ class ModelLearningAlgorithm(ABC):
         algorithm. Contains reference to the PsychSim world containing all definitions.
         """
         self.label = label
-        self.world = base_agent.world
-        self.agent = base_agent
+        self.world = copy.deepcopy(base_agent.world)
+        self.agent = self.world.agents[base_agent.name]
 
     @abstractmethod
     def learn(self, trajectories):
@@ -42,4 +43,3 @@ class ModelLearningAlgorithm(ABC):
         dictionary with relevant statistics of the algorithm.
         """
         pass
-

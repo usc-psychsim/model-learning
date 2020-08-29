@@ -6,7 +6,6 @@ import numpy as np
 from model_learning.metrics import policy_mismatch_prob, policy_divergence
 from model_learning.util.math import min_max_scale
 from model_learning.util.plot import plot_evolution
-from psychsim.helper_functions import get_true_model_name
 from psychsim.world import World
 from model_learning.planning import get_policy, get_action_values
 from model_learning.util.io import create_clear_dir
@@ -37,11 +36,12 @@ TRAJ_LENGTH = 10  # 15
 NORM_THETA = True
 LEARNING_RATE = 0.1  # 0.01
 MAX_EPOCHS = 200
-THRESHOLD = 1e-3
+THRESHOLD = 0.3  # 1e-3
 LEARNING_SEED = 1
 
 # common params
 HORIZON = 3
+PRUNE_THRESHOLD = 1e-2
 PARALLEL = True
 
 OUTPUT_DIR = 'output/examples/linear-reward-learning'
@@ -84,6 +84,7 @@ def _set_reward_function(theta, agent):
     """
     global env
     inner = theta.shape[0] == 2 * env.num_colors
+    agent.setAttribute('R', {})
     env.set_linear_color_reward(agent, theta[:env.num_colors], theta[env.num_colors:] if inner else None)
 
 
@@ -116,7 +117,7 @@ if __name__ == '__main__':
     # gets policy and value
     logging.info('=================================')
     logging.info('Computing expert policy & value function...')
-    expert_pi = get_policy(expert, states, selection='distribution')
+    expert_pi = get_policy(expert, states, selection='distribution', threshold=PRUNE_THRESHOLD)
     pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in expert_pi])
     expert_q = np.array(get_action_values(
         expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))
@@ -131,8 +132,9 @@ if __name__ == '__main__':
     # generate trajectories using expert's reward and rationality
     logging.info('=================================')
     logging.info('Generating expert trajectories...')
-    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, expert, seed=EXPERT_SEED)
-    env.plot_trajectories(trajectories, os.path.join(OUTPUT_DIR, 'expert-trajectories.{}'.format(IMG_FORMAT)),
+    trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, expert,
+                                             threshold=PRUNE_THRESHOLD, seed=EXPERT_SEED)
+    env.plot_trajectories(trajectories, expert, os.path.join(OUTPUT_DIR, 'expert-trajectories.{}'.format(IMG_FORMAT)),
                           'Expert Trajectories')
 
     # create learning algorithm and optimize reward weights
@@ -142,9 +144,9 @@ if __name__ == '__main__':
     # feat_matrix = env.get_dist_feature_matrix(True, False)
     alg = MaxEntRewardLearning(
         'max-ent', expert, feat_matrix.shape[1], _get_feature_vector, _set_reward_function,
-        -1 if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, LEARNING_SEED)
+        None if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, PRUNE_THRESHOLD, LEARNING_SEED)
     trajectories = [[(w.state, a) for w, a in t] for t in trajectories]
-    model, stats = alg.learn(trajectories)
+    stats = alg.learn(trajectories, True)
 
     # saves results/stats
     np.savetxt(os.path.join(OUTPUT_DIR, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
@@ -155,14 +157,14 @@ if __name__ == '__main__':
                    'Reward Parameters Evolution', None,
                    os.path.join(OUTPUT_DIR, 'evo-rwd-weights.{}'.format(IMG_FORMAT)), 'Epoch', 'Weight')
 
-    # set learner model to expert for evaluation (compare to true model)
-    true_model_name = get_true_model_name(expert)
-    expert.models[true_model_name] = model
+    # set learner's reward into expert for evaluation (compare to true model)
+    theta = stats[THETA_STR]
+    _set_reward_function(theta, expert)
 
     # gets policy and value
     logging.info('=================================')
     logging.info('Computing learner policy & value function...')
-    learner_pi = get_policy(expert, states, selection='distribution')
+    learner_pi = get_policy(expert, states, selection='distribution', threshold=PRUNE_THRESHOLD)
     pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in learner_pi])
     learner_q = np.array(get_action_values(
         expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))

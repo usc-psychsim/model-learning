@@ -120,7 +120,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
 def generate_trajectories(agent, n_trajectories, trajectory_length, features=None, init_feats=None,
                           model=None, horizon=None, selection=None, threshold=None,
-                          processes=-1, seed=0, verbose=False):
+                          processes=None, seed=0, verbose=None):
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
@@ -135,7 +135,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int processes: number of processes to use. `<=0` indicates all cores available, `1` uses single process.
+    :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
     :param int seed: the seed used to initialize the random number generator.
     :param bool or Callable verbose: whether to show information at each timestep during trajectory generation.
     :rtype: list[list[tuple[World, Distribution]]]

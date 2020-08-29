@@ -108,7 +108,7 @@ if __name__ == '__main__':
     # generates trajectory
     logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
     trajectory = env.generate_trajectories(1, NUM_STEPS, agent, [[0, 0]])[0]
-    env.plot_trajectories([trajectory], os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
+    env.plot_trajectories([trajectory], agent, os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
     # gets evolution of inference over reward models of the agent
     probs = track_reward_model_inference(trajectory, model_names, agent, observer, [x, y])
