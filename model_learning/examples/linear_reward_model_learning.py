@@ -29,14 +29,14 @@ EXPERT_THETA = [0.5, -0.4, 0.1, 0., 0.]
 EXPERT_RATIONALITY = 1 / 0.1  # inverse temperature
 EXPERT_SELECTION = 'random'
 EXPERT_SEED = 1
-NUM_TRAJECTORIES = 20
+NUM_TRAJECTORIES = 8  # 20
 TRAJ_LENGTH = 10  # 15
 
 # learning params
 NORM_THETA = True
-LEARNING_RATE = 0.1  # 0.01
+LEARNING_RATE = 1e-2  # 0.01
 MAX_EPOCHS = 200
-THRESHOLD = 0.3  # 1e-3
+THRESHOLD = 1e-3
 LEARNING_SEED = 1
 
 # common params
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     logging.info('=================================')
     logging.info('Computing expert policy & value function...')
     expert_pi = get_policy(expert, states, selection='distribution', threshold=PRUNE_THRESHOLD)
-    pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in expert_pi])
+    pi = np.array([[dist.getProb(a) for a in env.agent_actions[expert.name]] for dist in expert_pi])
     expert_q = np.array(get_action_values(
         expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))
     expert_v = np.max(expert_q, axis=1)
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     logging.info('=================================')
     logging.info('Computing learner policy & value function...')
     learner_pi = get_policy(expert, states, selection='distribution', threshold=PRUNE_THRESHOLD)
-    pi = np.array([[dist[a] for a in env.agent_actions[expert.name]] for dist in learner_pi])
+    pi = np.array([[dist.getProb(a) for a in env.agent_actions[expert.name]] for dist in learner_pi])
     learner_q = np.array(get_action_values(
         expert, list(zip(states, itertools.repeat(env.agent_actions[expert.name], len(states))))))
     learner_v = np.max(learner_q, axis=1)

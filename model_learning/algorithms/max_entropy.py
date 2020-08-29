@@ -172,8 +172,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         # 0 - parameterizes according to the max. entropy principle
         self.agent.setAttribute('rationality', 1.)
         # todo change this
-        # self.agent.setAttribute('selection', 'distribution')
-        self.agent.setAttribute('selection', 'random')
+        self.agent.setAttribute('selection', 'distribution')
+        # self.agent.setAttribute('selection', 'random')
 
         # get empirical feature counts (mean feature path) from trajectories
         empirical_fc = self._get_mean_feature_counts(trajectories)
