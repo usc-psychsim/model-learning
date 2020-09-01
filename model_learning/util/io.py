@@ -7,6 +7,18 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
+def get_file_changed_extension(file, ext):
+    """
+    Changes the extension of the given file.
+    :param str file: the path to the file.
+    :param str ext: the new file extension.
+    :rtype: str
+    :return: the file path with the new extension.
+    """
+    return os.path.join(os.path.dirname(file),
+                        '{}.{}'.format(get_file_name_without_extension(file), ext.replace('.', '')))
+
+
 def get_file_name_without_extension(file):
     """
     Gets the file name in the given path without extension.

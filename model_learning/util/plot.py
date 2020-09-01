@@ -1,6 +1,10 @@
 import colorsys
 import numpy as np
+import matplotlib
+
+matplotlib.use('Agg')  # for linux
 import matplotlib.pyplot as plt
+from model_learning.util.io import get_file_name_without_extension, get_file_changed_extension
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -23,10 +27,15 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
     :param bool show: whether to show the plot on the screen.
     :return:
     """
-    plt.figure()
-
     assert len(labels) == data.shape[0], 'Number of given labels does not match data size!'
     assert colors is None or len(colors) == data.shape[0], 'Number of given colors does not match data size!'
+
+    # saves to CSV data-file
+    np.savetxt(get_file_changed_extension(output_img, 'csv'),
+               data.transpose() if len(data.shape) > 1 else data.reshape((-1, 1)),
+               '%s', ',', header=','.join(labels), comments='')
+
+    plt.figure()
 
     # automatically get colors
     if colors is None:
