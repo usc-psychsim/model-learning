@@ -1,17 +1,37 @@
 import numpy as np
-from model_learning.util.math import get_jensen_shannon_divergence
 from psychsim.probability import Distribution
+from model_learning.util.math import get_jensen_shannon_divergence
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+POLICY_MISMATCH_STR = 'Policy Mismatch'
+POLICY_DIVERGENCE_STR = 'Policy Divergence'
+
+
+def evaluate_internal(expert_pi, learner_pi):
+    """
+    Utility method that compares two policies using internal metrics, i.e., that do not rely on knowing the
+    "ground-truth" expert policy or reward function. Useful for analyzing human behavior data.
+    Note: the policies are lists where elements are distributions over actions for each state considered. Policies
+    should have the same size and it is assumed that each pair of elements.
+    :param list[Distribution] expert_pi: the expert's policy (or approximation) for a set of states.
+    :param list[Distribution] learner_pi: the learner's policy for the same set of states.
+    :rtype: dict[str, float]
+    :return: a dictionary containing several internal evaluation metrics.
+    """
+    return {
+        POLICY_MISMATCH_STR: policy_mismatch_prob(expert_pi, learner_pi),
+        POLICY_DIVERGENCE_STR: policy_divergence(expert_pi, learner_pi)
+    }
 
 
 def policy_mismatch_prob(policy1, policy2):
     """
     Compares the given policies by measuring the amount of discrepancy between them. This corresponds to the mean,
     over all states, of the probability that the policies will take different actions.
-    Note: the policies are lists where elements are actions (deterministic policy) or distributions (stochastic policy)
-    for each state considered. Policies should have the same size and it is assumed that each pair of elements
+    Note: the policies are lists where elements are distributions over actions for each state considered. Policies
+    should have the same size and it is assumed that each pair of elements.
     corresponds to the policy in the same state.
     :param list[Distribution] policy1: the first policy.
     :param list[Distribution] policy2: the second policy.
@@ -36,8 +56,8 @@ def policy_divergence(policy1, policy2):
     Compares the given policies by measuring the amount of discrepancy between them in terms of probability divergence.
     This is measured by the mean, over all states, of the Jensen-Shannon divergence (JSD) between the policies'
     probability distribution over actions.
-    Note: the policies are lists where elements are actions (deterministic policy) or distributions (stochastic policy)
-    for each state considered. Policies should have the same size and it is assumed that each pair of elements
+    Note: the policies are lists where elements are distributions over actions for each state considered. Policies
+    should have the same size and it is assumed that each pair of elements.
     corresponds to the policy in the same state.
     :param list[Distribution] policy1: the first policy.
     :param list[Distribution] policy2: the second policy.

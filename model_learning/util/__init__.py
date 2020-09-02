@@ -1,24 +1,22 @@
-import itertools
-from multiprocessing.pool import Pool
+import argparse
 
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
+__email__ = 'pedro.sequeira@sri.com'
 
 
-def get_pool_and_map(processes, star=False):
+def str2bool(v):
     """
-    Returns a process pool and mapping function, or a single-process mapping function, depending on the number of
-    requested processes.
-    :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
-    :param bool star: whether to return a starmap function instead of single-argument map.
-    :rtype: (Pool, Callable)
-    :return: a tuple (pool, mapping_func) containing the pool object (or None) and mapping function.
+    Converts the given string to a boolean value to use with the argparse library.
+    See: https://stackoverflow.com/a/43357954
+    :param str v: the string we want to convert to a bool.
+    :rtype: bool
+    :return: the boolean value corresponding to the given string.
     """
-    # selects mapping function according to number of requested processes
-    if processes == 1:
-        pool = None
-        map_func = itertools.starmap if star else map
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
     else:
-        pool = Pool(processes)
-        map_func = pool.starmap if star else pool.map
-    return pool, map_func
+        raise argparse.ArgumentTypeError('Boolean value expected.')

@@ -28,8 +28,14 @@ class ModelLearningAlgorithm(ABC):
         algorithm. Contains reference to the PsychSim world containing all definitions.
         """
         self.label = label
-        self.world = copy.deepcopy(base_agent.world)
-        self.agent = self.world.agents[base_agent.name]
+        self.__base_agent = base_agent
+        self.agent = base_agent
+        self.world = base_agent.world
+        self._reset()
+
+    def _reset(self):
+        self.world = copy.deepcopy(self.__base_agent.world)
+        self.agent = self.world.agents[self.__base_agent.name]
 
     @abstractmethod
     def learn(self, trajectories):
@@ -38,8 +44,18 @@ class ModelLearningAlgorithm(ABC):
         through the given trajectories.
         :param list[list[VectorDistributionSet, ActionSet]] trajectories:a list of trajectories, each containing a list
         (sequence) of state-action pairs demonstrated by an "expert" in the task.
-        :rtype: (dict, dict[str, np.ndarray])
-        :return: a tuple (model, stats) containing the learned PsychSim model (a dictionary of parameters), and a
-        dictionary with relevant statistics of the algorithm.
+        :rtype: dict[str, np.ndarray]
+        :return: a dictionary with relevant statistics of the algorithm.
+        """
+        pass
+
+    @abstractmethod
+    def save_results(self, stats, output_dir, img_format):
+        """
+        Saves the several results of a run of the algorithm to the given directory.
+        :param dict[str, np.ndarray] stats: a dictionary with relevant statistics of the algorithm's run.
+        :param str output_dir: the path to the directory in which to save the results.
+        :param str img_format: the format of the images to be saved.
+        :return:
         """
         pass

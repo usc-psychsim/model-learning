@@ -1,15 +1,17 @@
 import copy
 import logging
+import os
 import random
 import numpy as np
-from typing import Callable
 from timeit import default_timer as timer
 from psychsim.agent import Agent
 from psychsim.pwl import VectorDistributionSet, turnKey
 from psychsim.probability import Distribution
-from model_learning.util import get_pool_and_map
+from model_learning.util.multiprocessing import get_pool_and_map
+from model_learning.util.plot import plot_evolution
 from model_learning.trajectory import TOP_LEVEL_STR, get_agent_action
 from model_learning.algorithms import ModelLearningAlgorithm
+from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -36,13 +38,10 @@ def gen_stochastic_trajectory(agent, init_state, length, threshold, seed):
     world.state = init_state
 
     random.seed(seed)
-    # todo need this?
-    agent.belief_threshold = 1e-2
 
     # for each step, uses the MaxEnt stochastic policy and registers state-action pairs
     trajectory = []
     for i in range(length):
-
         # step the world until it's this agent's turn
         turn = world.getFeature(turnKey(agent.name), unique=True)
         while turn != 0:
@@ -75,40 +74,36 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
     learning. In AAAI (Vol. 8, pp. 1433-1438).
     """
 
-    def __init__(self, label, base_agent, num_features,
-                 feature_func: Callable[[VectorDistributionSet], np.ndarray],
-                 reward_func: Callable[[np.ndarray, Agent], None],
-                 processes=None, normalize_weights=True, learning_rate=0.01, max_epochs=200, diff_threshold=1e-2,
-                 prune_threshold=1e-2, seed=0):
+    def __init__(self, label, base_agent, reward_vector,
+                 processes=None, normalize_weights=True,
+                 learning_rate=0.01, max_epochs=200, diff_threshold=1e-2, prune_threshold=1e-2, horizon=2, seed=0):
         """
         Creates a new Max Entropy algorithm.
         :param str label: the label associated with this algorithm (might be useful for testing purposes).
         :param Agent base_agent: the base agent containing the model parameters that will not be optimized by the
         algorithm. Contains reference to the PsychSim world containing all definitions.
-        :param int num_features: the number of features whose associated reward weights are going to be optimized.
-        :param feature_func: a function (state) -> feature_values that takes in a PsychSim state and returns the
-        feature mapping for that state. The resulting array should be of shape (`num_features`,).
-        :param reward_func: a function (array, agent) -> None, that takes in an array of feature weights,
-        a PsychSim agent and a model name, and sets its reward function according to the linear reward parametrization.
+        :param LinearRewardVector reward_vector: the reward vector containing the features whose weights are going to
+        be optimized.
         :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
         :param bool normalize_weights: whether to normalize reward weights at each step of the algorithm.
         :param float learning_rate: the gradient descent learning/update rate.
         :param int max_epochs: the maximum number of gradient descent steps.
         :param float diff_threshold: the termination threshold for the weight vector difference.
         :param float prune_threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+        :param int horizon: the planning horizon used to compute feature counts.
         :param int seed: the seed to initialize the random number generator.
         """
         super().__init__(label, base_agent)
 
-        self.num_features = num_features
-        self.feature_func = feature_func
-        self.set_reward_func = reward_func
+        self.reward_vector = reward_vector
+        self.num_features = len(reward_vector)
         self.processes = processes
         self.normalize_weights = normalize_weights
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.diff_threshold = diff_threshold
         self.prune_threshold = prune_threshold
+        self.horizon = horizon
         self.seed = seed
 
     def _get_mean_feature_counts(self, trajectories):
@@ -129,7 +124,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
 
         # gets all states in the trajectories and get feature counts
         states = [s for trajectory in trajectories for s, _ in trajectory]
-        all_fcs = list(map_func(self.feature_func, states))
+        all_fcs = list(map_func(self.reward_vector.get_values, states))
         empirical_fc = np.sum(all_fcs, axis=0)
         if pool is not None:
             pool.close()
@@ -166,12 +161,14 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
         :param bool verbose: whether to show information at each timestep during learning.
         :rtype: dict[str, np.ndarray]
-        :return: dictionary with relevant statistics of the algorithm.
+        :return: a dictionary with relevant statistics of the algorithm.
         """
+        self._reset()
 
         # 0 - parameterizes according to the max. entropy principle
         self.agent.setAttribute('rationality', 1.)
         self.agent.setAttribute('selection', 'distribution')
+        self.agent.setAttribute('horizon', self.horizon)
 
         # get empirical feature counts (mean feature path) from trajectories
         empirical_fc = self._get_mean_feature_counts(trajectories)
@@ -180,7 +177,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         # rng = np.random.RandomState(self.seed)
         # theta = rng.uniform(-1, 1, self.num_features)
         theta = np.ones(self.num_features) / self.num_features
-        self.set_reward_func(theta, self.agent)
+        self.reward_vector.set_rewards(self.agent, theta)
 
         # 2 - perform gradient descent to optimize reward weights
         diff = np.float('inf')
@@ -218,10 +215,11 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             e += 1
 
             # set updated reward function
-            self.set_reward_func(theta, self.agent)
+            self.reward_vector.set_rewards(self.agent, theta)
 
         if verbose:
             self.log_progress(e, theta, diff, step_time)
+            logging.info('Finished, total time: {:.2f} secs.'.format(sum(times)))
 
         # returns stats dictionary
         return {
@@ -230,3 +228,16 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             THETA_STR: theta,
             TIME_STR: np.array([times])
         }
+
+    def save_results(self, stats, output_dir, img_format):
+        np.savetxt(os.path.join(output_dir, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
+                   header=','.join(self.reward_vector.names), comments='')
+
+        plot_evolution(stats[FEATURE_COUNT_DIFF_STR], ['diff'], 'Feature Count Diff. Evolution', None,
+                       os.path.join(output_dir, 'evo-feat-diff.{}'.format(img_format)), 'Epoch', 'Feature Difference')
+
+        plot_evolution(stats[REWARD_WEIGHTS_STR], self.reward_vector.names, 'Reward Parameters Evolution', None,
+                       os.path.join(output_dir, 'evo-rwd-weights.{}'.format(img_format)), 'Epoch', 'Weight')
+
+        plot_evolution(stats[TIME_STR], ['time'], 'Step Time Evolution', None,
+                       os.path.join(output_dir, 'evo-time.{}'.format(img_format)), 'Epoch', 'Time (secs.)')

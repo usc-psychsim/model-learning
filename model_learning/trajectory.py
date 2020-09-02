@@ -8,7 +8,7 @@ from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, turnKey, actionKey, VectorDistributionSet
-from model_learning.util import get_pool_and_map
+from model_learning.util.multiprocessing import get_pool_and_map
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'

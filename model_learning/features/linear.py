@@ -52,6 +52,8 @@ class LinearRewardVector(object):
         """
         assert len(weights) == len(self.rwd_features), \
             'Provided weight vector\'s dimension does not match reward features'
+
+        agent.setAttribute('R', {})
         for i, weight in enumerate(weights):
             self.rwd_features[i].set_reward(agent, weight, model)
 
@@ -116,7 +118,7 @@ class ValueComparisonLinearRewardFeature(LinearRewardFeature):
         self.comp_func = COMPARISON_OPS[comparison]
 
     def get_value(self, state):
-        # collects feature value distribution and returns weighted average
+        # collects feature value distribution and returns weighted sum
         dist = np.array([[float(self.comp_func(self.world.float2value(self.key, kv[self.key]), self.value)), p]
                          for kv, p in state.distributions[state.keyMap[self.key]].items()])
         return dist[:, 0].dot(dist[:, 1])
@@ -159,7 +161,7 @@ class NumericLinearRewardFeature(LinearRewardFeature):
         self.key = key
 
     def get_value(self, state):
-        # collects feature value distribution and returns weighted average
+        # collects feature value distribution and returns weighted sum
         dist = np.array([[kv[self.key], p] for kv, p in state.distributions[state.keyMap[self.key]].items()])
         return dist[:, 0].dot(dist[:, 1])
 

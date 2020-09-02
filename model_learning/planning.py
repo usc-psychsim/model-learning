@@ -4,7 +4,7 @@ from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, VectorDistributionSet
 from model_learning.trajectory import get_agent_action
-from model_learning.util import get_pool_and_map
+from model_learning.util.multiprocessing import get_pool_and_map
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -35,7 +35,7 @@ def get_policy(agent, states, model=None, horizon=None, selection=None, threshol
     Gets an agent's policy (action selection) for the given states.
     :param Agent agent: the agent for which to calculate the policy.
     :param list[VectorDistributionSet] states: the list of states for which to get the agent's policy.
-    :param str model: the name of the agent's model used for decision-making. `None` corresponds to the true model.
+    :param str or None model: the name of the agent's model used for decision-making. `None` corresponds to the true model.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
