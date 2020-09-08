@@ -2,7 +2,6 @@ import copy
 import random
 import logging
 from timeit import default_timer as timer
-from typing import Callable
 from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value

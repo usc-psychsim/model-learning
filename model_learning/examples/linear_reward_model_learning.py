@@ -105,7 +105,7 @@ if __name__ == '__main__':
     rwd_vector = ObjectsRewardVector(env, expert, feat_matrix, OUTER_COLORS, INNER_COLORS)
     alg = MaxEntRewardLearning(
         'max-ent', expert, rwd_vector,
-        None if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, PRUNE_THRESHOLD, HORIZON,
+        None if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, True, PRUNE_THRESHOLD, HORIZON,
         LEARNING_SEED)
     trajectories = [[(w.state, a) for w, a in t] for t in trajectories]
     stats = alg.learn(trajectories, True)

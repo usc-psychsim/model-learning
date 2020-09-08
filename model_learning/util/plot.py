@@ -4,6 +4,7 @@ import matplotlib
 
 matplotlib.use('Agg')  # for linux
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from model_learning.util.io import get_file_name_without_extension, get_file_changed_extension
 
 __author__ = 'Pedro Sequeira'
@@ -20,7 +21,6 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
     :param str title: the title of the plot.
     :param np.ndarray or None colors: an array of shape (num_variables, 3) containing colors for each variable in the
     [R, G, B] normalized format ([0-1]). If `None`, colors will be automatically generated.
-    :param str output_img:
     :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
     :param str x_label: the label of the X axis.
     :param str y_label: the label of the Y axis.
@@ -47,6 +47,58 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
 
     plt.xlim([0, data.shape[1] - 1])
     format_and_save_plot(plt.gca(), title, output_img, x_label, y_label, data.shape[0] > 1, True, show)
+
+
+def plot_bar(data, title, colors=None, output_img=None, plot_mean=True, x_label='', y_label='',
+             show_legend=True, horiz_grid=True, show=False):
+    """
+    Plots the given data, assumed to be a collection of key-value pairs.
+    :param dict[str, float] data: the data to be plotted.
+    :param str title: the title of the plot.
+    :param np.ndarray or None colors: an array of shape (num_variables, 3) containing colors for each variable in the
+    [R, G, B] normalized format ([0-1]). If `None`, colors will be automatically generated.
+    :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
+    :param str x_label: the label of the X axis.
+    :param str y_label: the label of the Y axis.
+    :param bool show_legend: whether to show a legend. If `False`, data labels will be placed on tick marks.
+    :param bool horiz_grid: whether to show an horizontal grid.
+    :param bool show: whether to show the plot on the screen.
+    :return:
+    """
+    data_size = len(data)
+    labels = list(data.keys())
+    values = [data[key] for key in labels]
+
+    # save to csv
+    np.savetxt(get_file_changed_extension(output_img, 'csv'), np.array([values]), '%s', ',',
+               header=','.join(labels), comments='')
+
+    # automatically get colors
+    if colors is None:
+        colors = distinct_colors(data_size)
+
+    # create bar chart with mean
+    plt.figure()
+    ax = plt.gca()
+    ax.bar(np.arange(data_size), values, color=colors, edgecolor='black', linewidth=0.7, zorder=100)
+    if plot_mean:
+        ax.axhline(y=np.mean(values), label='Mean', c='black', ls='--')
+
+    if show_legend:
+        # add custom legend on the side
+        plt.xticks([])
+        patches = []
+        for i, color in enumerate(colors):
+            patches.append(mpatches.Patch(color=color, label=labels[i]))
+        leg = plt.legend(handles=patches, loc='right', fancybox=False)
+        leg.get_frame().set_edgecolor('black')
+        leg.get_frame().set_linewidth(0.8)
+    else:
+        # show data labels in tick marks
+        plt.xticks(np.arange(data_size), labels, rotation=45, horizontalalignment='right')
+
+    format_and_save_plot(ax, title, output_img, x_label, y_label, False, horiz_grid, show)
+    plt.close()
 
 
 def format_and_save_plot(ax, title, output_img=None, x_label='', y_label='',

@@ -1,9 +1,9 @@
-import copy
 import numpy as np
 from abc import ABC, abstractmethod
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.pwl import VectorDistributionSet
+from model_learning.trajectory import copy_world
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -34,7 +34,10 @@ class ModelLearningAlgorithm(ABC):
         self._reset()
 
     def _reset(self):
-        self.world = copy.deepcopy(self.__base_agent.world)
+        """
+        Resets the algorithm by creating a clean copy of the world and agent
+        """
+        self.world = copy_world(self.__base_agent.world)
         self.agent = self.world.agents[self.__base_agent.name]
 
     @abstractmethod
