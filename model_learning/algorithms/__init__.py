@@ -1,12 +1,30 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from psychsim.action import ActionSet
 from psychsim.agent import Agent
+from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
 from model_learning.trajectory import copy_world
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+
+class ModelLearningResult(object):
+    """
+    Represents a result of PsychSim model learning for some expert data.
+    """
+
+    def __init__(self, data_id, trajectories, stats):
+        """
+        Creates a new result.
+        :param str data_id: an identifier for the data for which model learning was performed.
+        :param list[list[(VectorDistributionSet, Distribution)]] trajectories: a list of trajectories, each containing a
+        list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param dict[str, np.ndarray] stats: a dictionary with relevant statistics regarding the algorithm's execution.
+        """
+        self.data_id = data_id
+        self.trajectories = trajectories
+        self.stats = stats
 
 
 class ModelLearningAlgorithm(ABC):
@@ -41,22 +59,23 @@ class ModelLearningAlgorithm(ABC):
         self.agent = self.world.agents[self.__base_agent.name]
 
     @abstractmethod
-    def learn(self, trajectories):
+    def learn(self, trajectories, data_id=None):
         """
         Performs model learning by retrieving a PsychSim model approximating an expert's behavior as demonstrated
         through the given trajectories.
-        :param list[list[VectorDistributionSet, ActionSet]] trajectories:a list of trajectories, each containing a list
-        (sequence) of state-action pairs demonstrated by an "expert" in the task.
-        :rtype: dict[str, np.ndarray]
-        :return: a dictionary with relevant statistics of the algorithm.
+        :param list[list[(VectorDistributionSet, Distribution)]] trajectories: a list of trajectories, each containing a
+        list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param str data_id: an (optional) identifier for the data for which model learning was performed.
+        :rtype: ModelLearningResult
+        :return: the result of the model learning procedure.
         """
         pass
 
     @abstractmethod
-    def save_results(self, stats, output_dir, img_format):
+    def save_results(self, result, output_dir, img_format):
         """
         Saves the several results of a run of the algorithm to the given directory.
-        :param dict[str, np.ndarray] stats: a dictionary with relevant statistics of the algorithm's run.
+        :param ModelLearningResult result: the results of the algorithm run.
         :param str output_dir: the path to the directory in which to save the results.
         :param str img_format: the format of the images to be saved.
         :return:

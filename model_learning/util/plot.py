@@ -58,6 +58,7 @@ def plot_bar(data, title, colors=None, output_img=None, plot_mean=True, x_label=
     :param np.ndarray or None colors: an array of shape (num_variables, 3) containing colors for each variable in the
     [R, G, B] normalized format ([0-1]). If `None`, colors will be automatically generated.
     :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
+    :param bool plot_mean: whether to plot a horizontal line across the bar chart denoting the mean of the values.
     :param str x_label: the label of the X axis.
     :param str y_label: the label of the Y axis.
     :param bool show_legend: whether to show a legend. If `False`, data labels will be placed on tick marks.
@@ -78,7 +79,7 @@ def plot_bar(data, title, colors=None, output_img=None, plot_mean=True, x_label=
         colors = distinct_colors(data_size)
 
     # create bar chart with mean
-    plt.figure()
+    plt.figure(figsize=(max(8., 0.4 * data_size), 6))
     ax = plt.gca()
     ax.bar(np.arange(data_size), values, color=colors, edgecolor='black', linewidth=0.7, zorder=100)
     if plot_mean:

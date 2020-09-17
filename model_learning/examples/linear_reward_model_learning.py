@@ -9,8 +9,7 @@ from model_learning.planning import get_policy, get_action_values
 from model_learning.util.io import create_clear_dir
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.features.objectworld import ObjectsRewardVector
-from model_learning.algorithms.max_entropy import MaxEntRewardLearning, FEATURE_COUNT_DIFF_STR, REWARD_WEIGHTS_STR, \
-    THETA_STR
+from model_learning.algorithms.max_entropy import MaxEntRewardLearning, THETA_STR
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -108,13 +107,13 @@ if __name__ == '__main__':
         None if PARALLEL else 1, NORM_THETA, LEARNING_RATE, MAX_EPOCHS, THRESHOLD, True, PRUNE_THRESHOLD, HORIZON,
         LEARNING_SEED)
     trajectories = [[(w.state, a) for w, a in t] for t in trajectories]
-    stats = alg.learn(trajectories, True)
+    result = alg.learn(trajectories, verbose=True)
 
     # saves results/stats
-    alg.save_results(stats, OUTPUT_DIR, IMG_FORMAT)
+    alg.save_results(result, OUTPUT_DIR, IMG_FORMAT)
 
     # set learner's reward into expert for evaluation (compare to true model)
-    rwd_vector.set_rewards(expert, stats[THETA_STR])
+    rwd_vector.set_rewards(expert, result.stats[THETA_STR])
 
     # gets policy and value
     logging.info('=================================')

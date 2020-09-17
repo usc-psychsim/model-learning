@@ -9,7 +9,7 @@ from psychsim.probability import Distribution
 from model_learning.util.multiprocessing import get_pool_and_map
 from model_learning.util.plot import plot_evolution
 from model_learning.trajectory import TOP_LEVEL_STR
-from model_learning.algorithms import ModelLearningAlgorithm
+from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
 from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
@@ -155,15 +155,16 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             logging.info('Step {}: diff={:.3f}, θ={}, α={:.2f}, time={:.2f}s'.format(
                 e, diff, theta, learning_rate, step_time))
 
-    def learn(self, trajectories, verbose=False):
+    def learn(self, trajectories, data_id=None, verbose=False):
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
-        :param list[list[tuple[VectorDistributionSet, Distribution]]] trajectories: a list of trajectories, each
+        :param list[list[(VectorDistributionSet, Distribution)]] trajectories: a list of trajectories, each
         containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param str data_id: an (optional) identifier for the data for which model learning was performed.
         :param bool verbose: whether to show information at each timestep during learning.
-        :rtype: dict[str, np.ndarray]
-        :return: a dictionary with relevant statistics of the algorithm.
+        :rtype: ModelLearningResult
+        :return: the result of the model learning procedure.
         """
         self._reset()
 
@@ -230,15 +231,23 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             logging.info('Finished, total time: {:.2f} secs.'.format(sum(times)))
 
         # returns stats dictionary
-        return {
+        return ModelLearningResult(data_id, trajectories, {
             FEATURE_COUNT_DIFF_STR: np.array([diffs]),
             REWARD_WEIGHTS_STR: np.array(thetas).T,
             THETA_STR: theta,
             TIME_STR: np.array([times]),
             LEARN_RATE_STR: np.array([rates])
-        }
+        })
 
-    def save_results(self, stats, output_dir, img_format):
+    def save_results(self, result, output_dir, img_format):
+        """
+        Saves the several results of a run of the algorithm to the given directory.
+        :param ModelLearningResult result: the results of the algorithm run.
+        :param str output_dir: the path to the directory in which to save the results.
+        :param str img_format: the format of the images to be saved.
+        :return:
+        """
+        stats = result.stats
         np.savetxt(os.path.join(output_dir, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
                    header=','.join(self.reward_vector.names), comments='')
 

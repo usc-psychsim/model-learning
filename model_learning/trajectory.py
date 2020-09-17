@@ -6,7 +6,7 @@ from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey, actionKey, VectorDistributionSet
+from psychsim.pwl import modelKey, turnKey
 from model_learning.util.multiprocessing import get_pool_and_map
 
 __author__ = 'Pedro Sequeira'
@@ -29,17 +29,6 @@ def copy_world(world):
         new_world.agents[name].modelList = copy.deepcopy(agent.modelList)
         new_world.agents[name].models = copy.deepcopy(agent.models)
     return new_world
-
-
-def get_agent_action(agent, state):
-    """
-    Gets the distribution over actions that the agent executed which resulted in the given state.
-    :param Agent agent: the agent whose action(s) we want to retrieve.
-    :param VectorDistributionSet state: the state resulting from the agent's action(s).
-    :rtype: Distribution
-    :return: the action(s) that the agent executed.
-    """
-    return agent.world.getFeature(actionKey(agent.name), state)
 
 
 def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
@@ -97,7 +86,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
         # steps the world, gets the agent's action
         prev_world = copy_world(world)
         world.step(select=True, horizon=horizon, tiebreak=selection, threshold=threshold, debug={TOP_LEVEL_STR: True})
-        action = get_agent_action(agent, world.state)
+        action = world.getAction(agent.name)
         trajectory.append((prev_world, action))
 
         step_time = timer() - start

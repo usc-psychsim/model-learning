@@ -3,7 +3,6 @@ from psychsim.action import ActionSet
 from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, VectorDistributionSet
-from model_learning.trajectory import get_agent_action
 from model_learning.util.multiprocessing import get_pool_and_map
 
 __author__ = 'Pedro Sequeira'
@@ -27,7 +26,7 @@ def get_state_policy(agent, state, model=None, horizon=None, selection=None, thr
         state = copy.deepcopy(state)
         agent.world.setFeature(modelKey(agent.name), model, state)
     state = agent.world.step(state=state, real=False, horizon=horizon, tiebreak=selection, threshold=threshold)
-    return get_agent_action(agent, state)
+    return agent.world.getAction(agent.name, state)
 
 
 def get_policy(agent, states, model=None, horizon=None, selection=None, threshold=None, processes=None):
