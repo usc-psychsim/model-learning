@@ -49,16 +49,17 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
     format_and_save_plot(plt.gca(), title, output_img, x_label, y_label, data.shape[0] > 1, True, show)
 
 
-def plot_bar(data, title, colors=None, output_img=None, plot_mean=True, x_label='', y_label='',
-             show_legend=True, horiz_grid=True, show=False):
+def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_error=True, x_label='', y_label='',
+             show_legend=False, horiz_grid=True, show=False):
     """
-    Plots the given data, assumed to be a collection of key-value pairs.
-    :param dict[str, float] data: the data to be plotted.
+    Plots the given data as a bar-chart, assumed to be a collection of key-value pairs.
+    :param dict[str, float or list[float]] data: the data to be plotted.
     :param str title: the title of the plot.
+    :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
     :param np.ndarray or None colors: an array of shape (num_variables, 3) containing colors for each variable in the
     [R, G, B] normalized format ([0-1]). If `None`, colors will be automatically generated.
-    :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
     :param bool plot_mean: whether to plot a horizontal line across the bar chart denoting the mean of the values.
+    :param bool plot_error: whether to plot error bars (requires input `data` to be 2-dimensional for each entry).
     :param str x_label: the label of the X axis.
     :param str y_label: the label of the Y axis.
     :param bool show_legend: whether to show a legend. If `False`, data labels will be placed on tick marks.
@@ -68,22 +69,26 @@ def plot_bar(data, title, colors=None, output_img=None, plot_mean=True, x_label=
     """
     data_size = len(data)
     labels = list(data.keys())
-    values = [data[key] for key in labels]
+    values = np.array([data[key] if isinstance(data[key], list) else [data[key]] for key in labels]).T
 
     # save to csv
-    np.savetxt(get_file_changed_extension(output_img, 'csv'), np.array([values]), '%s', ',',
-               header=','.join(labels), comments='')
+    np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',', header=','.join(labels), comments='')
 
     # automatically get colors
     if colors is None:
         colors = distinct_colors(data_size)
 
-    # create bar chart with mean
+    # create bar chart with mean and error-bars
     plt.figure(figsize=(max(8., 0.4 * data_size), 6))
     ax = plt.gca()
-    ax.bar(np.arange(data_size), values, color=colors, edgecolor='black', linewidth=0.7, zorder=100)
+    if plot_error and values.shape[0] > 1:
+        ax.bar(np.arange(data_size), values[0], yerr=values[1], capsize=2, error_kw={'elinewidth': .75},
+               color=colors, edgecolor='black', linewidth=0.7, zorder=100)
+    else:
+        ax.bar(np.arange(data_size), values[0], color=colors, edgecolor='black', linewidth=0.7, zorder=100)
+
     if plot_mean:
-        ax.axhline(y=np.mean(values), label='Mean', c='black', ls='--')
+        ax.axhline(y=np.mean(values[0]), label='Mean', c='black', ls='--')
 
     if show_legend:
         # add custom legend on the side

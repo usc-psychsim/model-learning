@@ -251,8 +251,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         np.savetxt(os.path.join(output_dir, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
                    header=','.join(self.reward_vector.names), comments='')
 
-        plot_evolution(stats[FEATURE_COUNT_DIFF_STR], ['diff'], 'Feature Count Diff. Evolution', None,
-                       os.path.join(output_dir, 'evo-feat-diff.{}'.format(img_format)), 'Epoch', 'Feature Difference')
+        plot_evolution(stats[FEATURE_COUNT_DIFF_STR], ['diff'], 'Reward Param. Diff. Evolution', None,
+                       os.path.join(output_dir, 'evo-rwd-weights-diff.{}'.format(img_format)), 'Epoch', '$\Delta \\theta$')
 
         plot_evolution(stats[REWARD_WEIGHTS_STR], self.reward_vector.names, 'Reward Parameters Evolution', None,
                        os.path.join(output_dir, 'evo-rwd-weights.{}'.format(img_format)), 'Epoch', 'Weight')
