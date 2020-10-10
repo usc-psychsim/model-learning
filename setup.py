@@ -15,8 +15,10 @@ setup(name='model-learning',
       install_requires=[
           'psychsim',
           'numpy',
+          'scipy',
           'matplotlib',
-          'jsonpickle'
+          'jsonpickle',
+          'sklearn'
       ],
       zip_safe=True,
       python_requires='>=3.6',
