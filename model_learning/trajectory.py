@@ -1,6 +1,7 @@
 import copy
 import random
 import logging
+import numpy as np
 from timeit import default_timer as timer
 from psychsim.agent import Agent
 from psychsim.world import World
@@ -152,7 +153,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     return trajectories
 
 
-def sample_sub_trajectories(trajectory, n_trajectories, trajectory_length, with_replacement=False, seed=0):
+def sample_random_sub_trajectories(trajectory, n_trajectories, trajectory_length, with_replacement=False, seed=0):
     """
     Randomly samples sub-trajectories from a given trajectory.
     :param list[tuple[World, Distribution]] trajectory: the trajectory containing a list of state-action pairs.
@@ -172,6 +173,24 @@ def sample_sub_trajectories(trajectory, n_trajectories, trajectory_length, with_
     rng = random.Random(seed)
     idxs = list(range(len(trajectory) - trajectory_length + 1))
     idxs = rng.choices(idxs, k=n_trajectories) if with_replacement else rng.sample(idxs, n_trajectories)
+    return [trajectory[idx:idx + trajectory_length] for idx in idxs]
+
+
+def sample_spread_sub_trajectories(trajectory, n_trajectories, trajectory_length):
+    """
+    Samples sub-trajectories from a given trajectory as spread as possible.
+    :param list[tuple[World, Distribution]] trajectory: the trajectory containing a list of state-action pairs.
+    :param int n_trajectories: the number of trajectories to be sampled.
+    :param int trajectory_length: the length of the sampled trajectories.
+    :rtype: list[list[tuple[World, Distribution]]]
+    :return: a list of sub-trajectories, each containing a list of state-action pairs.
+    """
+    # check provided trajectory length
+    assert len(trajectory) > trajectory_length + n_trajectories - 1, \
+        'Trajectory has insufficient length in relation to the requested length and amount of sub-trajectories.'
+
+    idxs = np.asarray(np.arange(0, len(trajectory) - trajectory_length + 1,
+                                (len(trajectory) - trajectory_length) / (n_trajectories - 1)), dtype=int)
     return [trajectory[idx:idx + trajectory_length] for idx in idxs]
 
 
