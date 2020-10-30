@@ -2,7 +2,7 @@ import itertools
 import logging
 import os
 import numpy as np
-from model_learning.metrics import policy_mismatch_prob, policy_divergence
+from model_learning.evaluation.metrics import policy_mismatch_prob, policy_divergence
 from model_learning.util.math import min_max_scale
 from psychsim.world import World
 from model_learning.planning import get_policy, get_action_values

@@ -5,6 +5,7 @@ from scipy.cluster.hierarchy import dendrogram
 from sklearn.cluster import AgglomerativeClustering
 from model_learning.algorithms.max_entropy import THETA_STR
 from model_learning.util.plot import format_and_save_plot
+from model_learning.util.io import get_file_changed_extension
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -26,7 +27,30 @@ def cluster_linear_rewards(results, linkage, dist_threshold):
         n_clusters=None, linkage=linkage, distance_threshold=dist_threshold)
     clustering.fit(thetas)
 
+    # performs edge/slope detection
+    grad = np.gradient(clustering.distances_)
+    edges = np.where(grad > (grad.mean() + grad.std()))[0]
+
+    # manually update clusters if distance threshold is lower than expected
+    if len(edges) > 0 and clustering.distances_[edges[0]] < dist_threshold:
+        clustering.labels_ = np.full(clustering.labels_.shape, -1, dtype=int)
+        clustering.distance_threshold = clustering.distances_[edges[0]]
+        clustering.n_clusters_ = int(len(clustering.labels_) - edges[0])
+        _update_clusters(clustering, 0, len(clustering.children_) - 1)
+        clustering.labels_ = np.max(clustering.labels_) - clustering.labels_  # invert labels to follow natural order
+
     return clustering, thetas
+
+
+def _update_clusters(clustering, cur_cluster, cur_node):
+    children = clustering.children_[cur_node]
+    dist = clustering.distances_[cur_node]
+    for child in children:
+        cur_cluster = cur_cluster if dist < clustering.distance_threshold else np.max(clustering.labels_) + 1
+        if child < clustering.n_leaves_:
+            clustering.labels_[child] = cur_cluster
+        else:
+            _update_clusters(clustering, cur_cluster, child - clustering.n_leaves_)
 
 
 def get_clusters_means(clustering, thetas):
@@ -97,29 +121,41 @@ def plot_clustering_distances(clustering, file_path):
     :param str file_path: the path to the file in which to save the plot.
     :return:
     """
+    # saves csv with distances
+    num_clusters = np.flip(np.arange(len(clustering.distances_) + 1) + 1)
+    distances = np.hstack(([0], clustering.distances_))
+    np.savetxt(get_file_changed_extension(file_path, 'csv'), np.column_stack((num_clusters, distances)), '%s', ',',
+               header='Num. Clusters,Distance', comments='')
+
     # distances plot
     plt.figure()
-    plt.plot(np.hstack(([0], clustering.distances_)))
+    plt.plot(distances)
     plt.xlim([0, len(clustering.distances_)])
     plt.ylim(ymin=0)
-    plt.xticks(np.arange(len(clustering.distances_) + 1), np.flip(np.arange(len(clustering.distances_) + 1) + 1))
-    plt.axvline(x=len(clustering.distances_) - clustering.n_clusters_ + 1, c='red', ls='--', lw=0.6)
+    plt.xticks(np.arange(len(clustering.distances_) + 1), num_clusters)
+    plt.axvline(x=len(clustering.distances_) - clustering.n_clusters_ + 1, c='red', ls='--',
+                lw=clustering.distance_threshold)
     format_and_save_plot(plt.gca(), 'Reward Weights Clustering Distance', file_path,
                          x_label='Num. Clusters', show_legend=False)
 
 
-def plot_clustering_dendrogram(clustering, file_path, dist_threshold, labels):
+def plot_clustering_dendrogram(clustering, file_path, labels):
     """
     Saves a dendrogram plot with the clustering resulting from the given model.
     :param AgglomerativeClustering clustering: the clustering algorithm with the resulting labels and distances.
     :param str file_path: the path to the file in which to save the plot.
-    :param float dist_threshold: the distance above which the clusters are not joined (determines final number of clusters).
     :param list[str] labels: a list containing a label for each clustering datapoint.
     :return:
     """
+    # saves linkage info to csv
     linkage_matrix = get_linkage_matrix(clustering)
-    dendrogram(linkage_matrix, clustering.n_clusters_, 'level', labels=labels, leaf_rotation=45, leaf_font_size=8)
-    plt.axhline(y=dist_threshold, c='red', ls='--', lw=0.6)
+    np.savetxt(get_file_changed_extension(file_path, 'csv'), linkage_matrix, '%s', ',',
+               header='Child 0, Child 1, Distance, Leaf Count', comments='')
+
+    # saves dendrogram plot
+    dendrogram(linkage_matrix, clustering.n_clusters_, 'level', clustering.distance_threshold,
+               labels=labels, leaf_rotation=45, leaf_font_size=8)
+    plt.axhline(y=clustering.distance_threshold, c='red', ls='--', lw=clustering.distance_threshold)
     format_and_save_plot(plt.gca(), 'Reward Weights Clustering Dendrogram', file_path, show_legend=False)
 
 
