@@ -1,5 +1,6 @@
 import colorsys
 import numpy as np
+import pandas as pd
 import matplotlib
 
 matplotlib.use('Agg')  # for linux
@@ -105,6 +106,37 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
 
     format_and_save_plot(ax, title, output_img, x_label, y_label, False, horiz_grid, show)
     plt.close()
+
+
+def plot_confusion_matrix(matrix, output_img, x_labels, y_labels, color_map, title,
+                          x_label='', y_label='', vmin=None, vmax=None):
+    """
+    Plots the given confusion matrix.
+    :param np.ndarray matrix: the confusion matrix to be plotted.
+    :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
+    :param list[str] x_labels: the labels for the elements in the X-axis.
+    :param list[str] y_labels: the labels for the elements in the Y-axis.
+    :param str color_map: the colormap to be used.
+    :param str title: the plot's title.
+    :param str x_label: the label of the X axis.
+    :param str y_label: the label of the Y axis.
+    :param float vmin: the colorbar minimal value. The true minimum will be used if set to `None`.
+    :param float vmax: the colorbar maximal value. The true maximum will be used if set to `None`.
+    :return:
+    """
+    # saves matrix to csv
+    pd.DataFrame(matrix, y_labels, x_labels).to_csv(get_file_changed_extension(output_img, 'csv'))
+
+    # save grid/heatmap plot
+    plt.figure()
+    color_map = matplotlib.cm.get_cmap(color_map)
+    color_map.set_under('w')
+    color_map.set_over('w')
+    plt.pcolormesh(matrix, cmap=color_map, edgecolors=None, linewidth=0.1, vmax=vmax, vmin=vmin)
+    plt.xticks(np.arange(len(x_labels)) + 0.5, x_labels, rotation=45, horizontalalignment='right')
+    plt.yticks(np.arange(len(y_labels)) + 0.5, y_labels)
+    plt.colorbar()
+    format_and_save_plot(plt.gca(), title, output_img, x_label, y_label, False, False)
 
 
 def format_and_save_plot(ax, title, output_img=None, x_label='', y_label='',
