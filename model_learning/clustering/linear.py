@@ -11,12 +11,13 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def cluster_linear_rewards(results, linkage, dist_threshold):
+def cluster_linear_rewards(results, linkage, dist_threshold, stds=1.):
     """
     Performs hierarchical agglomerative clustering of a group of linear reward functions found through IRL.
     :param list[ModelLearningResult] results: a list of linear IRL results used for clustering.
     :param str linkage: the linkage criterion of clustering algorithm.
     :param float dist_threshold: the distance above which the clusters are not joined (determines final number of clusters).
+    :param float stds: the number of standard deviations above the gradient mean used for automatic cluster detection.
     :rtype: (AgglomerativeClustering, np.ndarray)
     :return: a tuple containing the agglomerative clustering algorithm fit to the reward weight vectors, and the
     an array containing all the reward weight vectors).
@@ -29,7 +30,7 @@ def cluster_linear_rewards(results, linkage, dist_threshold):
 
     # performs edge/slope detection
     grad = np.gradient(clustering.distances_)
-    edges = np.where(grad > (grad.mean() + grad.std()))[0]
+    edges = np.where(grad > (grad.mean() + stds * grad.std()))[0]
 
     # manually update clusters if distance threshold is lower than expected
     if len(edges) > 0 and clustering.distances_[edges[0]] < dist_threshold:

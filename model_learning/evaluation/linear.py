@@ -10,7 +10,7 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights, include_random=True,
+def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
                      rationality=None, horizon=None, threshold=None, processes=None, invalid_val=-1.):
     """
     Performs cross internal evaluation by testing a set of agents under different linear reward weights.
@@ -20,7 +20,6 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights, includ
     :param list[str] agent_names: the names of the expert agents in each trajectory used for evaluation.
     :param list[LinearRewardVector] rwd_vectors: the reward functions for each agent.
     :param list[np.ndarray] rwd_weights: the reward weight vectors that we want to compare against the expert's behavior.
-    :param bool include_random: whether to evaluate against a random weight vector in addition to the provided vectors in `rwd_weights`.
     :param float rationality: the rationality of agents when computing their policy to compare against the experts'.
     :param int horizon: the agent's planning horizon.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
@@ -32,10 +31,6 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights, includ
     """
     assert len(trajectories) == len(agent_names) == len(rwd_vectors), \
         'Different number of trajectories, agent names or reward vectors provided!'
-
-    if include_random:
-        rwd_weights = rwd_weights.copy()
-        rwd_weights.append(np.full(rwd_weights[0].shape, 1. / len(rwd_weights[0])))
 
     eval_matrix = {}
     for i, trajectory in enumerate(trajectories):
