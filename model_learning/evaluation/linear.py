@@ -5,13 +5,15 @@ from psychsim.world import World
 from model_learning.evaluation.metrics import evaluate_internal
 from model_learning.features.linear import LinearRewardVector
 from model_learning.planning import get_policy
+from model_learning.trajectory import sample_random_sub_trajectories
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
 def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
-                     rationality=None, horizon=None, threshold=None, processes=None, invalid_val=-1.):
+                     rationality=None, horizon=None, threshold=None, processes=None,
+                     num_states=None, seed=0, invalid_val=-1.):
     """
     Performs cross internal evaluation by testing a set of agents under different linear reward weights.
     :param list[list[tuple[World, Distribution]]] trajectories: the set of trajectories containing the experts' behavior
@@ -24,10 +26,12 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
     :param int horizon: the agent's planning horizon.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
+    :param int num_states: the number of states in the trajectory to be evaluated. `None` indicates all states.
+    :param int seed: the seed used to initialize the random number generator for state sampling.
     :param float invalid_val: the value set to non-compared pairs, used to initialize the confusion matrix.
     :rtype: dict[str, np.ndarray]
-    :return: a dictionary containing, for each internal evaluation metric, a matrix of size (num_trajectories,
-    num_rwd_weights) with the evaluation comparing each expert's policy (rows) against each reward weight vector (columns).
+    :return: a dictionary containing, for each internal evaluation metric, a matrix of size (num_rwd_weights,
+    num_trajectories) with the evaluation comparing each expert's policy (column) against each reward weight vector (row).
     """
     assert len(trajectories) == len(agent_names) == len(rwd_vectors), \
         'Different number of trajectories, agent names or reward vectors provided!'
@@ -37,9 +41,13 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
         agent = trajectory[-1][0].agents[agent_names[i]]
         agent.setAttribute('rationality', rationality)
 
+        # sample states from trajectories
+        worlds = trajectory if num_states is None else \
+            [st[0] for st in sample_random_sub_trajectories(trajectory, num_states, 1, seed=seed)]
+
         # expert's observed "policy"
-        expert_states = [w.state for w, _ in trajectory]
-        expert_pi = [a for _, a in trajectory]
+        expert_states = [w.state for w, _ in worlds]
+        expert_pi = [a for _, a in worlds]
 
         # compute agent's policy under each reward function
         for j, rwd_weight in enumerate(rwd_weights):
@@ -54,7 +62,7 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
             metrics = evaluate_internal(expert_pi, agent_pi)
             for metric_name, metric in metrics.items():
                 if metric_name not in eval_matrix:
-                    eval_matrix[metric_name] = np.full((len(trajectories), len(rwd_weights)), invalid_val)
-                eval_matrix[metric_name][i, j] = metric
+                    eval_matrix[metric_name] = np.full((len(rwd_weights),len(trajectories)), invalid_val)
+                eval_matrix[metric_name][j, i] = metric
 
     return eval_matrix

@@ -128,7 +128,7 @@ def plot_confusion_matrix(matrix, output_img, x_labels, y_labels, color_map, tit
     pd.DataFrame(matrix, y_labels, x_labels).to_csv(get_file_changed_extension(output_img, 'csv'))
 
     # save grid/heatmap plot
-    plt.figure()
+    plt.figure(figsize=(max(8., len(x_labels) * .5), max(6., len(y_labels) * 6 / 16)))
     color_map = matplotlib.cm.get_cmap(color_map)
     color_map.set_under('w')
     color_map.set_over('w')

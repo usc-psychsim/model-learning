@@ -28,12 +28,15 @@ def evaluate_clustering(clustering, gt_labels, output_dir, img_format='pdf', max
     :param str img_format: the format of plot images to be saved.
     :param int max_comb_length: the maximum length of the ground-truth partition combinations to be evaluated.
     A value of `1` means that only the original, non-combined partitions, are evaluated.
-    :return:
+    :rtype: dict[int, dict[str, dict[str, float]]]
+    :return: a dictionary of form comb_length -> metric -> partition -> value  containing, for each combination length
+    and for each metric, a dictionary with that metric's evaluation for a particular data partition with that length.
     """
     # gets unique labels
     gt_labels = {name: _get_unique_labels(gt_labels[name]) for name in gt_labels}
 
     # gets different combinations of ground-truth labels
+    evaluations = {}
     data_length = len(gt_labels[next(iter(gt_labels))])
     for comb_length in range(1, max_comb_length + 1):
         gt_name_combs = list(combinations(list(gt_labels.keys()), comb_length))
@@ -44,12 +47,17 @@ def evaluate_clustering(clustering, gt_labels, output_dir, img_format='pdf', max
             gt_comb_labels[comb_name] = _get_unique_labels(comb_labels)
 
         # evaluates partitions according to different metrics
+        evaluations[comb_length] = {}
         for metric_name in GT_EVAL_METRICS:
             metric_short, metric_func = GT_EVAL_METRICS[metric_name]
 
             clustering_evals = {name: metric_func(labels, clustering.labels_)
                                 for name, labels in gt_comb_labels.items()}
 
+            evaluations[comb_length][metric_name] = clustering_evals
+
             plot_bar(clustering_evals, 'Clustering Evaluations',
                      os.path.join(output_dir, 'eval-comb-{}-{}.{}'.format(comb_length, metric_short, img_format)),
                      y_label=metric_name)
+
+    return evaluations
