@@ -95,7 +95,8 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
         if verbose is not None:
             logging.info('Step {} took {:.2f}s (action: {})'.format(
                 i, step_time, action if len(action) > 1 else action.first()))
-            verbose()
+            if callable(verbose):
+                verbose()
 
     # puts back agent model
     if model is not None:
@@ -145,7 +146,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
          for t in range(n_trajectories)]))
 
     if verbose:
-        logging.info('Total time for generating {} trajectories: {:.2f}s'.format(n_trajectories, timer() - start))
+        logging.info('Total time for generating {} trajectories: {:.3f}s'.format(n_trajectories, timer() - start))
 
     if pool is not None:
         pool.close()

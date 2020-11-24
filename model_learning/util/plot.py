@@ -73,7 +73,9 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
     values = np.array([data[key] if isinstance(data[key], list) else [data[key]] for key in labels]).T
 
     # save to csv
-    np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',', header=','.join(labels), comments='')
+    if output_img is not None:
+        np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',',
+                   header=','.join(labels), comments='')
 
     # automatically get colors
     if colors is None:
