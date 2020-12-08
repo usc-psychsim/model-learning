@@ -73,9 +73,7 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
     values = np.array([data[key] if isinstance(data[key], list) else [data[key]] for key in labels]).T
 
     # save to csv
-    if output_img is not None:
-        np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',',
-                   header=','.join(labels), comments='')
+    np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',', header=','.join(labels), comments='')
 
     # automatically get colors
     if colors is None:
@@ -104,7 +102,8 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
         leg.get_frame().set_linewidth(0.8)
     else:
         # show data labels in tick marks
-        plt.xticks(np.arange(data_size), labels, rotation=45, horizontalalignment='right')
+        rotation = 0 if max(len(label) for label in labels) <= 8 else 45
+        plt.xticks(np.arange(data_size), labels, rotation=rotation, horizontalalignment='right')
 
     format_and_save_plot(ax, title, output_img, x_label, y_label, False, horiz_grid, show)
     plt.close()

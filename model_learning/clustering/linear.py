@@ -128,24 +128,23 @@ def plot_clustering_distances(clustering, file_path):
     np.savetxt(get_file_changed_extension(file_path, 'csv'), np.column_stack((num_clusters, distances)), '%s', ',',
                header='Num. Clusters,Distance', comments='')
 
-    # distances plot
+    # plots distances
     plt.figure()
-    plt.plot(distances)
-    plt.xlim([0, len(clustering.distances_)])
+    plt.plot(num_clusters, distances)
+    plt.xlim(num_clusters[0], num_clusters[-1])  # invert for more natural view of hierarchical clustering
     plt.ylim(ymin=0)
-    plt.xticks(np.arange(len(clustering.distances_) + 1), num_clusters)
-    plt.axvline(x=len(clustering.distances_) - clustering.n_clusters_ + 1, c='red', ls='--',
-                lw=clustering.distance_threshold)
+    plt.axvline(x=clustering.n_clusters_, c='red', ls='--', lw=clustering.distance_threshold)
     format_and_save_plot(plt.gca(), 'Reward Weights Clustering Distance', file_path,
                          x_label='Num. Clusters', show_legend=False)
 
 
-def plot_clustering_dendrogram(clustering, file_path, labels):
+def plot_clustering_dendrogram(clustering, file_path, labels=None):
     """
     Saves a dendrogram plot with the clustering resulting from the given model.
     :param AgglomerativeClustering clustering: the clustering algorithm with the resulting labels and distances.
     :param str file_path: the path to the file in which to save the plot.
-    :param list[str] labels: a list containing a label for each clustering datapoint.
+    :param list[str] labels: a list containing a label for each clustering datapoint. If `None`, the cluster if of each
+    datapoint is used as label.
     :return:
     """
     # saves linkage info to csv
@@ -154,8 +153,9 @@ def plot_clustering_dendrogram(clustering, file_path, labels):
                header='Child 0, Child 1, Distance, Leaf Count', comments='')
 
     # saves dendrogram plot
+    labels = [str(c) for c in clustering.labels_] if labels is None else labels
     dendrogram(linkage_matrix, clustering.n_clusters_, 'level', clustering.distance_threshold,
-               labels=labels, leaf_rotation=45, leaf_font_size=8)
+               labels=labels, leaf_rotation=45 if max(len(l) for l in labels) <= 8 else 0, leaf_font_size=8)
     plt.axhline(y=clustering.distance_threshold, c='red', ls='--', lw=clustering.distance_threshold)
     format_and_save_plot(plt.gca(), 'Reward Weights Clustering Dendrogram', file_path, show_legend=False)
 
