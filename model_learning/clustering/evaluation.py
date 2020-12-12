@@ -40,7 +40,7 @@ def evaluate_clustering(clustering, gt_labels, output_dir, img_format='pdf', max
     data_length = len(gt_labels[next(iter(gt_labels))])
     for comb_length in range(1, max_comb_length + 1):
         gt_name_combs = list(combinations(list(gt_labels.keys()), comb_length))
-        gt_comb_labels = {}
+        gt_comb_labels = {'Ground-truth': clustering.labels_}
         for gt_name_comb in gt_name_combs:
             comb_name = ' x '.join(gt_name_comb)
             comb_labels = [''.join([str(gt_labels[name][i]) for name in gt_name_comb]) for i in range(data_length)]

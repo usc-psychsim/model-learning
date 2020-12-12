@@ -54,7 +54,7 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
              show_legend=False, horiz_grid=True, show=False):
     """
     Plots the given data as a bar-chart, assumed to be a collection of key-value pairs.
-    :param dict[str, float or list[float]] data: the data to be plotted.
+    :param dict[str, float or (float,float)] data: the data to be plotted.
     :param str title: the title of the plot.
     :param str output_img: the path to the image on which to save the plot. None results in no image being saved.
     :param np.ndarray or None colors: an array of shape (num_variables, 3) containing colors for each variable in the
@@ -70,7 +70,8 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
     """
     data_size = len(data)
     labels = list(data.keys())
-    values = np.array([data[key] if isinstance(data[key], list) else [data[key]] for key in labels]).T
+    values = np.array([data[key] if isinstance(data[key], tuple) or isinstance(data[key], list) else [data[key]]
+                       for key in labels]).T
 
     # save to csv
     np.savetxt(get_file_changed_extension(output_img, 'csv'), values, '%s', ',', header=','.join(labels), comments='')
@@ -102,8 +103,10 @@ def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_err
         leg.get_frame().set_linewidth(0.8)
     else:
         # show data labels in tick marks
-        rotation = 0 if max(len(label) for label in labels) <= 8 else 45
-        plt.xticks(np.arange(data_size), labels, rotation=rotation, horizontalalignment='right')
+        short_labels = max(len(label) for label in labels) <= 8
+        rotation = 0 if short_labels else 45
+        align = 'center' if short_labels else 'right'
+        plt.xticks(np.arange(data_size), labels, rotation=rotation, horizontalalignment=align)
 
     format_and_save_plot(ax, title, output_img, x_label, y_label, False, horiz_grid, show)
     plt.close()

@@ -155,7 +155,7 @@ def plot_clustering_dendrogram(clustering, file_path, labels=None):
     # saves dendrogram plot
     labels = [str(c) for c in clustering.labels_] if labels is None else labels
     dendrogram(linkage_matrix, clustering.n_clusters_, 'level', clustering.distance_threshold,
-               labels=labels, leaf_rotation=45 if max(len(l) for l in labels) <= 8 else 0, leaf_font_size=8)
+               labels=labels, leaf_rotation=45 if max(len(l) for l in labels) > 8 else 0, leaf_font_size=8)
     plt.axhline(y=clustering.distance_threshold, c='red', ls='--', lw=clustering.distance_threshold)
     format_and_save_plot(plt.gca(), 'Reward Weights Clustering Dendrogram', file_path, show_legend=False)
 
