@@ -38,25 +38,14 @@ class ModelLearningAlgorithm(ABC):
     while others are set as free parameters to be optimized by the algorithm.
     """
 
-    def __init__(self, label, base_agent):
+    def __init__(self, label, agent_name):
         """
         Creates a new algorithm.
         :param str label: the label associated with this algorithm (might be useful for testing purposes).
-        :param Agent base_agent: the base agent containing the model parameters that will not be optimized by the
-        algorithm. Contains reference to the PsychSim world containing all definitions.
+        :param str agent_name: the name of the agent whose behavior that we want to model (the "expert").
         """
         self.label = label
-        self.__base_agent = base_agent
-        self.agent = base_agent
-        self.world = base_agent.world
-        self._reset()
-
-    def _reset(self):
-        """
-        Resets the algorithm by creating a clean copy of the world and agent
-        """
-        self.world = copy_world(self.__base_agent.world)
-        self.agent = self.world.agents[self.__base_agent.name]
+        self.agent_name = agent_name
 
     @abstractmethod
     def learn(self, trajectories, data_id=None):

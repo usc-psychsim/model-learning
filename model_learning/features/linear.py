@@ -63,12 +63,14 @@ class LinearRewardFeature(ABC):
     Represents a reward feature that can be used in linearly-parameterized reward functions.
     """
 
-    def __init__(self, name):
+    def __init__(self, name, normalize_factor=1):
         """
         Creates a new reward feature.
         :param str name: the label for this reward feature.
+        :param float normalize_factor: the normalization factor for this feature.
         """
         self.name = name
+        self.normalize_factor = normalize_factor
 
     @abstractmethod
     def get_value(self, state):
@@ -121,14 +123,14 @@ class ValueComparisonLinearRewardFeature(LinearRewardFeature):
         # collects feature value distribution and returns weighted sum
         dist = np.array([[float(self.comp_func(self.world.float2value(self.key, kv[self.key]), self.value)), p]
                          for kv, p in state.distributions[state.keyMap[self.key]].items()])
-        return dist[:, 0].dot(dist[:, 1])
+        return dist[:, 0].dot(dist[:, 1]) * self.normalize_factor
 
     def set_reward(self, agent, weight, model=None):
         rwd_key = rewardKey(agent.name)
         tree = {'if': KeyedPlane(KeyedVector({self.key: 1}), self.value, self.comparison),
                 True: setToConstantMatrix(rwd_key, 1.),
                 False: setToConstantMatrix(rwd_key, 0.)}
-        agent.setReward(makeTree(tree), weight, model)
+        agent.setReward(makeTree(tree), weight * self.normalize_factor, model)
 
 
 class ActionLinearRewardFeature(ValueComparisonLinearRewardFeature):
@@ -161,11 +163,10 @@ class NumericLinearRewardFeature(LinearRewardFeature):
         self.key = key
 
     def get_value(self, state):
-        # collects feature value distribution and returns weighted sum
-        dist = np.array([[kv[self.key], p] for kv, p in state.distributions[state.keyMap[self.key]].items()])
-        return dist[:, 0].dot(dist[:, 1])
+        # simply return expectation of marginal
+        return state.marginal(self.key).expectation() * self.normalize_factor
 
     def set_reward(self, agent, weight, model=None):
         # simply multiply the feature's value by the given weight
         rwd_key = rewardKey(agent.name)
-        agent.setReward(KeyedTree(setToFeatureMatrix(rwd_key, self.key)), weight, model)
+        agent.setReward(KeyedTree(setToFeatureMatrix(rwd_key, self.key)), weight * self.normalize_factor, model)

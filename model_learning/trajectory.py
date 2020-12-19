@@ -18,17 +18,22 @@ TOP_LEVEL_STR = 'top_level'
 
 def copy_world(world):
     """
-    Creates a copy of the given world. This implementation clones the world's state and all agents' models so that
-    the dynamic world elements are maintained in this timestep copy.
+    Creates a copy of the given world. This implementation clones the world's state and all agents' so that the dynamic
+    world elements are "frozen" in time.
     :param World world: the original world to be copied.
     :rtype: World
     :return: a semi-hard copy of the given world.
     """
     new_world = copy.copy(world)
     new_world.state = copy.deepcopy(world.state)
+    new_world.agents = copy.copy(new_world.agents)
     for name, agent in world.agents.items():
-        new_world.agents[name].modelList = copy.deepcopy(agent.modelList)
-        new_world.agents[name].models = copy.deepcopy(agent.models)
+        # clones agent with exception of world
+        agent.world = None
+        new_agent = copy.deepcopy(agent)
+        new_world.agents[name] = new_agent
+        new_agent.world = new_world  # assigns cloned world to cloned agent
+        agent.world = world  # puts original world back to old agent
     return new_world
 
 
@@ -191,7 +196,7 @@ def sample_spread_sub_trajectories(trajectory, n_trajectories, trajectory_length
         'Trajectory has insufficient length in relation to the requested length and amount of sub-trajectories.'
 
     idxs = np.asarray(np.arange(0, len(trajectory) - trajectory_length + 1,
-                                (len(trajectory) - trajectory_length) / (n_trajectories - 1)), dtype=int)
+                                (len(trajectory) - trajectory_length) / max(1, n_trajectories - 1)), dtype=int)
     return [trajectory[idx:idx + trajectory_length] for idx in idxs]
 
 
