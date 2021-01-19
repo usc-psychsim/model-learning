@@ -39,7 +39,7 @@ def copy_world(world):
 
 def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
                         model=None, horizon=None, selection=None, threshold=None,
-                        seed=0, verbose=None):
+                        seed=0, verbose=None, debug={}):
     """
     Generates one fixed-length agent trajectory (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
@@ -91,9 +91,9 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
         # steps the world, gets the agent's action
         prev_world = copy_world(world)
-        world.step(select=True, horizon=horizon, tiebreak=selection, threshold=threshold, debug={TOP_LEVEL_STR: True})
+        world.step(select=True, horizon=horizon, tiebreak=selection, threshold=threshold, debug=debug)# debug={TOP_LEVEL_STR: True})
         action = world.getAction(agent.name)
-        trajectory.append((prev_world, action))
+        trajectory.append((prev_world, action, copy.deepcopy(debug)))
 
         step_time = timer() - start
         total += step_time
@@ -115,7 +115,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
 def generate_trajectories(agent, n_trajectories, trajectory_length, features=None, init_feats=None,
                           model=None, horizon=None, selection=None, threshold=None,
-                          processes=None, seed=0, verbose=None):
+                          processes=None, seed=0, verbose=None, debug={}):
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
@@ -147,7 +147,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     pool, map_func = get_pool_and_map(processes, True)
     trajectories = list(map_func(
         generate_trajectory,
-        [[agent, trajectory_length, features, init_feats, model, horizon, selection, threshold, seed + t, verbose]
+        [[agent, trajectory_length, features, init_feats, model, horizon, selection, threshold, seed + t, verbose, debug]
          for t in range(n_trajectories)]))
 
     if verbose:
