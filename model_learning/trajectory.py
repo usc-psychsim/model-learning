@@ -30,7 +30,10 @@ def copy_world(world):
     for name, agent in world.agents.items():
         # clones agent with exception of world
         agent.world = None
-        new_agent = copy.deepcopy(agent)
+        # TODO tentative
+        new_agent = copy.copy(agent)
+        new_agent.models = agent.models.copy()
+        new_agent.modelList = agent.modelList.copy()
         new_world.agents[name] = new_agent
         new_agent.world = new_world  # assigns cloned world to cloned agent
         agent.world = world  # puts original world back to old agent
@@ -38,7 +41,7 @@ def copy_world(world):
 
 
 def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
-                        model=None, horizon=None, selection=None, threshold=None,
+                        model=None, select=None, horizon=None, selection=None, threshold=None,
                         seed=0, verbose=None):
     """
     Generates one fixed-length agent trajectory (state-action pairs) by running the agent in the world.
@@ -50,6 +53,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
     trajectory. Each item is a list of feature values in the same order of `features`. If `None`, then features will
     be initialized uniformly at random according to their domain.
     :param str model: the agent model used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
@@ -59,7 +63,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
     :return: a trajectory containing a list of state-action pairs.
     :return:
     """
-    world = agent.world
+    world = copy_world(agent.world)
     random.seed(seed)
     rng = random.Random(seed)
 
@@ -77,7 +81,6 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
     # for each step, takes action and registers state-action pairs
     trajectory = []
     total = 0
-    prev_model = world.getFeature(modelKey(agent.name))
     if model is not None:
         world.setFeature(modelKey(agent.name), model)
     for i in range(trajectory_length):
@@ -91,7 +94,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
         # steps the world, gets the agent's action
         prev_world = copy_world(world)
-        world.step(select=True, horizon=horizon, tiebreak=selection, threshold=threshold, debug={TOP_LEVEL_STR: True})
+        world.step(select=select, horizon=horizon, tiebreak=selection, threshold=threshold)
         action = world.getAction(agent.name)
         trajectory.append((prev_world, action))
 
@@ -103,10 +106,6 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
             if callable(verbose):
                 verbose()
 
-    # puts back agent model
-    if model is not None:
-        world.setFeature(modelKey(agent.name), prev_model)
-
     if verbose is not None:
         logging.info('Total time: {:.2f}s'.format(total))
 
@@ -114,7 +113,7 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
 
 def generate_trajectories(agent, n_trajectories, trajectory_length, features=None, init_feats=None,
-                          model=None, horizon=None, selection=None, threshold=None,
+                          model=None, select=None, horizon=None, selection=None, threshold=None,
                           processes=None, seed=0, verbose=None):
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
@@ -127,6 +126,7 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     trajectories. Each item is a list of feature values in the same order of `features`. If `None`, then features will
     be initialized uniformly at random according to their domain.
     :param str model: the agent model used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
@@ -146,9 +146,9 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
     start = timer()
     pool, map_func = get_pool_and_map(processes, True)
     trajectories = list(map_func(
-        generate_trajectory,
-        [[agent, trajectory_length, features, init_feats, model, horizon, selection, threshold, seed + t, verbose]
-         for t in range(n_trajectories)]))
+        generate_trajectory, [[agent, trajectory_length, features, init_feats, model,
+                               select, horizon, selection, threshold, seed + t, verbose]
+                              for t in range(n_trajectories)]))
 
     if verbose:
         logging.info('Total time for generating {} trajectories: {:.3f}s'.format(n_trajectories, timer() - start))
