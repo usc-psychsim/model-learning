@@ -137,9 +137,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
 
             # steps the world if needed
             if i < length - 1:
-                # todo
-                # self.world.step(threshold=self.prune_threshold, debug={TOP_LEVEL_STR: True})
-                world.step(select=True, debug={TOP_LEVEL_STR: True})
+                world.step(threshold=self.prune_threshold)
+                # world.step(select=True)
                 world.modelGC()
 
         return np.sum(all_fcs, axis=0)
