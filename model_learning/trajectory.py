@@ -151,7 +151,8 @@ def generate_trajectories(agent, n_trajectories, trajectory_length, features=Non
                               for t in range(n_trajectories)]))
 
     if verbose:
-        logging.info('Total time for generating {} trajectories: {:.3f}s'.format(n_trajectories, timer() - start))
+        logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
+                     f'{timer() - start:.3f}s')
 
     if pool is not None:
         pool.close()
