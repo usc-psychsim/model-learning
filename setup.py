@@ -18,7 +18,9 @@ setup(name='model-learning',
           'scipy',
           'matplotlib',
           'jsonpickle',
-          'sklearn'
+          'sklearn',
+          'joblib',
+          'tqdm'
       ],
       zip_safe=True,
       python_requires='>=3.6',
