@@ -1,10 +1,9 @@
 import logging
 import os
 import numpy as np
-from psychsim.helper_functions import get_true_model_name
 from psychsim.reward import maximizeFeature
 from psychsim.world import World
-from model_learning.planning import get_policy
+from model_learning.planning import get_policy, get_action_values
 from model_learning.environments.gridworld import GridWorld
 from model_learning.util.io import create_clear_dir, change_log_handler
 
@@ -30,10 +29,11 @@ OUTPUT_DIR = 'output/examples/collect-trajectories'
 SEED = 0
 PROCESSES = 1
 VERBOSE = True
+IMG_FORMAT = 'pdf'
 
 if __name__ == '__main__':
     # create output
-    create_clear_dir(OUTPUT_DIR)
+    create_clear_dir(OUTPUT_DIR, clear=False)
     change_log_handler(os.path.join(OUTPUT_DIR, 'collect.log'))
 
     # create world and agent
@@ -58,10 +58,10 @@ if __name__ == '__main__':
     # generate trajectories using agent's policy
     logging.info('Generating trajectories...')
     trajectories = env.generate_trajectories(NUM_TRAJECTORIES, TRAJ_LENGTH, agent, select=SELECT,
-                                             selection=ACTION_SEL, threshold=PRUNE_THRESHOLD,
+                                             horizon=HORIZON, selection=ACTION_SEL, threshold=PRUNE_THRESHOLD,
                                              processes=PROCESSES, seed=SEED, verbose=VERBOSE)
     env.log_trajectories(trajectories, agent)
-    env.plot_trajectories(trajectories, agent, os.path.join(OUTPUT_DIR, 'trajectories.png'))
+    env.plot_trajectories(trajectories, agent, os.path.join(OUTPUT_DIR, f'trajectories.{IMG_FORMAT}'))
 
     # gets policy and value
     logging.info('Computing policy...')
@@ -70,14 +70,13 @@ if __name__ == '__main__':
     pi = np.array([[dist[a] if a in dist.domain() else 0. for a in env.agent_actions[agent.name]] for dist in pi])
 
     logging.info('Computing value function...')
-    q = np.array([[agent.value(s, a, get_true_model_name(agent))['__EV__'] for a in env.agent_actions[agent.name]]
-                  for s in states])
-    v = np.max(q, axis=1)
-    env.plot_policy(pi, v, os.path.join(OUTPUT_DIR, 'policy.png'))
+    q = get_action_values(agent, states, env.agent_actions[agent.name], horizon=HORIZON, processes=PROCESSES)
+    v = np.max(q, axis=1)  # get state value
+    env.plot_policy(pi, v, os.path.join(OUTPUT_DIR, f'policy.{IMG_FORMAT}'))
 
     # gets rewards
     logging.info('Computing rewards...')
     r = np.array([agent.reward(state) for state in states])
-    env.plot_func(r, os.path.join(OUTPUT_DIR, 'reward.png'), 'Rewards')
+    env.plot_func(r, os.path.join(OUTPUT_DIR, f'reward.{IMG_FORMAT}'), 'Rewards')
 
     logging.info('\nDone!')
