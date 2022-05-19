@@ -3,22 +3,27 @@ import random
 import logging
 import numpy as np
 from timeit import default_timer as timer
+from typing import List, Tuple, Dict, Any, Optional, Literal
 from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey
-from model_learning.util.multiprocessing import get_pool_and_map
+from psychsim.pwl import modelKey, turnKey, VectorDistributionSet
+from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
+# types
+State = VectorDistributionSet
+Trajectory = List[Tuple[World, Distribution]]  # list of world-action (distribution) pairs
+
 TOP_LEVEL_STR = 'top_level'
 
 
-def copy_world(world):
+def copy_world(world: World) -> World:
     """
-    Creates a copy of the given world. This implementation clones the world's state and all agents' so that the dynamic
+    Creates a copy of the given world. This implementation clones the world's state and all agents so that the dynamic
     world elements are "frozen" in time.
     :param World world: the original world to be copied.
     :rtype: World
@@ -40,46 +45,49 @@ def copy_world(world):
     return new_world
 
 
-def generate_trajectory(agent, trajectory_length, features=None, init_feats=None,
-                        model=None, select=None, horizon=None, selection=None, threshold=None,
-                        seed=0, verbose=None):
+def generate_trajectory(agent: Agent,
+                        trajectory_length: int,
+                        init_feats: Optional[Dict[str, Any]] = None,
+                        model: Optional[str] = None,
+                        select: Optional[bool] = None,
+                        horizon: Optional[int] = None,
+                        selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                        threshold: Optional[float] = None,
+                        seed: int = 0,
+                        verbose: bool = False) -> Trajectory:
     """
     Generates one fixed-length agent trajectory (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
     :param int trajectory_length: the length of the generated trajectories.
-    :param list[str] features: the list of relevant features (keys) for which to initialize trajectories. If `None`,
-    the trajectory starts from the world's current state.
-    :param list[list] init_feats: a list of initial feature values from which to randomly initialize the
-    trajectory. Each item is a list of feature values in the same order of `features`. If `None`, then features will
-    be initialized uniformly at random according to their domain.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
     :param str model: the agent model used to generate the trajectories.
     :param bool select: whether to select from stochastic states after each world step.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int seed: the seed used to initialize the random number generator.
-    :param bool or Callable verbose: whether to show information at each timestep during trajectory generation.
-    :rtype: list[tuple[World, Distribution]]
+    :param bool verbose: whether to show time information at each timestep during trajectory generation.
+    :rtype: Trajectory
     :return: a trajectory containing a list of state-action pairs.
-    :return:
     """
     world = copy_world(agent.world)
     random.seed(seed)
     rng = random.Random(seed)
 
     # generate or select initial state features
-    if features is not None:
-        if init_feats is None:
-            init_values = [get_random_value(world, feature, rng) for feature in features]
-        else:
-            init_values = rng.choice(init_feats)
-
-        # set features' initial value
-        for feature, init_value in zip(features, init_values):
+    if init_feats is not None:
+        for feature, init_value in init_feats.items():
+            if init_value is None:
+                init_value = get_random_value(world, feature, rng)
+            elif isinstance(init_value, List):
+                init_value = rng.choice(init_value)
             world.setFeature(feature, init_value)
 
     # for each step, takes action and registers state-action pairs
-    trajectory = []
+    trajectory: Trajectory = []
     total = 0
     if model is not None:
         world.setFeature(modelKey(agent.name), model)
@@ -100,78 +108,82 @@ def generate_trajectory(agent, trajectory_length, features=None, init_feats=None
 
         step_time = timer() - start
         total += step_time
-        if verbose is not None:
-            logging.info('Step {} took {:.2f}s (action: {})'.format(
-                i, step_time, action if len(action) > 1 else action.first()))
-            if callable(verbose):
-                verbose()
+        if verbose:
+            logging.info(f'Step {i} took {step_time:.2f}s (action: {action if len(action) > 1 else action.first()})')
 
-    if verbose is not None:
-        logging.info('Total time: {:.2f}s'.format(total))
+    if verbose:
+        logging.info(f'Total time: {total:.2f}s')
 
     return trajectory
 
 
-def generate_trajectories(agent, n_trajectories, trajectory_length, features=None, init_feats=None,
-                          model=None, select=None, horizon=None, selection=None, threshold=None,
-                          processes=None, seed=0, verbose=None):
+def generate_trajectories(agent: Agent,
+                          n_trajectories: int,
+                          trajectory_length: int,
+                          init_feats: Optional[Dict[str, Any]] = None,
+                          model: Optional[str] = None,
+                          select: Optional[bool] = None,
+                          horizon: Optional[int] = None,
+                          selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                          threshold: Optional[float] = None,
+                          processes: int = -1,
+                          seed: int = 0,
+                          verbose: bool = False,
+                          use_tqdm: bool = True) -> List[Trajectory]:
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
     :param Agent agent: the agent for which to record the actions.
     :param int n_trajectories: the number of trajectories to be generated.
     :param int trajectory_length: the length of the generated trajectories.
-    :param list[str] features: the list of relevant features (keys) for which to initialize trajectories. If `None`,
-    each trajectory start from the world's current state.
-    :param list[list] init_feats: a list of initial feature states from which to randomly initialize the
-    trajectories. Each item is a list of feature values in the same order of `features`. If `None`, then features will
-    be initialized uniformly at random according to their domain.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
     :param str model: the agent model used to generate the trajectories.
     :param bool select: whether to select from stochastic states after each world step.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
+    :param int processes: number of processes to use. Follows `joblib` convention.
     :param int seed: the seed used to initialize the random number generator.
-    :param bool or Callable verbose: whether to show information at each timestep during trajectory generation.
-    :rtype: list[list[tuple[World, Distribution]]]
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+    :rtype: list[Trajectory]
     :return: a list of trajectories, each containing a list of state-action pairs.
     """
     # initial checks
     world = agent.world
-    features = [] if features is None else features
-    for feature in features:
-        assert feature in world.variables, 'World does not have feature \'{}\'!'.format(feature)
+    for feature in init_feats:
+        assert feature in world.variables, f'World does not have feature \'{feature}\'!'
 
-    # generates each trajectory using a different random seed
+    # generates each trajectory in parallel using a different random seed
     start = timer()
-    pool, map_func = get_pool_and_map(processes, True)
-    trajectories = list(map_func(
-        generate_trajectory, [[agent, trajectory_length, features, init_feats, model,
-                               select, horizon, selection, threshold, seed + t, verbose]
-                              for t in range(n_trajectories)]))
+    args = [(agent, trajectory_length, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
+            for t in range(n_trajectories)]
+    trajectories: List[Trajectory] = run_parallel(generate_trajectory, args, processes=processes, use_tqdm=use_tqdm)
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
                      f'{timer() - start:.3f}s')
 
-    if pool is not None:
-        pool.close()
-
     return trajectories
 
 
-def sample_random_sub_trajectories(trajectory, n_trajectories, trajectory_length, with_replacement=False, seed=0):
+def sample_random_sub_trajectories(trajectory: Trajectory,
+                                   n_trajectories: int,
+                                   trajectory_length: int,
+                                   with_replacement: bool = False,
+                                   seed: int = 0) -> List[Trajectory]:
     """
     Randomly samples sub-trajectories from a given trajectory.
-    :param list[tuple[World, Distribution]] trajectory: the trajectory containing a list of state-action pairs.
+    :param Trajectory trajectory: the trajectory containing a list of state-action pairs.
     :param int n_trajectories: the number of trajectories to be sampled.
     :param int trajectory_length: the length of the sampled trajectories.
     :param bool with_replacement: whether to allow repeated sub-trajectories to be sampled.
     :param int seed: the seed used to initialize the random number generator.
-    :rtype: list[list[tuple[World, Distribution]]]
+    :rtype: list[Trajectory]
     :return: a list of sub-trajectories, each containing a list of state-action pairs.
     """
-
     # check provided trajectory length
     assert with_replacement or len(trajectory) > trajectory_length + n_trajectories - 1, \
         'Trajectory has insufficient length in relation to the requested length and amount of sub-trajectories.'
@@ -183,13 +195,15 @@ def sample_random_sub_trajectories(trajectory, n_trajectories, trajectory_length
     return [trajectory[idx:idx + trajectory_length] for idx in idxs]
 
 
-def sample_spread_sub_trajectories(trajectory, n_trajectories, trajectory_length):
+def sample_spread_sub_trajectories(trajectory: Trajectory,
+                                   n_trajectories: int,
+                                   trajectory_length: int) -> List[Trajectory]:
     """
-    Samples sub-trajectories from a given trajectory as spread as possible.
-    :param list[tuple[World, Distribution]] trajectory: the trajectory containing a list of state-action pairs.
+    Samples sub-trajectories from a given trajectory as spread in time as possible.
+    :param Trajectory trajectory: the trajectory containing a list of state-action pairs.
     :param int n_trajectories: the number of trajectories to be sampled.
     :param int trajectory_length: the length of the sampled trajectories.
-    :rtype: list[list[tuple[World, Distribution]]]
+    :rtype: list[Trajectory]
     :return: a list of sub-trajectories, each containing a list of state-action pairs.
     """
     # check provided trajectory length
@@ -201,22 +215,20 @@ def sample_spread_sub_trajectories(trajectory, n_trajectories, trajectory_length
     return [trajectory[idx:idx + trajectory_length] for idx in idxs]
 
 
-def log_trajectories(trajectories, features):
+def log_trajectories(trajectories: List[Trajectory], features: List[str]):
     """
     Prints the given trajectories to the log at the info level.
     :param list[list[tuple[World, Distribution]]] trajectories: the set of trajectories to save, containing
     several sequences of state-action pairs.
-    :param list[str] features: the state features to be printed at each step representing the state.
-    :return:
+    :param list[str] features: the state features to be printed at each step, representing the state of interest.
     """
     if len(trajectories) == 0 or len(trajectories[0]) == 0:
         return
 
     for i, trajectory in enumerate(trajectories):
         logging.info('-------------------------------------------')
-        logging.info('Trajectory {}:'.format(i))
+        logging.info(f'Trajectory {i}:')
         for t, sa in enumerate(trajectory):
             world, action = sa
             feat_values = [str(world.getFeature(feat, unique=True)) for feat in features]
-            logging.info('{}:\t({}) -> {}'.format(
-                t, ', '.join(feat_values), action if len(action) > 1 else action.first()))
+            logging.info(f'{t}:\t({", ".join(feat_values)}) -> {action if len(action) > 1 else action.first()}')
