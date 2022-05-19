@@ -3,6 +3,7 @@ import itertools
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Dict, List, Tuple, Literal, Optional, Any
 from matplotlib.colors import ListedColormap
 from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARETDOWNBASE
 from psychsim.action import ActionSet
@@ -12,7 +13,7 @@ from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
-from model_learning.trajectory import generate_trajectories, log_trajectories
+from model_learning.trajectory import generate_trajectories, log_trajectories, Trajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -59,7 +60,7 @@ class GridWorld(object):
     location.
     """
 
-    def __init__(self, world, width, height, name=''):
+    def __init__(self, world: World, width: int, height: int, name: str = ''):
         """
         Creates a new gridworld.
         :param World world: the PsychSim world associated with this gridworld.
@@ -72,9 +73,9 @@ class GridWorld(object):
         self.height = height
         self.name = name
 
-        self.agent_actions = {}
+        self.agent_actions: Dict[str, List[ActionSet]] = {}
 
-    def add_agent_dynamics(self, agent):
+    def add_agent_dynamics(self, agent: Agent) -> List[ActionSet]:
         """
         Adds the PsychSim action dynamics for the given agent to move in this gridworld.
         The 4 cardinal movement actions plus a stay-still/no-op action is added.
@@ -83,16 +84,15 @@ class GridWorld(object):
         :rtype: list[ActionSet]
         :return: a list containing the agent's newly created actions.
         """
-        assert agent.name not in self.agent_actions, \
-            'An agent was already registered with the name \'{}\''.format(agent.name)
+        assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
         self.agent_actions[agent.name] = []
 
         # creates agent's location feature
         x = self.world.defineState(
-            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, '{}\'s horizontal location'.format(agent.name))
+            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, f'{agent.name}\'s horizontal location')
         self.world.setFeature(x, 0)
         y = self.world.defineState(
-            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, '{}\'s vertical location'.format(agent.name))
+            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, f'{agent.name}\'s vertical location')
         self.world.setFeature(y, 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op)
@@ -121,7 +121,7 @@ class GridWorld(object):
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'up'})
         tree = makeTree({'if': thresholdRow(y, self.height - 2),  # if loc is up border
                          True: noChangeMatrix(y),  # stay still
-                         False: incrementMatrix(y, 1)})  # else move right
+                         False: incrementMatrix(y, 1)})  # else move up
         self.world.setDynamics(y, action, tree)
         self.agent_actions[agent.name].append(action)
 
@@ -135,7 +135,7 @@ class GridWorld(object):
 
         return self.agent_actions[agent.name]
 
-    def get_location_features(self, agent):
+    def get_location_features(self, agent: Agent) -> Tuple[str, str]:
         """
         Gets the agent's (X,Y) features in the gridworld.
         :param Agent agent: the agent for which to get the location features.
@@ -146,7 +146,7 @@ class GridWorld(object):
         y = stateKey(agent.name, Y_FEATURE + self.name)
         return x, y
 
-    def get_location_plane(self, agent, locs, comp=0):
+    def get_location_plane(self, agent: Agent, locs: List[Tuple[int, int]], comp: int = Literal[0, 1, 2]) -> KeyedPlane:
         """
         Gets a PsychSim plane for the given agent that can be used to compare it's current location against the given
         set of locations. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
@@ -157,12 +157,11 @@ class GridWorld(object):
         :rtype: KeyedPlane
         :return: the plane corresponding to comparing the agent's location against the given coordinates.
         """
-        x_feat = stateKey(agent.name, X_FEATURE + self.name)
-        y_feat = stateKey(agent.name, Y_FEATURE + self.name)
+        x_feat, y_feat = self.get_location_features(agent)
         loc_values = {self.xy_to_idx(x, y) for x, y in locs}
         return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}), loc_values, comp)
 
-    def idx_to_xy(self, i):
+    def idx_to_xy(self, i: int) -> Tuple[int, int]:
         """
         Converts the given location index to XY coordinates. Indexes are taken from the left-right, bottom-up order.
         :param int i: the index of the location.
@@ -171,7 +170,7 @@ class GridWorld(object):
         """
         return i % self.width, i // self.width
 
-    def xy_to_idx(self, x, y):
+    def xy_to_idx(self, x: int, y: int) -> int:
         """
         Converts the given XY coordinates to a location index. Indexes are taken from the left-right, bottom-up order.
         :param int x: the location's X coordinate.
@@ -181,34 +180,62 @@ class GridWorld(object):
         """
         return x + y * self.width
 
-    def generate_trajectories(self, n_trajectories, trajectory_length, agent, init_feats=None,
-                              model=None, horizon=None, selection=None, threshold=None,
-                              processes=None, seed=0):
+    def generate_trajectories(self,
+                              n_trajectories: int,
+                              trajectory_length: int,
+                              agent: Agent,
+                              init_feats: Optional[Dict[str, Any]] = None,
+                              model: Optional[str] = None,
+                              select: bool = False,
+                              horizon: Optional[int] = None,
+                              selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                              threshold: Optional[float] = None,
+                              processes: Optional[int] = -1,
+                              seed: int = 0,
+                              verbose: bool = False,
+                              use_tqdm: bool = True) -> List[Trajectory]:
         """
         Generates a number of fixed-length agent trajectories/traces/paths (state-action pairs).
         :param int n_trajectories: the number of trajectories to be generated.
         :param int trajectory_length: the length of the generated trajectories.
         :param Agent agent: the agent for which to record the actions.
-        :param list[list] init_feats: a list of initial feature states from which to randomly initialize the
-        trajectories. Each item is a list of feature values in the same order of `features`. If `None`, then features
-        will be initialized uniformly at random according to their domain.
+        :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+        trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+        values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+        feature's domain.
         :param str model: the agent model used to generate the trajectories.
+        :param bool select: whether to select from stochastic states after each world step.
         :param int horizon: the agent's planning horizon.
         :param str selection: the action selection criterion, to untie equal-valued actions.
-        :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
+        :param int processes: number of processes to use. Follows `joblib` convention.
         :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
         :param int seed: the seed used to initialize the random number generator.
-        :rtype: list[list[tuple[World, Distribution]]]
+        :param bool verbose: whether to show information at each timestep during trajectory generation.
+        :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+        :rtype: list[Trajectory]
         :return: the generated agent trajectories.
         """
         # get relevant features for this world (x-y location)
         x, y = self.get_location_features(agent)
 
+        # if not specified, set random values for x, y pos
+        if init_feats is None:
+            init_feats = {}
+        if x not in init_feats:
+            init_feats[x] = None
+        if y not in init_feats:
+            init_feats[y] = None
+
         # generate trajectories starting from random locations in the gridworld
         return generate_trajectories(agent, n_trajectories, trajectory_length,
-                                     [x, y], init_feats, model, horizon, selection, threshold, processes, seed)
+                                     init_feats, model, select, horizon, selection, threshold,
+                                     processes, seed, verbose, use_tqdm)
 
-    def set_achieve_locations_reward(self, agent, locs, weight, model=None):
+    def set_achieve_locations_reward(self,
+                                     agent: Agent,
+                                     locs: List[Tuple[int, int]],
+                                     weight: float,
+                                     model: Optional[str] = None):
         """
         Sets a reward to the agent such that if its current location is equal to one of the given locations it will
         receive the given value. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
@@ -216,13 +243,12 @@ class GridWorld(object):
         :param list[(int,int)] locs: a list of target XY coordinate tuples.
         :param float weight: the weight/value associated with this reward.
         :param str model: the agent's model on which to set the reward.
-        :return:
         """
-        return agent.setReward(makeTree({'if': self.get_location_plane(agent, locs),
-                                         True: setToConstantMatrix(rewardKey(agent.name), 1.),
-                                         False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight, model)
+        agent.setReward(makeTree({'if': self.get_location_plane(agent, locs),
+                                  True: setToConstantMatrix(rewardKey(agent.name), 1.),
+                                  False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight, model)
 
-    def get_all_states(self, agent):
+    def get_all_states(self, agent: Agent) -> List[Optional[VectorDistributionSet]]:
         """
         Collects all PsychSim world states that the given agent can be in according to the gridworld's locations.
         Other PsychSim features *are not* changed, i.e., the agent does not perform any actions.
@@ -247,10 +273,10 @@ class GridWorld(object):
         self.world.state = old_state
         return states
 
-    def log_trajectories(self, trajectories, agent):
+    def log_trajectories(self, trajectories: List[Trajectory], agent: Agent):
         """
         Prints the given trajectories to the log at the info level.
-        :param list[list[tuple[World, Distribution]]] trajectories: the set of trajectories to save, containing
+        :param list[Trajectory] trajectories: the set of trajectories to save, containing
         several sequences of state-action pairs.
         :param Agent agent: the agent whose location we want to log.
         :return:
@@ -259,12 +285,12 @@ class GridWorld(object):
             return
 
         x, y = self.get_location_features(self.world.agents[agent.name])
-        assert x in self.world.variables, 'Agent \'{}\' does not have x location feature'.format(agent.name)
-        assert y in self.world.variables, 'Agent \'{}\' does not have y location feature'.format(agent.name)
+        assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
+        assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
 
         log_trajectories(trajectories, [x, y])
 
-    def plot(self, file_name, title='Environment', show=False):
+    def plot(self, file_name: str, title: str = 'Environment', show: bool = False):
         """
         Generates and saves a grid plot of the environment, including the number of each state.
         Utility method for 2D / gridworld environments that can have a visual representation.
@@ -276,12 +302,17 @@ class GridWorld(object):
         plt.figure()
         self._plot(None, title, None)
         plt.savefig(file_name, pad_inches=0, bbox_inches='tight')
-        logging.info('Saved environment \'{}\' plot to:\n\t{}'.format(title, file_name))
+        logging.info(f'Saved environment \'{title}\' plot to:\n\t{file_name}')
         if show:
             plt.show()
         plt.close()
 
-    def plot_func(self, value_func, file_name, title='Environment', cmap=VALUE_CMAP, show=False):
+    def plot_func(self,
+                  value_func: np.ndarray,
+                  file_name: str,
+                  title: str = 'Environment',
+                  cmap: str = VALUE_CMAP,
+                  show: bool = False):
         """
         Generates ands saves a plot of the environment, including a heatmap according to the given value function.
         Utility method for 2D / gridworld environments that can have a visual representation.
@@ -290,7 +321,6 @@ class GridWorld(object):
         :param str title: the title of the plot.
         :param str cmap: the colormap used to plot the reward function.
         :param bool show: whether to show the plot to the screen.
-        :return:
         """
         plt.figure()
 
@@ -302,7 +332,13 @@ class GridWorld(object):
             plt.show()
         plt.close()
 
-    def plot_policy(self, policy, value_func, file_name, title='Policy', cmap=VALUE_CMAP, show=False):
+    def plot_policy(self,
+                    policy: np.ndarray,
+                    value_func: np.ndarray,
+                    file_name: str,
+                    title: str = 'Policy',
+                    cmap: str = VALUE_CMAP,
+                    show: bool = False):
         """
         Generates ands saves a plot of the given policy in the environment.
         Utility method for 2D / gridworld environments that can have a visual representation.
@@ -312,7 +348,6 @@ class GridWorld(object):
         :param str title: the title of the plot.
         :param str cmap: the colormap used to plot the reward function.
         :param bool show: whether to show the plot to the screen.
-        :return:
         """
         plt.figure()
 
@@ -330,13 +365,19 @@ class GridWorld(object):
                          alpha=policy[idx, a])
 
         plt.savefig(file_name, pad_inches=0, bbox_inches='tight')
-        logging.info('Saved policy \'{}\' plot to:\n\t{}'.format(title, file_name))
+        logging.info(f'Saved policy \'{title}\' plot to:\n\t{file_name}')
         if show:
             plt.show()
         plt.close()
 
-    def plot_trajectories(self, trajectories, agent, file_name, title='Trajectories',
-                          value_func=None, cmap=VALUE_CMAP, show=False):
+    def plot_trajectories(self,
+                          trajectories: List[Trajectory],
+                          agent: Agent,
+                          file_name: str,
+                          title: str = 'Trajectories',
+                          value_func: Optional[np.ndarray] = None,
+                          cmap: str = VALUE_CMAP,
+                          show: bool = False):
         """
         Plots the given set of trajectories over a representation of the environment.
         Utility method for 2D / gridworld environments that can have a visual representation.
@@ -348,14 +389,13 @@ class GridWorld(object):
         :param np.ndarray value_func: the value for each state of the environment of shape (n_states, 1).
         :param str cmap: the colormap used to plot the reward function.
         :param bool show: whether to show the plot to the screen.
-        :return:
         """
         if len(trajectories) == 0 or len(trajectories[0]) == 0:
             return
 
         x, y = self.get_location_features(self.world.agents[agent.name])
-        assert x in self.world.variables, 'Agent \'{}\' does not have x location feature'.format(agent.name)
-        assert y in self.world.variables, 'Agent \'{}\' does not have y location feature'.format(agent.name)
+        assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
+        assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
 
         plt.figure()
         ax = plt.gca()
@@ -389,7 +429,7 @@ class GridWorld(object):
             plt.show()
         plt.close()
 
-    def _plot(self, val_func=None, title='Environment', cmap=None):
+    def _plot(self, val_func: Optional[np.ndarray] = None, title: str = 'Environment', cmap: Optional[str] = None):
         ax = plt.gca()
 
         if val_func is None:
@@ -408,4 +448,4 @@ class GridWorld(object):
         plt.xticks([])
         plt.yticks([])
         ax.set_aspect('equal', adjustable='box')
-        plt.title(title, fontweight='bold', fontsize=TITLE_FONT_SIZE)
+        plt.title(title, fontsize=TITLE_FONT_SIZE)
