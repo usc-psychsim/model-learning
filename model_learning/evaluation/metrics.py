@@ -1,6 +1,7 @@
 import numpy as np
+from typing import List, Dict
 from psychsim.probability import Distribution
-from model_learning.util.math import get_jensen_shannon_divergence
+from model_learning.util.math import jensen_shannon_divergence
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -9,13 +10,13 @@ POLICY_MISMATCH_STR = 'Policy Mismatch'
 POLICY_DIVERGENCE_STR = 'Policy Divergence'
 
 
-def evaluate_internal(expert_pi, learner_pi):
+def evaluate_internal(expert_pi: List[Distribution], learner_pi: List[Distribution]) -> Dict[str, float]:
     """
     Utility method that compares two policies using internal metrics, i.e., that do not rely on knowing the
     "ground-truth" expert policy or reward function. Useful for analyzing human behavior data.
     Note: the policies are lists where elements are distributions over actions for each state considered. Policies
     should have the same size and it is assumed that each pair of elements.
-    :param list[Distribution] expert_pi: the expert's policy (or approximation) for a set of states.
+    :param list[Distribution] expert_pi: the expert's policy (or approximation) for some set of states.
     :param list[Distribution] learner_pi: the learner's policy for the same set of states.
     :rtype: dict[str, float]
     :return: a dictionary containing several internal evaluation metrics.
@@ -26,7 +27,7 @@ def evaluate_internal(expert_pi, learner_pi):
     }
 
 
-def policy_mismatch_prob(policy1, policy2):
+def policy_mismatch_prob(policy1: List[Distribution], policy2: List[Distribution]) -> float:
     """
     Compares the given policies by measuring the amount of discrepancy between them. This corresponds to the mean,
     over all states, of the probability that the policies will take different actions.
@@ -38,20 +39,19 @@ def policy_mismatch_prob(policy1, policy2):
     :rtype float:
     :return: the mean probability in `[0, 1]`, of the policies choosing different actions.
     """
-    assert len(policy1) == len(policy2), \
-        'Given policies have different lengths: {}!={}'.format(len(policy1), len(policy2))
+    assert len(policy1) == len(policy2), f'Given policies have different lengths: {len(policy1)}!={len(policy2)}'
 
     # computes prob. of different actions for all states
     prob = 0.
     for s in range(len(policy1)):
         a1 = policy1[s]
         a2 = policy2[s]
-        joint = sum(a1.getProb(a) * a2.getProb(a) for a in set(a1.domain() + a2.domain()))
+        joint = sum(a1.get(a) * a2.get(a) for a in set(list(a1.domain()) + list(a2.domain())))
         prob += 1. - joint
     return prob / len(policy1)
 
 
-def policy_divergence(policy1, policy2):
+def policy_divergence(policy1: List[Distribution], policy2: List[Distribution]) -> float:
     """
     Compares the given policies by measuring the amount of discrepancy between them in terms of probability divergence.
     This is measured by the mean, over all states, of the Jensen-Shannon divergence (JSD) between the policies'
@@ -64,8 +64,7 @@ def policy_divergence(policy1, policy2):
     :rtype float:
     :return: the mean probability in `[0, 1]`, of the policies choosing different actions.
     """
-    assert len(policy1) == len(policy2), \
-        'Given policies have different lengths: {}!={}'.format(len(policy1), len(policy2))
+    assert len(policy1) == len(policy2), f'Given policies have different lengths: {len(policy1)}!={len(policy2)}'
 
     # computes JSD divergence for all states
     div = 0.
@@ -75,13 +74,15 @@ def policy_divergence(policy1, policy2):
         a2 = policy2[s]
 
         # gets JSD between the two
-        actions = list(set(a1.domain() + a2.domain()))
-        a1 = np.array([a1.getProb(a) for a in actions])
-        a2 = np.array([a2.getProb(a) for a in actions])
-        div += get_jensen_shannon_divergence(a1, a2)
+        actions = list(set(list(a1.domain()) + list(a2.domain())))
+        a1 = np.array([a1.get(a) for a in actions])  # shape (num_actions, )
+        a2 = np.array([a2.get(a) for a in actions])  # shape (num_actions, )
+        dists = np.array([a1, a2])  # shape (2, num_actions)
+        div += jensen_shannon_divergence(dists)
 
     return div / len(policy1)
 
+# TODO
 # def evd(env, expert_r, learner_r, trajectories, stochastic=False):
 #     """
 #     Computes the expected value difference (EVD) between the expert and learner's policies.
