@@ -6,7 +6,7 @@ from psychsim.agent import Agent
 from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
-from model_learning.trajectory import State
+from model_learning import State
 from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
@@ -34,7 +34,8 @@ def get_state_policy(agent: Agent,
     if model is not None:
         state = copy.deepcopy(state)
         agent.world.setFeature(modelKey(agent.name), model, state)
-    state = agent.world.step(state=state, real=False, horizon=horizon, tiebreak=selection, threshold=threshold)
+    state = agent.world.step(state=state, real=False, updateBeliefs=False,
+                             horizon=horizon, tiebreak=selection, threshold=threshold)
     return agent.world.getAction(agent.name, state)
 
 
