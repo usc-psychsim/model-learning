@@ -13,7 +13,8 @@ from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
 from model_learning.util.plot import distinct_colors
-from model_learning.trajectory import generate_trajectories, log_trajectories, Trajectory
+from model_learning.trajectory import generate_trajectories, log_trajectories
+from model_learning import Trajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -152,22 +153,30 @@ class GridWorld(object):
         y = stateKey(agent.name, Y_FEATURE + self.name)
         return x, y
 
-    def get_location_plane(self, agent: Agent, locs: List[Location], comp: Literal[0, 1, 2] = 0) -> KeyedPlane:
+    def get_location_plane(self,
+                           agent: Agent,
+                           locs: List[Location],
+                           comp: Literal[KeyedPlane.COMPARISON_MAP] = KeyedPlane.COMPARISON_MAP[0]) -> KeyedPlane:
         """
         Gets a PsychSim plane for the given agent that can be used to compare it's current location against the given
         set of locations. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
         Also, comparison uses logical OR, i.e., it verifies against *any* of the given locations.
         :param Agent agent: the agent for which to get the comparison plane.
-        :param list[(int,int)] locs: a list of target XY coordinate tuples.
-        :param int comp: the comparison to be made (0:'==', 1:'>', 2:'<').
+        :param list[Location] locs: a list of target XY coordinate tuples.
+        :param str comp: the comparison to be made ('==', '>', or '<').
         :rtype: KeyedPlane
         :return: the plane corresponding to comparing the agent's location against the given coordinates.
         """
+        assert comp in KeyedPlane.COMPARISON_MAP, \
+            f'Invalid comparison provided: {comp}; valid: {KeyedPlane.COMPARISON_MAP}'
+
         x_feat, y_feat = self.get_location_features(agent)
         loc_idxs = {self.xy_to_idx(*loc) for loc in locs}
 
         # creates plane that checks if x+(y*width) equals any idx in the set
-        return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}), loc_idxs, comp)
+        return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}),
+                          loc_idxs,
+                          KeyedPlane.COMPARISON_MAP.index(comp))
 
     def idx_to_xy(self, i: int) -> Location:
         """

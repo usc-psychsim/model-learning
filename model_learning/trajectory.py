@@ -3,20 +3,17 @@ import random
 import logging
 import numpy as np
 from timeit import default_timer as timer
-from typing import List, Tuple, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal
 from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey, VectorDistributionSet
+from psychsim.pwl import modelKey, turnKey
+from model_learning import Trajectory
 from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
-
-# types
-State = VectorDistributionSet
-Trajectory = List[Tuple[World, Distribution]]  # list of world-action (distribution) pairs
 
 TOP_LEVEL_STR = 'top_level'
 
