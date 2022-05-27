@@ -139,7 +139,7 @@ class ObjectsGridWorld(GridWorld):
 
     def set_linear_color_reward(self,
                                 agent: Agent,
-                                weights_outer: np.ndarray,
+                                weights_outer: Optional[np.ndarray] = None,
                                 weights_inner: Optional[np.ndarray] = None,
                                 model: Optional[str] = None):
         """
@@ -159,6 +159,8 @@ class ObjectsGridWorld(GridWorld):
             f'Weight vectors should have length {self.num_colors}.'
         assert weights_inner is None or len(weights_inner) == self.num_colors, \
             f'Weight vectors should have length {self.num_colors}.'
+
+        agent.setAttribute('R', {}, model)  # make sure to clear agent's reward function
 
         # sets the corresponding weight for each object location
         for c in range(self.num_colors):

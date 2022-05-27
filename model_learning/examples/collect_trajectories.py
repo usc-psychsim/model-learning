@@ -5,7 +5,8 @@ from psychsim.reward import maximizeFeature
 from psychsim.world import World
 from model_learning.planning import get_policy, get_action_values
 from model_learning.environments.gridworld import GridWorld
-from model_learning.util.io import create_clear_dir, change_log_handler
+from model_learning.util.io import create_clear_dir
+from model_learning.util.logging import change_log_handler
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'

@@ -1,10 +1,11 @@
 import logging
 import os
 import numpy as np
+from psychsim.world import World
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.planning import get_policy, get_action_values
-from model_learning.util.io import create_clear_dir, change_log_handler
-from psychsim.world import World
+from model_learning.util.io import create_clear_dir
+from model_learning.util.logging import change_log_handler
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -23,7 +24,7 @@ SELECT = True
 NUM_TRAJECTORIES = 5  # 10
 TRAJ_LENGTH = 10  # 20
 
-OUTPUT_DIR = 'output/tests/objects-world'
+OUTPUT_DIR = 'output/examples/collect-traj-obj-world'
 SEED = 0
 PROCESSES = 1
 VERBOSE = True
