@@ -3,7 +3,7 @@ import itertools
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Literal, Optional, Any
+from typing import Dict, List, Tuple, Literal, Optional, Any, NamedTuple
 from matplotlib.colors import ListedColormap
 from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARETDOWNBASE
 from psychsim.action import ActionSet
@@ -17,6 +17,12 @@ from model_learning.trajectory import generate_trajectories, log_trajectories, T
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+
+class Location(NamedTuple):
+    x: int
+    y: int
+
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
@@ -146,7 +152,7 @@ class GridWorld(object):
         y = stateKey(agent.name, Y_FEATURE + self.name)
         return x, y
 
-    def get_location_plane(self, agent: Agent, locs: List[Tuple[int, int]], comp: int = Literal[0, 1, 2]) -> KeyedPlane:
+    def get_location_plane(self, agent: Agent, locs: List[Location], comp: Literal[0, 1, 2] = 0) -> KeyedPlane:
         """
         Gets a PsychSim plane for the given agent that can be used to compare it's current location against the given
         set of locations. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
@@ -158,17 +164,19 @@ class GridWorld(object):
         :return: the plane corresponding to comparing the agent's location against the given coordinates.
         """
         x_feat, y_feat = self.get_location_features(agent)
-        loc_values = {self.xy_to_idx(x, y) for x, y in locs}
-        return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}), loc_values, comp)
+        loc_idxs = {self.xy_to_idx(*loc) for loc in locs}
 
-    def idx_to_xy(self, i: int) -> Tuple[int, int]:
+        # creates plane that checks if x+(y*width) equals any idx in the set
+        return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}), loc_idxs, comp)
+
+    def idx_to_xy(self, i: int) -> Location:
         """
         Converts the given location index to XY coordinates. Indexes are taken from the left-right, bottom-up order.
         :param int i: the index of the location.
         :rtype: (int, int)
         :return: a tuple containing the XY coordinates corresponding to the given location index.
         """
-        return i % self.width, i // self.width
+        return Location(i % self.width, i // self.width)
 
     def xy_to_idx(self, x: int, y: int) -> int:
         """
@@ -233,14 +241,14 @@ class GridWorld(object):
 
     def set_achieve_locations_reward(self,
                                      agent: Agent,
-                                     locs: List[Tuple[int, int]],
+                                     locs: List[Location],
                                      weight: float,
                                      model: Optional[str] = None):
         """
         Sets a reward to the agent such that if its current location is equal to one of the given locations it will
         receive the given value. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
         :param Agent agent: the agent for which to get set the reward.
-        :param list[(int,int)] locs: a list of target XY coordinate tuples.
+        :param list[Location] locs: a list of target XY coordinate tuples.
         :param float weight: the weight/value associated with this reward.
         :param str model: the agent's model on which to set the reward.
         """
