@@ -2,13 +2,19 @@ import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from typing import List, Dict, NamedTuple, Optional
 from psychsim.world import World
 from psychsim.agent import Agent
-from model_learning.environments.gridworld import GridWorld
+from model_learning.environments.gridworld import GridWorld, Location
 from model_learning.util.plot import distinct_colors
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+
+class Color(NamedTuple):
+    inner: int
+    outer: int
 
 
 class ObjectsGridWorld(GridWorld):
@@ -17,8 +23,8 @@ class ObjectsGridWorld(GridWorld):
     e.g., can be used to manipulate rewards provided to an agent.
     """
 
-    def __init__(self, world, width, height, num_objects, num_colors,
-                 name='', seed=0, show_objects=True, single_color=True):
+    def __init__(self, world: World, width: int, height: int, num_objects: int, num_colors: int,
+                 name: str = '', seed: int = 0, show_objects: bool = True, single_color: bool = True):
         """
         Creates a new gridworld.
         :param World world: the PsychSim world associated with this gridworld.
@@ -39,20 +45,20 @@ class ObjectsGridWorld(GridWorld):
         # initialize objects
         rng = np.random.RandomState(seed)
         locations = rng.choice(np.arange(width * height), num_objects, False)
-        self.objects = {}
+        self.objects: Dict[Location, Color] = {}
         for loc in locations:
             x, y = self.idx_to_xy(loc)
             color = rng.randint(num_colors)
-            self.objects[(x, y)] = (color, color) if single_color else (color, rng.randint(num_colors))
+            self.objects[Location(x, y)] = Color(color, color) if single_color else Color(color, rng.randint(num_colors))
 
         # gets locations indexed by color
-        self.inner_locs = [[] for _ in range(self.num_colors)]
-        self.outer_locs = [[] for _ in range(self.num_colors)]
+        self.inner_locs: List[List[Location]] = [[] for _ in range(self.num_colors)]
+        self.outer_locs: List[List[Location]] = [[] for _ in range(self.num_colors)]
         for loc, color in self.objects.items():
-            self.inner_locs[color[0]].append(loc)
-            self.outer_locs[color[1]].append(loc)
+            self.inner_locs[color.inner].append(loc)
+            self.outer_locs[color.outer].append(loc)
 
-    def _plot(self, val_func=None, title='Environment', cmap=None):
+    def _plot(self, val_func: Optional[np.ndarray] = None, title: str = 'Environment', cmap: Optional[str] = None):
 
         super()._plot(val_func, title, cmap)
 
@@ -63,7 +69,7 @@ class ObjectsGridWorld(GridWorld):
             obj_colors = distinct_colors(self.num_colors)
             patches = []
             for i, color in enumerate(obj_colors):
-                patches.append(mpatches.Patch(color=color, label='Color {}'.format(i + 1)))
+                patches.append(mpatches.Patch(color=color, label=f'Color {i}'))
             leg = plt.legend(handles=patches, loc='upper left', bbox_to_anchor=(-.35, 0.02, 1, 1), fancybox=False)
             leg.get_frame().set_edgecolor('black')
             leg.get_frame().set_linewidth(0.8)
@@ -75,56 +81,67 @@ class ObjectsGridWorld(GridWorld):
                 ax.add_artist(outer_circle)
                 ax.add_artist(inner_circle)
 
-    def get_loc_feature_matrix(self, outer=True, inner=True):
+    def get_location_feature_matrix(self, outer: bool = True, inner: bool = True) -> np.ndarray:
         """
-        Gets a matrix containing boolean features for the presence of object colors in each indexed location in the
-        environment, where a feature is `1` if there is an object of the corresponding color in that location, `0`
-        otherwise. Location index is given in a left-right, bottom-up order.
+        Gets a matrix containing boolean features for the presence of object colors in each location in the environment,
+        where a feature is `1` if there is an object of the corresponding color in that location, `0` otherwise
         :param bool outer: whether to include features for the presence of objects' outer colors.
         :param bool inner: whether to include features for the presence of objects' inner colors.
         :rtype: np.ndarray
-        :return: an array of shape (width*height, num_colors*(outer+inner)) containing the color features for each
+        :return: an array of shape (width, height, num_colors [, num_colors]) containing the color features for each
         environment location.
         """
-        feat_matrix = np.zeros((self.width * self.height, self.num_colors * (outer + inner)))
+        assert inner or outer, 'At least one option "inner" or "outer" must be true'
+
+        if inner and outer:
+            feat_matrix = np.zeros((self.width, self.height, self.num_colors, self.num_colors), dtype=np.bool)
+        else:
+            feat_matrix = np.zeros((self.width, self.height, self.num_colors), dtype=np.bool)
+
         for loc, color in self.objects.items():
-            idx = self.xy_to_idx(*loc)
-            if outer:
-                feat_matrix[idx, color[0]] = 1.
-            if inner:
-                feat_matrix[idx, self.num_colors + color[1]] = 1.
+            if inner and outer:
+                feat_matrix[loc.x, loc.y, color.inner, color.outer] = 1
+            elif outer:
+                feat_matrix[loc.x, loc.y, color.outer] = 1
+            else:
+                feat_matrix[loc.x, loc.y, color.inner] = 1
         return feat_matrix
 
-    def get_dist_feature_matrix(self, outer=True, inner=True):
+    def get_distance_feature_matrix(self, outer: bool = True, inner: bool = True) -> np.ndarray:
         """
         Gets a matrix containing numerical features denoting the distance to the nearest object inner or outer color
-        from each indexed location in the environment. Location index is given in a left-right, bottom-up order.
+        from each location in the environment.
         :param bool outer: whether to include features for the nearest distance to objects' outer colors.
         :param bool inner: whether to include features for the nearest distance to objects' inner colors.
         :rtype: np.ndarray
-        :return: an array of shape (width*height, num_colors*(outer+inner)) containing the color features for each
+        :return: an array of shape (width, height, num_colors [, num_colors]) containing the color features for each
         environment location.
         """
-        outer_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
-        inner_dists = np.full((self.width, self.height, self.num_colors), np.float('inf'))
+        assert inner or outer, 'At least one option "inner" or "outer" must be true'
+
+        if inner and outer:
+            feat_matrix = np.full((self.width, self.height, self.num_colors, self.num_colors), np.inf)
+        else:
+            feat_matrix = np.full((self.width, self.height, self.num_colors), np.inf)
+
         for loc in itertools.product(range(self.width), range(self.height)):
             x, y = loc
             for obj_loc, color in self.objects.items():
                 dist = np.linalg.norm(np.array(loc) - obj_loc)
-                outer_dists[x, y, color[0]] = min(outer_dists[x, y, color[0]], dist)
-                inner_dists[x, y, color[1]] = min(inner_dists[x, y, color[1]], dist)
-
-        feat_matrix = np.zeros((self.width * self.height, self.num_colors * (outer + inner)))
-        for x, y in itertools.product(range(self.width), range(self.height)):
-            idx = self.xy_to_idx(x, y)
-            for color in range(self.num_colors):
-                if outer:
-                    feat_matrix[idx, color] = outer_dists[x, y, color]
-                if inner:
-                    feat_matrix[idx, self.num_colors + color] = inner_dists[x, y, color]
+                if inner and outer:
+                    feat_matrix[x, y, color.inner, color.outer] = min(feat_matrix[x, y, color.inner, color.outer], dist)
+                elif outer:
+                    feat_matrix[x, y, color.outer] = min(feat_matrix[x, y, color.outer], dist)
+                else:
+                    feat_matrix[x, y, color.inner] = min(feat_matrix[x, y, color.inner], dist)
+        feat_matrix[np.isinf(feat_matrix)] = np.nan
         return feat_matrix
 
-    def set_linear_color_reward(self, agent, weights_outer, weights_inner=None, model=None):
+    def set_linear_color_reward(self,
+                                agent: Agent,
+                                weights_outer: np.ndarray,
+                                weights_inner: Optional[np.ndarray] = None,
+                                model: Optional[str] = None):
         """
         Sets a reward to the agent that is a linear combination of the given weights associated with each object color.
         In other words, when the agent is collocated with some object, the received reward will be proportional to the
@@ -133,17 +150,19 @@ class ObjectsGridWorld(GridWorld):
         :param np.ndarray or list[float] weights_outer: the reward weights associated with each object's outer color.
         :param np.ndarray or list[float] weights_inner: the reward weights associated with each object's inner color.
         :param str model: the agent's model on which to set the reward.
-        :return:
         """
+        assert weights_outer is not None or weights_inner is not None, \
+            'At least one option "weights_inner" or "weights_outer" must be given'
 
-        # checks
-        assert weights_outer is not None and len(weights_outer) == self.num_colors, \
-            'Weight vectors should have length {}.'.format(self.num_colors)
+        # checks num colors
+        assert weights_outer is None or len(weights_outer) == self.num_colors, \
+            f'Weight vectors should have length {self.num_colors}.'
         assert weights_inner is None or len(weights_inner) == self.num_colors, \
-            'Weight vectors should have length {}.'.format(self.num_colors)
+            f'Weight vectors should have length {self.num_colors}.'
 
         # sets the corresponding weight for each object location
-        for color in range(self.num_colors):
-            self.set_achieve_locations_reward(agent, self.outer_locs[color], weights_outer[color], model)
+        for c in range(self.num_colors):
+            if weights_outer is not None:
+                self.set_achieve_locations_reward(agent, self.outer_locs[c], weights_outer[c], model)
             if weights_inner is not None:
-                self.set_achieve_locations_reward(agent, self.inner_locs[color], weights_inner[color], model)
+                self.set_achieve_locations_reward(agent, self.inner_locs[c], weights_inner[c], model)
