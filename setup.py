@@ -23,5 +23,5 @@ setup(name='model-learning',
           'tqdm'
       ],
       zip_safe=True,
-      python_requires='>=3.6',
+      python_requires='>=3.8',
       )
