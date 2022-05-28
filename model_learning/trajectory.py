@@ -9,7 +9,7 @@ from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, turnKey
-from model_learning import Trajectory
+from model_learning import Trajectory, StateActionPair
 from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
@@ -71,11 +71,10 @@ def generate_trajectory(agent: Agent,
     :return: a trajectory containing a list of state-action pairs.
     """
     world = copy_world(agent.world)
-    random.seed(seed)
-    rng = random.Random(seed)
 
     # generate or select initial state features
     if init_feats is not None:
+        rng = random.Random(seed)
         for feature, init_value in init_feats.items():
             if init_value is None:
                 init_value = get_random_value(world, feature, rng)
@@ -83,9 +82,12 @@ def generate_trajectory(agent: Agent,
                 init_value = rng.choice(init_value)
             world.setFeature(feature, init_value)
 
+    random.seed(seed)
+
     # for each step, takes action and registers state-action pairs
     trajectory: Trajectory = []
     total = 0
+    prob = 1.
     if model is not None:
         world.setFeature(modelKey(agent.name), model)
     for i in range(trajectory_length):
@@ -97,11 +99,15 @@ def generate_trajectory(agent: Agent,
             world.step()
             turn = world.getFeature(turnKey(agent.name), unique=True)
 
+        prev_world = copy_world(world)  # keep state and prob before selection
+        prev_prob = prob
+        if select:
+            prob *= world.state.select()  # select if state is stochastic
+
         # steps the world, gets the agent's action
-        prev_world = copy_world(world)
-        world.step(select=select, horizon=horizon, tiebreak=selection, threshold=threshold)
+        world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
         action = world.getAction(agent.name)
-        trajectory.append((prev_world, action))
+        trajectory.append(StateActionPair(prev_world, action, prev_prob))
 
         step_time = timer() - start
         total += step_time
@@ -150,8 +156,9 @@ def generate_trajectories(agent: Agent,
     """
     # initial checks
     world = agent.world
-    for feature in init_feats:
-        assert feature in world.variables, f'World does not have feature \'{feature}\'!'
+    if init_feats is not None:
+        for feature in init_feats:
+            assert feature in world.variables, f'World does not have feature \'{feature}\'!'
 
     # generates each trajectory in parallel using a different random seed
     start = timer()
@@ -226,6 +233,6 @@ def log_trajectories(trajectories: List[Trajectory], features: List[str]):
         logging.info('-------------------------------------------')
         logging.info(f'Trajectory {i}:')
         for t, sa in enumerate(trajectory):
-            world, action = sa
-            feat_values = [str(world.getFeature(feat, unique=True)) for feat in features]
+            action = sa.action
+            feat_values = [str(sa.world.getFeature(feat, unique=True)) for feat in features]
             logging.info(f'{t}:\t({", ".join(feat_values)}) -> {action if len(action) > 1 else action.first()}')
