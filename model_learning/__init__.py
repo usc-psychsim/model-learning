@@ -1,12 +1,30 @@
+from typing import Union, List
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
 from psychsim.world import World
-from typing import Union, List, Tuple
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
+
 # types
+class StateActionPair(object):
+    """
+    Represents a state-action pair which can have associated a probability.
+    """
+
+    def __init__(self, world: World, action: Distribution, prob: float = 1.):
+        """
+        Creates a new state-action pair.
+        :param World world: the world containing the state.
+        :param Distribution action: the (stochastic) action selection associated with the state of the world.
+        :param float prob: the probability with which the state of the world was selected (for stochastic states).
+        """
+        self.world: World = world
+        self.action: Distribution = action
+        self.prob: float = prob
+
+
 PsychSimType = Union[float, int, str]
 State = VectorDistributionSet
-Trajectory = List[Tuple[World, Distribution]]  # list of world-action (distribution) pairs
+Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
