@@ -1,9 +1,9 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from psychsim.agent import Agent
+from typing import List, Optional, Dict
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
-from model_learning.trajectory import copy_world
+from model_learning import Trajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -14,12 +14,11 @@ class ModelLearningResult(object):
     Represents a result of PsychSim model learning for some expert data.
     """
 
-    def __init__(self, data_id, trajectories, stats):
+    def __init__(self, data_id: str, trajectories: List[Trajectory], stats: Dict[str, np.ndarray]):
         """
         Creates a new result.
         :param str data_id: an identifier for the data for which model learning was performed.
-        :param list[list[(VectorDistributionSet, Distribution)]] trajectories: a list of trajectories, each containing a
-        list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param list[Trajectory] trajectories: a list of trajectories, each a sequence of state-action pairs.
         :param dict[str, np.ndarray] stats: a dictionary with relevant statistics regarding the algorithm's execution.
         """
         self.data_id = data_id
@@ -38,7 +37,7 @@ class ModelLearningAlgorithm(ABC):
     while others are set as free parameters to be optimized by the algorithm.
     """
 
-    def __init__(self, label, agent_name):
+    def __init__(self, label: str, agent_name: str, ):
         """
         Creates a new algorithm.
         :param str label: the label associated with this algorithm (might be useful for testing purposes).
@@ -48,25 +47,28 @@ class ModelLearningAlgorithm(ABC):
         self.agent_name = agent_name
 
     @abstractmethod
-    def learn(self, trajectories, data_id=None):
+    def learn(self,
+              trajectories: List[Trajectory],
+              data_id: Optional[str] = None,
+              verbose: bool = False) -> ModelLearningResult:
         """
         Performs model learning by retrieving a PsychSim model approximating an expert's behavior as demonstrated
         through the given trajectories.
         :param list[list[(VectorDistributionSet, Distribution)]] trajectories: a list of trajectories, each containing a
         list (sequence) of state-action pairs demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
+        :param bool verbose: whether to show information at each timestep during learning.
         :rtype: ModelLearningResult
         :return: the result of the model learning procedure.
         """
         pass
 
     @abstractmethod
-    def save_results(self, result, output_dir, img_format):
+    def save_results(self, result: ModelLearningResult, output_dir: str, img_format: str):
         """
         Saves the several results of a run of the algorithm to the given directory.
         :param ModelLearningResult result: the results of the algorithm run.
         :param str output_dir: the path to the directory in which to save the results.
         :param str img_format: the format of the images to be saved.
-        :return:
         """
         pass
