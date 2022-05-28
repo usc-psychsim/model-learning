@@ -67,15 +67,26 @@ class ObjectsRewardVector(LinearRewardVector):
         # collects possible locations and associated probabilities
         locs: List[Location] = []
         probs: List[float] = []
-        for row in state.distributions[state.keyMap[self.x]].domain():
-            x_val = row[self.x]
-            y_val = row[self.y]
+        key = state.keyMap[self.x]
+        if key is None:
+            # feature values are certain
+            x_val = state.certain[self.x]
+            y_val = state.certain[self.y]
             locs.append(Location(x_val, y_val))
-            probs.append(state.distributions[state.keyMap[self.x]][row])
+            probs.append(1.)
+        else:
+            # feature values are probabilistic, so iterate over values and associated probs
+            for dist, prob in state.distributions[key].items():
+                x_val = dist[self.x]
+                y_val = dist[self.y]
+                locs.append(Location(x_val, y_val))
+                probs.append(prob)
 
         # return weighted average of feature vectors
-        return np.multiply(self.feat_matrix[locs],
-                           np.array(probs).reshape(len(locs), 1)).sum(axis=0)
+        return np.multiply(
+            self.feat_matrix[tuple(np.array(locs).swapaxes(0, 1))],  # shape: (num_locs, num_objects)
+            np.array(probs).reshape(len(locs), 1)  # shape: (num_locs, 1)
+        ).sum(axis=0)  # shape: (num_objects,)
 
     def set_rewards(self,
                     agent: Agent,
