@@ -16,6 +16,7 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
                      num_states=None, seed=0, invalid_val=-1.):
     """
     Performs cross internal evaluation by testing a set of agents under different linear reward weights.
+    These can represent different hypothesis, different notional models, the centers of different clusters, etc.
     :param list[list[tuple[World, Distribution]]] trajectories: the set of trajectories containing the experts' behavior
     against which we will compare the behavior resulting from the different reward weight vectors, containing several
     sequences of state-action pairs.
