@@ -426,9 +426,8 @@ class GridWorld(object):
             xs = []
             ys = []
             for t, sa in enumerate(trajectory):
-                world, action = sa
-                x_t = world.getValue(x)
-                y_t = world.getValue(y)
+                x_t = sa.world.getValue(x)
+                y_t = sa.world.getValue(y)
                 xs.append(x_t + .5)
                 ys.append(y_t + .5)
 

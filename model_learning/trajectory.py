@@ -234,5 +234,5 @@ def log_trajectories(trajectories: List[Trajectory], features: List[str]):
         logging.info(f'Trajectory {i}:')
         for t, sa in enumerate(trajectory):
             action = sa.action
-            feat_values = [str(sa.world.getFeature(feat, unique=True)) for feat in features]
+            feat_values = [str(sa.world.getFeature(feat)) for feat in features]
             logging.info(f'{t}:\t({", ".join(feat_values)}) -> {action if len(action) > 1 else action.first()}')
