@@ -17,7 +17,7 @@ NUM_COLORS = 5
 AGENT_NAME = 'Agent'
 HORIZON = 3
 RATIONALITY = 1 / 0.05  # inverse temperature
-ACTION_SEL = 'distribution'  # stochastic over all actions
+ACTION_SEL = 'random'  # 'distribution'  # stochastic over all actions
 PRUNE_THRESHOLD = 1e-2
 SELECT = True
 
@@ -26,14 +26,14 @@ TRAJ_LENGTH = 10  # 20
 
 OUTPUT_DIR = 'output/examples/collect-traj-obj-world'
 SEED = 0
-PROCESSES = 1
+PROCESSES = -1
 VERBOSE = True
 IMG_FORMAT = 'pdf'
 
 if __name__ == '__main__':
     # create output
     create_clear_dir(OUTPUT_DIR, clear=False)
-    change_log_handler(os.path.join(OUTPUT_DIR, 'collect.log'))
+    change_log_handler(os.path.join(OUTPUT_DIR, 'collect.log'), level=logging.INFO)
 
     # create world and agent
     world = World()
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # gets policy and value
     logging.info('Computing policy...')
     states = env.get_all_states(agent)
-    pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD)
+    pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
     pi = np.array([[dist[a] if a in dist.domain() else 0. for a in env.agent_actions[agent.name]] for dist in pi])
 
     logging.info('Computing value function...')

@@ -1,3 +1,4 @@
+import tqdm
 import numpy as np
 from typing import List, Callable, Optional, Literal
 from psychsim.agent import Agent
@@ -73,11 +74,13 @@ def estimate_feature_counts(agent: Agent,
     :return: the estimated expected feature counts.
     """
     trajectories = []
-    for t in range(len(initial_states)):
+    if use_tqdm:
+        initial_states = tqdm.tqdm(initial_states, total=len(initial_states))
+    for t, initial_state in enumerate(initial_states):
         # make copy of world and set initial state
         world = copy_world(agent.world)
         _agent = world.agents[agent.name]
-        world.state = initial_states[t]
+        world.state = initial_state
 
         if exact:
             # exact computation, generate single stochastic trajectory (select=False) from initial state
@@ -91,7 +94,7 @@ def estimate_feature_counts(agent: Agent,
                                                     model=model, select=True,
                                                     horizon=horizon, selection=selection, threshold=threshold,
                                                     processes=processes, seed=seed + t, verbose=verbose,
-                                                    use_tqdm=use_tqdm)
+                                                    use_tqdm=False)
             trajectories.extend(trajectories_mc)
 
     # return expected feature counts over all generated trajectories
