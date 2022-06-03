@@ -613,22 +613,22 @@ def finite_diff(y: np.ndarray,
 
     # check uniformity of space
     dy_dx = np.full_like(y, default_value)
-    if isinstance(x, float) or isinstance(x, int):
-        # uniform grid space, same coefficients for all indices
-        coefs = _fd_coefficients_uni(order, accuracy, fd_type)
-        offsets = coefs['offsets']
-        coefs = x ** -order * coefs['coefficients']
-        for idx in range(len(y)):
-            if _insuf_data(idx):
-                continue  # ignore, not enough data
-            dy_dx[idx] = np.dot(y[idx + offsets], coefs)
-    else:
+    if isinstance(x, np.ndarray):
         # non-uniform grid, diff coefficients for each index
         for idx in range(len(y)):
             if _insuf_data(idx):
                 continue  # ignore, not enough data
             coefs = _fd_coefficients_non_uni(order, accuracy, x, idx, fd_type)
             dy_dx[idx] = np.dot(y[idx + coefs['offsets']], coefs['coefficients'])
+    else:
+        # uniform grid space, same coefficients for all indices
+        coefs = _fd_coefficients_uni(order, accuracy, fd_type)
+        offsets = coefs['offsets']
+        coefs = float(x) ** -order * coefs['coefficients']
+        for idx in range(len(y)):
+            if _insuf_data(idx):
+                continue  # ignore, not enough data
+            dy_dx[idx] = np.dot(y[idx + offsets], coefs)
 
     return dy_dx
 
