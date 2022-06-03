@@ -2,7 +2,7 @@ import argparse
 import logging
 from enum import IntEnum
 from typing import Optional
-from interestingness_xdrl.util.io import save_dict_json
+from ..util.io import save_dict_json
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedro.sequeira@sri.com'
