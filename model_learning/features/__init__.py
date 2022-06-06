@@ -1,6 +1,7 @@
-import tqdm
+import itertools as it
 import numpy as np
 from typing import List, Callable, Optional, Literal
+from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from model_learning import Trajectory, State
 from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world
@@ -46,7 +47,6 @@ def estimate_feature_counts(agent: Agent,
                             num_mc_trajectories: int = 100,
                             model: Optional[str] = None,
                             horizon: Optional[int] = None,
-                            selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
                             threshold: Optional[float] = None,
                             processes: Optional[int] = -1,
                             seed: int = 0,
@@ -64,7 +64,6 @@ def estimate_feature_counts(agent: Agent,
     :param int num_mc_trajectories: the number of Monte Carlo trajectories to be samples. Works with `exact=False`.
     :param str model: the agent model used to generate the trajectories.
     :param int horizon: the agent's planning horizon.
-    :param str selection: the action selection criterion, to untie equal-valued actions.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int processes: number of processes to use. Follows `joblib` convention.
     :param int seed: the seed used to initialize the random number generator.
@@ -73,29 +72,39 @@ def estimate_feature_counts(agent: Agent,
     :rtype: np.ndarray
     :return: the estimated expected feature counts.
     """
-    trajectories = []
-    if use_tqdm:
-        initial_states = tqdm.tqdm(initial_states, total=len(initial_states))
-    for t, initial_state in enumerate(initial_states):
-        # make copy of world and set initial state
-        world = copy_world(agent.world)
-        _agent = world.agents[agent.name]
-        world.state = initial_state
 
-        if exact:
-            # exact computation, generate single stochastic trajectory (select=False) from initial state
-            trajectory_dist = generate_trajectory(_agent, trajectory_length, model=model, select=False,
-                                                  horizon=horizon, selection='distribution', threshold=threshold,
-                                                  seed=seed + t, verbose=verbose)
-            trajectories.append(trajectory_dist)
-        else:
-            # Monte Carlo approximation, generate N single-path trajectories (select=True) from initial state
-            trajectories_mc = generate_trajectories(_agent, num_mc_trajectories, trajectory_length,
-                                                    model=model, select=True,
-                                                    horizon=horizon, selection=selection, threshold=threshold,
-                                                    processes=processes, seed=seed + t, verbose=verbose,
-                                                    use_tqdm=False)
-            trajectories.extend(trajectories_mc)
+    args = []
+    for t, initial_state in enumerate(initial_states):
+        args.append((agent, initial_state, trajectory_length, exact, num_mc_trajectories, model, horizon,
+                     threshold, processes, seed + t, verbose))
+
+    trajectories = run_parallel(_generate_trajectories, args, processes=processes, use_tqdm=use_tqdm)
+    trajectories = list(it.chain(*trajectories))
 
     # return expected feature counts over all generated trajectories
     return expected_feature_counts(trajectories, feature_func)
+
+
+def _generate_trajectories(
+        agent: Agent, initial_state: State, trajectory_length: int, exact: bool,
+        num_mc_trajectories: int, model: Optional[str], horizon: Optional[int],
+        threshold: Optional[float], processes: Optional[int], seed: int, verbose: bool) -> List[Trajectory]:
+    # make copy of world and set initial state
+    world = copy_world(agent.world)
+    _agent = world.agents[agent.name]
+    world.state = initial_state
+
+    if exact:
+        # exact computation, generate single stochastic trajectory (select=False) from initial state
+        trajectory_dist = generate_trajectory(_agent, trajectory_length, model=model, select=False,
+                                              horizon=horizon, selection='distribution', threshold=threshold,
+                                              seed=seed, verbose=verbose)
+        return [trajectory_dist]
+
+    # Monte Carlo approximation, generate N single-path trajectories (select=True) from initial state
+    trajectories_mc = generate_trajectories(_agent, num_mc_trajectories, trajectory_length,
+                                            model=model, select=True,
+                                            horizon=horizon, selection='distribution', threshold=threshold,
+                                            processes=processes, seed=seed, verbose=verbose,
+                                            use_tqdm=False)
+    return trajectories_mc

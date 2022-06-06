@@ -99,12 +99,13 @@ def generate_trajectory(agent: Agent,
             world.step()
             turn = world.getFeature(turnKey(agent.name), unique=True)
 
-        prev_world = copy_world(world)  # keep state and prob before selection
+        prev_world = copy_world(world)  # keep (possibly stochastic) state and prob before selection
         prev_prob = prob
         if select:
-            prob *= world.state.select()  # select if state is stochastic
+            # select if state is stochastic and update probability of reaching state
+            prob *= world.state.select()
 
-        # steps the world, gets the agent's action
+        # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
         action = world.getAction(agent.name)
         trajectory.append(StateActionPair(prev_world, action, prev_prob))
