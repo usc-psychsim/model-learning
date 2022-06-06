@@ -28,14 +28,17 @@ EXPERT_THETA = [0.5, -0.4, 0.1, 0., 0.]
 EXPERT_RATIONALITY = 1 / 0.1  # inverse temperature
 EXPERT_ACT_SELECTION = 'random'
 EXPERT_SEED = 17
-NUM_TRAJECTORIES = 8  # 20
-TRAJ_LENGTH = 10  # 15
+NUM_TRAJECTORIES = 20  # 8 # 20
+TRAJ_LENGTH = 15  # 10 # 15
 
 # learning params
 NORM_THETA = True
 LEARNING_RATE = 1e-2  # 0.01
 MAX_EPOCHS = 200
 THRESHOLD = 1e-3
+DECREASE_RATE = True
+EXACT = False
+NUM_MC_TRAJECTORIES = 1000 #200
 LEARNING_SEED = 17
 
 # common params
@@ -109,8 +112,10 @@ if __name__ == '__main__':
         learning_rate=LEARNING_RATE,
         max_epochs=MAX_EPOCHS,
         diff_threshold=THRESHOLD,
-        decrease_rate=True,
+        decrease_rate=DECREASE_RATE,
         prune_threshold=PRUNE_THRESHOLD,
+        exact=EXACT,
+        num_mc_trajectories=NUM_MC_TRAJECTORIES,
         horizon=HORIZON,
         seed=LEARNING_SEED)
     # trajectories = [[(w.state, a) for w, a in t] for t in trajectories]

@@ -21,7 +21,6 @@ INNER_COLORS = False
 AGENT_NAME = 'Agent'
 HORIZON = 3
 RATIONALITY = 1
-ACTION_SEL = 'distribution'
 # THETA = [0, 0, 0, 0, 0]
 THETA = [0.5, -0.4, 0.1, 0., 0.]
 PRUNE_THRESHOLD = 1e-4
@@ -30,7 +29,7 @@ TRAJ_LENGTH = 10
 INIT_X = 0  # 5
 INIT_Y = 0  # 5
 
-MC_TRAJECTORIES = 1000
+MC_TRAJECTORIES = 200
 
 OUTPUT_DIR = 'output/examples/compute-feature-counts'
 SEED = 123
@@ -82,7 +81,7 @@ if __name__ == '__main__':
     logging.info('Computing expected feature counts using exact distribution...')
     # computes a single "trajectory distribution" using stochastic policy
     efc_dist = estimate_feature_counts(agent, [init_state], TRAJ_LENGTH, feature_func, exact=True,
-                                       horizon=HORIZON, selection=ACTION_SEL, threshold=PRUNE_THRESHOLD,
+                                       horizon=HORIZON, threshold=PRUNE_THRESHOLD,
                                        seed=SEED, verbose=VERBOSE)
 
     with np.printoptions(precision=2, suppress=True):
@@ -92,7 +91,7 @@ if __name__ == '__main__':
     logging.info('Computing expected feature counts using Monte Carlo approach to approximate distribution...')
     efc_mc = estimate_feature_counts(agent, [init_state], TRAJ_LENGTH, feature_func, exact=False,
                                      num_mc_trajectories=MC_TRAJECTORIES,
-                                     horizon=HORIZON, selection=ACTION_SEL, threshold=PRUNE_THRESHOLD,
+                                     horizon=HORIZON, threshold=PRUNE_THRESHOLD,
                                      processes=PROCESSES, seed=SEED, verbose=VERBOSE)
 
     with np.printoptions(precision=2, suppress=True):
