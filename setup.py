@@ -20,7 +20,8 @@ setup(name='model-learning',
           'jsonpickle',
           'sklearn',
           'joblib',
-          'tqdm'
+          'tqdm',
+          'pandas'
       ],
       zip_safe=True,
       python_requires='>=3.8',

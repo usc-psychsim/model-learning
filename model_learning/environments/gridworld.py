@@ -453,7 +453,7 @@ class GridWorld(object):
             grid = np.zeros((self.width, self.height))
             plt.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
             for x, y in itertools.product(range(self.width), range(self.height)):
-                ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                ax.annotate(f'({x},{y})', xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
         else:
             # plots given value function as heatmap
             val_func = val_func.reshape((self.width, self.height))

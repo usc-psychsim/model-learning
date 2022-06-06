@@ -47,6 +47,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
                  max_epochs: int = 200,
                  diff_threshold: float = 1e-2,
                  decrease_rate: bool = False,
+                 exact=False,
+                 num_mc_trajectories=1000,
                  prune_threshold: float = 1e-2,
                  horizon: int = 2,
                  seed: int = 17):
@@ -62,6 +64,9 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         :param int max_epochs: the maximum number of gradient descent steps.
         :param float diff_threshold: the termination threshold for the weight vector difference.
         :param bool decrease_rate: whether to exponentially decrease the learning rate over time.
+        :param bool exact: whether the computation of the distribution over paths should be exact (expand stochastic
+        branches) or not, in which case Monte Carlo sample trajectories will be generated to estimate the feature counts.
+        :param int num_mc_trajectories: the number of Monte Carlo trajectories to be samples. Works with `exact=False`.
         :param float prune_threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
         :param int horizon: the planning horizon used to compute feature counts.
         :param int seed: the seed to initialize the random number generator.
@@ -76,6 +81,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         self.max_epochs = max_epochs
         self.diff_threshold = diff_threshold
         self.decrease_rate = decrease_rate
+        self.exact = exact
+        self.num_mc_trajectories = num_mc_trajectories
         self.prune_threshold = prune_threshold
         self.horizon = horizon
         self.seed = seed
@@ -137,13 +144,13 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
                 learning_rate *= np.power(1 - (10 / self.max_epochs), e)
 
             # gets expected feature counts (mean feature path)
-            # by computing the efc using a MaxEnt stochastic policy from reward
+            # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses rational agent and we need the distribution over actions if exact
             expected_fc = estimate_feature_counts(agent, initial_states, traj_len, feature_func,
-                                                  exact=False, num_mc_trajectories=1000,
+                                                  exact=self.exact, num_mc_trajectories=self.num_mc_trajectories,
                                                   horizon=self.horizon, threshold=self.prune_threshold,
                                                   selection='distribution', processes=self.processes, seed=self.seed,
-                                                  verbose=False, use_tqdm=False)
+                                                  verbose=False, use_tqdm=True)
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
