@@ -11,7 +11,7 @@ from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
 from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
-    KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix
+    KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix, equalRow
 from model_learning.util.plot import distinct_colors
 from model_learning.trajectory import generate_trajectories, log_trajectories
 from model_learning import Trajectory
@@ -102,7 +102,7 @@ class GridWorld(object):
             agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, f'{agent.name}\'s vertical location')
         self.world.setFeature(y, 0)
 
-        # creates dynamics for the agent's movement (cardinal directions + no-op)
+        # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
         action = agent.addAction({'verb': 'move', 'action': 'nowhere'})
         tree = makeTree(noChangeMatrix(x))
         self.world.setDynamics(x, action, tree)
@@ -110,34 +110,34 @@ class GridWorld(object):
 
         # move right
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'right'})
-        tree = makeTree({'if': thresholdRow(x, self.width - 2),  # if loc is right border
-                         True: noChangeMatrix(x),  # stay still
-                         False: incrementMatrix(x, 1)})  # else move right
-        self.world.setDynamics(x, action, tree)
+        legal_dict = {'if': equalRow(x, self.width - 1), True: False, False: True}
+        agent.setLegal(action, makeTree(legal_dict))
+        move_tree = makeTree(incrementMatrix(x, 1))
+        self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         # move left
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'left'})
-        tree = makeTree({'if': thresholdRow(x, 0),  # if loc is not left border
-                         True: incrementMatrix(x, -1),  # move left
-                         False: noChangeMatrix(x)})  # else stay still
-        self.world.setDynamics(x, action, tree)
+        legal_dict = {'if': equalRow(x, 0), True: False, False: True}
+        agent.setLegal(action, makeTree(legal_dict))
+        move_tree = makeTree(incrementMatrix(x, -1))
+        self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         # move up
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'up'})
-        tree = makeTree({'if': thresholdRow(y, self.height - 2),  # if loc is up border
-                         True: noChangeMatrix(y),  # stay still
-                         False: incrementMatrix(y, 1)})  # else move up
-        self.world.setDynamics(y, action, tree)
+        legal_dict = {'if': equalRow(y, self.height - 1), True: False, False: True}
+        agent.setLegal(action, makeTree(legal_dict))
+        move_tree = makeTree(incrementMatrix(y, 1))
+        self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         # move down
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'down'})
-        tree = makeTree({'if': thresholdRow(y, 0),  # if loc is not bottom border
-                         True: incrementMatrix(y, -1),  # move down
-                         False: noChangeMatrix(y)})  # else stay still
-        self.world.setDynamics(y, action, tree)
+        legal_dict = {'if': equalRow(y, 0), True: False, False: True}
+        agent.setLegal(action, makeTree(legal_dict))
+        move_tree = makeTree(incrementMatrix(y, -1))
+        self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         return self.agent_actions[agent.name]
@@ -453,7 +453,7 @@ class GridWorld(object):
             grid = np.zeros((self.width, self.height))
             plt.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
             for x, y in itertools.product(range(self.width), range(self.height)):
-                ax.annotate(f'({x},{y})', xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
         else:
             # plots given value function as heatmap
             val_func = val_func.reshape((self.width, self.height))
