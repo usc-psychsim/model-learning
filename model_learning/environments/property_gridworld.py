@@ -19,8 +19,7 @@ __email__ = 'pedrodbs@gmail.com'
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
 PROPERTY_FEATURE = 'p'
-PROPERTY_LIST = ['unknown', 'medic', 'ready', 'clear']
-GOAL_FEATURE = 'g'
+PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear']
 
 
 class Location(NamedTuple):
@@ -69,6 +68,10 @@ class PropertyGridWorld(GridWorld):
         print(self.p)
         self.world.setFeature(self.p, 0)
 
+        # find # of GOAL location for each property state, p_idx: n_loc
+        self.property_goal_count: Dict[int, int] = {}
+        self.get_property_goal_count()
+
     def vis_agent_dynamics_in_xy(self):
         for k, v in self.world.dynamics.items():
             if type(k) is ActionSet:
@@ -78,9 +81,23 @@ class PropertyGridWorld(GridWorld):
                     print(kk)
                     print(vv)
 
-    def get_agent_goal_feature(self, agent: Agent) -> str:
-        g = stateKey(agent.name, GOAL_FEATURE + self.name)
-        return g
+    def get_property_goal_count(self):
+        for i in range(self.n_p_state):
+            self.property_goal_count[i] = 0
+        for p_idx in self.get_all_p_idx_has_p(PROPERTY_LIST[-1]):
+            n_goal = sum([p == PROPERTY_LIST[-1] for p in self.p_state[p_idx].values()])
+            self.property_goal_count[p_idx] = n_goal
+
+    def remove_nowhere_action(self, agent: Agent):
+        action = agent.find_action({'action': 'nowhere'})
+        agent.setLegal(action, makeTree(False))
+        self.agent_actions[agent.name].remove(action)
+
+    def get_all_p_idx_has_p(self, p) -> Set:
+        all_p_idx: Set = set()
+        for loc in self.exist_locations:
+            all_p_idx.update(self.get_possible_p_idx(loc, p))
+        return all_p_idx
 
     def get_possible_p_idx(self, loc, p):
         possible_p_idx = []
@@ -98,54 +115,61 @@ class PropertyGridWorld(GridWorld):
             if list(_loc_p.values()) == list(next_p.values()):
                 return next_p_idx
 
-    def add_location_property_dynamics(self, agent: Agent):
+    def get_next_p_idx_w_keys(self, new_loc, new_p):
+        p_idx = self.world.getFeature(self.p, unique=True)
+        new_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
+        return self.get_next_p_idx(p_idx, new_loc, new_p)
+
+    def add_location_property_dynamics(self, agent: Agent, idle: bool = True):
         assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
 
         self.add_agent_dynamics(agent)
+        if not idle:
+            self.remove_nowhere_action(agent)
         x, y = self.get_location_features(agent)
-
-        g = self.world.defineState(agent.name, GOAL_FEATURE + self.name,
-                                   int, 0, self.num_exist, description=f'Each location\'s property')
-        self.world.setFeature(g, 0)
 
         # property related action
         action = agent.addAction({'verb': 'handle', 'action': 'search'})
+        # search is valid everywhere
+        # model dynamics when agent is at a possible location
         tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
             all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[0])
             subtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+            # model dynamics for all possible property states at the location
             for j, p_idx in enumerate(all_p_idx):
-                loc_dict = {'if': equalRow(self.p, p_idx),
-                            True: setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[1])),
-                            False: noChangeMatrix(self.p)}
-                subtree_dict[j] = loc_dict
+                subtree_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[1]))
             subtree_dict[None] = noChangeMatrix(self.p)
             tree_dict[i] = subtree_dict
         tree_dict[None] = noChangeMatrix(self.p)
         self.world.setDynamics(self.p, action, makeTree(tree_dict))
         self.agent_actions[agent.name].append(action)
 
-        # action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
-        # legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
-        # for i, loc in enumerate(self.exist_locations):
-        #     legal_dict[i] = True
-        # legal_dict[None] = False
-        # agent.setLegal(action, makeTree(legal_dict))
-        # # problem here TODO
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
-        tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
+        # legality assumption: agent has observation on property state
+        # rescue is valid only when agent reach a location and the property state is rescue needed
+        # future: this action could be role-dependent, legality dynamics could be removed
+        legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
             all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[1])
-            subtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+            sublegal_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
             for j, p_idx in enumerate(all_p_idx):
-                loc_dict = {'if': equalRow(self.p, p_idx),
-                            True: setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[2])),
-                            False: noChangeMatrix(self.p)}
-                subtree_dict[j] = loc_dict
-            subtree_dict[None] = noChangeMatrix(self.p)
-            tree_dict[i] = subtree_dict
-        tree_dict[None] = noChangeMatrix(self.p)
-        self.world.setDynamics(self.p, action, makeTree(tree_dict))
+                sublegal_dict[j] = True
+            sublegal_dict[None] = False
+            legal_dict[i] = sublegal_dict
+        legal_dict[None] = False
+        agent.setLegal(action, makeTree(legal_dict))
+
+        rescue_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
+        for i, loc in enumerate(self.exist_locations):
+            all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[1])
+            subrescue_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+            for j, p_idx in enumerate(all_p_idx):
+                subrescue_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[2]))
+            subrescue_dict[None] = noChangeMatrix(self.p)
+            rescue_dict[i] = subrescue_dict
+        rescue_dict[None] = noChangeMatrix(self.p)
+        self.world.setDynamics(self.p, action, makeTree(rescue_dict))
         self.agent_actions[agent.name].append(action)
 
         return self.agent_actions[agent.name]
@@ -155,18 +179,14 @@ class PropertyGridWorld(GridWorld):
         for i, agent in enumerate(agents):
             assert agent.name in self.agent_actions, f'An agent was not registered with the name \'{agent.name}\''
 
-        carry_action = {'verb': 'handle', 'action': 'carry'}
+        carry_action = {'verb': 'handle', 'action': 'evacuate'}
         action_list = []
-        g_list = []
         for i, agent in enumerate(agents):
             if carry_action not in self.agent_actions[agent.name]:
                 action = agent.addAction(carry_action)
                 action_list.append(action)
                 self.agent_actions[agent.name].append(action)
-                g = self.get_agent_goal_feature(agent)
-                g_list.append(g)
         print(action_list)
-        print(g_list)
 
         for i, agent in enumerate(agents):
             j = -(i - 1)
@@ -176,11 +196,8 @@ class PropertyGridWorld(GridWorld):
             x2, y2 = self.get_location_features(agent2)
             # carry1, carry2 = action_list[i], action_list[j]
 
-            legal_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.height}), self.exist_locations, 0)}
-            for ii, loc in enumerate(self.exist_locations):
-                legal_dict[ii] = {'if': equalFeatureRow(x1, x2) & equalFeatureRow(y1, y2),
-                                  True: True, False: False}
-            legal_dict[None] = False
+            # legality assumption: agent has observation on every agent's location
+            legal_dict = {'if': equalFeatureRow(x1, x2) & equalFeatureRow(y1, y2), True: True, False: False}
             agents[i].setLegal(action_list[i], makeTree(legal_dict))
 
             tree_dict = {'if': equalRow(actionKey(agents[j].name, True), action_list[j])}
@@ -189,34 +206,14 @@ class PropertyGridWorld(GridWorld):
                 all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[2])
                 subsubtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
                 for pj, p_idx in enumerate(all_p_idx):
-                    loc_dict = {'if': equalRow(self.p, p_idx),
-                                True: setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[3])),
-                                False: noChangeMatrix(self.p)}
-                    subsubtree_dict[pj] = loc_dict
+                    subsubtree_dict[pj] = setToConstantMatrix(self.p,
+                                                              self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[3]))
                 subsubtree_dict[None] = noChangeMatrix(self.p)
                 subtree_dict[loci] = subsubtree_dict
             subtree_dict[None] = noChangeMatrix(self.p)
             tree_dict[True] = subtree_dict
             tree_dict[False] = noChangeMatrix(self.p)
             self.world.setDynamics(self.p, action_list[i], makeTree(tree_dict))
-
-            tree_dict = {'if': equalFeatureRow(x1, x2) & equalFeatureRow(y1, y2) &
-                               equalRow(actionKey(agents[j].name, True), action_list[j])}
-            subtree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.height}), self.exist_locations, 0)}
-            for loci, loc in enumerate(self.exist_locations):
-                all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[2])
-                subsubtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-                for pj, p_idx in enumerate(all_p_idx):
-                    loc_dict = {'if': equalRow(self.p, p_idx),
-                                True: incrementMatrix(g_list[i], 1),
-                                False: noChangeMatrix(g_list[i])}
-                    subsubtree_dict[pj] = loc_dict
-                subsubtree_dict[None] = noChangeMatrix(g_list[i])
-                subtree_dict[loci] = subsubtree_dict
-            subtree_dict[None] = noChangeMatrix(g_list[i])
-            tree_dict[True] = subtree_dict
-            tree_dict[False] = noChangeMatrix(g_list[i])
-            self.world.setDynamics(g_list[i], action_list[i], makeTree(tree_dict))
 
     def get_property_features(self) -> str:
         p = stateKey(WORLD, PROPERTY_FEATURE)
@@ -243,44 +240,25 @@ class PropertyGridWorld(GridWorld):
         self.world.state = old_state
         return states_wp
 
-    # def set_achieve_locations_reward(self, agent: Agent, locs: List[Location], weight: float, model: Optional[str] = None):
-    #     agent.setReward(makeTree({'if': self.get_location_plane(agent, locs),
-    #                               True: setToConstantMatrix(rewardKey(agent.name), 1.),
-    #                               False: setToConstantMatrix(rewardKey(agent.name), 0.)}), weight, model)
-
     # reward function
     def set_achieve_property_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
-        x, y = self.get_agent_location_features(agent)
-        reward_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.height}), self.exist_locations, 0)}
-        for i, loc in enumerate(self.exist_locations):
-            subtree_dict = {'if': equalRow(stateKey(self.name, PROPERTY_FEATURE), len(self.p_state) - 1),
-                            True: setToConstantMatrix(rewardKey(agent.name), 1),
-                            False: setToConstantMatrix(rewardKey(agent.name), 0)}
-            reward_dict[i] = subtree_dict
-        reward_dict[None] = setToConstantMatrix(rewardKey(agent.name), 0)
+        reward_dict = {'if': equalRow(actionKey(agent.name), agent.find_action({'action': 'evacuate'}))}
+        subreward_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}),
+                                           list(self.property_goal_count.keys()), 0)}
+        for i, (p_idx, count) in enumerate(self.property_goal_count.items()):
+            subreward_dict[i] = setToConstantMatrix(rewardKey(agent.name), count)
+        subreward_dict[None] = setToConstantMatrix(rewardKey(agent.name), 0)
+        reward_dict[True] = subreward_dict
+        reward_dict[False] = setToConstantMatrix(rewardKey(agent.name), 0)
         agent.setReward(makeTree(reward_dict), weight, model)
 
-    def get_property_plane(self, p_idxs: List[int],
-                           comp: Literal[KeyedPlane.COMPARISON_MAP] = KeyedPlane.COMPARISON_MAP[0]) -> KeyedPlane:
+    # reward function
+    # def set_achieve_property_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
+    #     reward_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), list(self.property_goal_count.keys()), 0)}
+    #     for i, (p_idx, count) in enumerate(self.property_goal_count.items()):
+    #         reward_dict[i] = setToConstantMatrix(rewardKey(agent.name), count)
+    #     reward_dict[None] = setToConstantMatrix(rewardKey(agent.name), 0)
+    #     agent.setReward(makeTree(reward_dict), weight, model)
 
-        assert comp in KeyedPlane.COMPARISON_MAP, \
-            f'Invalid comparison provided: {comp}; valid: {KeyedPlane.COMPARISON_MAP}'
 
-        # creates plane that checks if p equals any idx in the set
-        return KeyedPlane(KeyedVector({self.p: 1}), p_idxs, KeyedPlane.COMPARISON_MAP.index(comp))
 
-    # def get_location_id_plane(self,
-    #                           agent: Agent,
-    #                           locs: List,
-    #                           comp: Literal[KeyedPlane.COMPARISON_MAP] = KeyedPlane.COMPARISON_MAP[0]) -> KeyedPlane:
-    #
-    #     assert comp in KeyedPlane.COMPARISON_MAP, \
-    #         f'Invalid comparison provided: {comp}; valid: {KeyedPlane.COMPARISON_MAP}'
-    #
-    #     x_feat, y_feat = self.get_location_features(agent)
-    #     loc_idxs = locs
-    #
-    #     # creates plane that checks if x+(y*width) equals any idx in the set
-    #     return KeyedPlane(KeyedVector({x_feat: 1., y_feat: self.width}),
-    #                       loc_idxs,
-    #                       KeyedPlane.COMPARISON_MAP.index(comp))
