@@ -20,6 +20,7 @@ X_FEATURE = 'x'
 Y_FEATURE = 'y'
 PROPERTY_FEATURE = 'p'
 PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear']
+GOAL_FEATURE = 'g'
 
 
 class Location(NamedTuple):
@@ -33,6 +34,16 @@ class LocationInfo(NamedTuple):
 
 
 # define object property
+def get_property_features() -> str:
+    p = stateKey(WORLD, PROPERTY_FEATURE)
+    return p
+
+
+def get_goal_features() -> str:
+    g = stateKey(WORLD, GOAL_FEATURE)
+    return g
+
+
 class PropertyGridWorld(GridWorld):
 
     def __init__(self, world: World, width: int, height: int, num_exist: int,
@@ -44,8 +55,6 @@ class PropertyGridWorld(GridWorld):
 
         # set property for exist locations
         self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
-        print(self.exist_locations)
-        print(PROPERTY_LIST)
         self.property_length = len(PROPERTY_LIST)
         self.n_p_state = self.property_length ** self.num_exist
         self.p_state = {}
@@ -65,8 +74,10 @@ class PropertyGridWorld(GridWorld):
 
         self.p = self.world.defineState(WORLD, PROPERTY_FEATURE,
                                         int, 0, self.n_p_state - 1, description=f'Each location\'s property')
-        print(self.p)
         self.world.setFeature(self.p, 0)
+        self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
+                                        description=f'GOAL: # of cleared locations')
+        self.world.setFeature(self.g, 0)
 
         # find # of GOAL location for each property state, p_idx: n_loc
         self.property_goal_count: Dict[int, int] = {}
@@ -88,10 +99,10 @@ class PropertyGridWorld(GridWorld):
             n_goal = sum([p == PROPERTY_LIST[-1] for p in self.p_state[p_idx].values()])
             self.property_goal_count[p_idx] = n_goal
 
-    def remove_nowhere_action(self, agent: Agent):
-        action = agent.find_action({'action': 'nowhere'})
-        agent.setLegal(action, makeTree(False))
-        self.agent_actions[agent.name].remove(action)
+    def remove_action(self, agent: Agent, action: str):
+        illegal_action = agent.find_action({'action': action})
+        agent.setLegal(illegal_action, makeTree(False))
+        self.agent_actions[agent.name].remove(illegal_action)
 
     def get_all_p_idx_has_p(self, p) -> Set:
         all_p_idx: Set = set()
@@ -115,17 +126,12 @@ class PropertyGridWorld(GridWorld):
             if list(_loc_p.values()) == list(next_p.values()):
                 return next_p_idx
 
-    def get_next_p_idx_w_keys(self, new_loc, new_p):
-        p_idx = self.world.getFeature(self.p, unique=True)
-        new_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
-        return self.get_next_p_idx(p_idx, new_loc, new_p)
-
     def add_location_property_dynamics(self, agent: Agent, idle: bool = True):
         assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
 
         self.add_agent_dynamics(agent)
         if not idle:
-            self.remove_nowhere_action(agent)
+            self.remove_action(agent, 'nowhere')
         x, y = self.get_location_features(agent)
 
         # property related action
@@ -186,7 +192,6 @@ class PropertyGridWorld(GridWorld):
                 action = agent.addAction(carry_action)
                 action_list.append(action)
                 self.agent_actions[agent.name].append(action)
-        print(action_list)
 
         for i, agent in enumerate(agents):
             j = -(i - 1)
@@ -215,9 +220,12 @@ class PropertyGridWorld(GridWorld):
             tree_dict[False] = noChangeMatrix(self.p)
             self.world.setDynamics(self.p, action_list[i], makeTree(tree_dict))
 
-    def get_property_features(self) -> str:
-        p = stateKey(WORLD, PROPERTY_FEATURE)
-        return p
+            # update GOAL_FEATURE
+            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.p): 1}), list(self.property_goal_count.keys()), 0)}
+            for gi, (k, v) in enumerate(self.property_goal_count.items()):
+                tree_dict[gi] = setToConstantMatrix(self.g, v)
+            tree_dict[None] = noChangeMatrix(self.g)
+            self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
 
     def get_all_states_with_properties(self, agent: Agent) -> List[Optional[VectorDistributionSet]]:
         assert agent.world == self.world, 'Agent\'s world different from the environment\'s world!'
@@ -259,6 +267,3 @@ class PropertyGridWorld(GridWorld):
     #         reward_dict[i] = setToConstantMatrix(rewardKey(agent.name), count)
     #     reward_dict[None] = setToConstantMatrix(rewardKey(agent.name), 0)
     #     agent.setReward(makeTree(reward_dict), weight, model)
-
-
-
