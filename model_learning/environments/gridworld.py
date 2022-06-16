@@ -129,7 +129,7 @@ class GridWorld(object):
         legal_dict = {'if': equalRow(y, self.height - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, 1))
-        self.world.setDynamics(x, action, move_tree)
+        self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         # move down
@@ -137,7 +137,7 @@ class GridWorld(object):
         legal_dict = {'if': equalRow(y, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, -1))
-        self.world.setDynamics(x, action, move_tree)
+        self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
         return self.agent_actions[agent.name]
