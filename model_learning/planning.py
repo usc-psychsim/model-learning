@@ -34,8 +34,8 @@ def get_state_policy(agent: Agent,
     if model is not None:
         state = copy.deepcopy(state)
         agent.world.setFeature(modelKey(agent.name), model, state)
-    state = agent.world.step(state=state, real=False, updateBeliefs=False,
-                             horizon=horizon, tiebreak=selection, threshold=threshold)
+    p = agent.world.step(state=state, real=True, updateBeliefs=True,
+                         horizon=horizon, tiebreak=selection, threshold=threshold)
     return agent.world.getAction(agent.name, state)
 
 
