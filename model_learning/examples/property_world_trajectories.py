@@ -71,6 +71,9 @@ if __name__ == '__main__':
 
     states = env.get_all_states_with_properties(team[0], team[1])
 
+    # "compile" reward functions to get trees
+    world.dependency.getEvaluation()
+
     # generate trajectories using agent's policy #ACT_SELECTION
     # Team trajectory functions
     if not DEBUG:
