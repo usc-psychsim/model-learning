@@ -1,13 +1,17 @@
 from model_learning.features.linear import *
 from model_learning.environments.property_gridworld import *
 
+GOAL_FEATURE = 'g'
+VISIT_FEATURE = 'v'
+MOVEMENT = ['right', 'left', 'up', 'down']
+
 
 class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
     """
     Represents a reward feature that returns `1` under a property-action pair and `0` otherwise.
     """
 
-    def __init__(self, name: str, agent: Agent, env: PropertyGridWorld,
+    def __init__(self, name: str, agent_name: str, env: PropertyGridWorld,
                  action_value: str, property_value: str, property_value_next: str,
                  comparison: str):
         """
@@ -24,12 +28,12 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         super().__init__(name)
         self.env = env
         self.world = env.world
-        self.action_key = actionKey(agent.name)
+        self.action_key = actionKey(agent_name)
         self.action_value = action_value
         self.property_key = get_property_features()
         self.property_value = property_value
         self.property_value_next = property_value_next
-        self.locations = env.exist_locations
+        self.locations = list(range(env.width*env.height))
 
         assert comparison in KeyedPlane.COMPARISON_MAP, \
             f'Invalid comparison provided: {comparison}; valid: {KeyedPlane.COMPARISON_MAP}'
@@ -63,10 +67,6 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         agent.setReward(makeTree(property_action_tree), weight * self.normalize_factor, model)
 
 
-GOAL_FEATURE = 'g'
-MOVEMENT = ['right', 'left', 'up', 'down']
-
-
 class AgentRoles(Agent):
     """
     setup agent roles and the corresponding reward features
@@ -85,27 +85,56 @@ class AgentRoles(Agent):
             r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
             reward_features.append(r_goal)
             rf_weights.append(1)
+
+            for move in MOVEMENT:
+                move_action = self.find_action({'action': move})
+                r_move = ActionLinearRewardFeature(move, self, move_action)
+                reward_features.append(r_move)
+                rf_weights.append(-.01)
+
         if 'Navigator' in self.roles:  # move
+            # search_action = self.find_action({'action': 'search'})
+            # r_search_unknown = PropertyActionComparisonLinearRewardFeature(
+            #     'search_unknown_empty', self.name, env, search_action, PROPERTY_LIST[0], PROPERTY_LIST[4], '==')
+            # reward_features.append(r_search_unknown)
+            # rf_weights.append(.05)
+            #
+            # search_action = self.find_action({'action': 'search'})
+            # r_search_unknown = PropertyActionComparisonLinearRewardFeature(
+            #     'search_unknown_found', self.name, env, search_action, PROPERTY_LIST[0], PROPERTY_LIST[1], '==')
+            # reward_features.append(r_search_unknown)
+            # rf_weights.append(.1)
+
             search_action = self.find_action({'action': 'search'})
-            r_search_unknown = PropertyActionComparisonLinearRewardFeature(
-                'search_unknown', self, env, search_action, PROPERTY_LIST[0], PROPERTY_LIST[1], '==')
-            reward_features.append(r_search_unknown)
-            rf_weights.append(.05)
+            r_search = ActionLinearRewardFeature('search', self, search_action)
+            reward_features.append(r_search)
+            rf_weights.append(.1)
+
+            visits = env.get_visit_feature(self)
+            for loc_i in range(env.width*env.height):
+                r_visit = ValueComparisonLinearRewardFeature(
+                    VISIT_FEATURE+f'{loc_i}', env.world, visits[loc_i], 2, '==')
+                reward_features.append(r_visit)
+                rf_weights.append(-.02)
+
             for move in MOVEMENT:
                 move_action = self.find_action({'action': move})
                 r_move = ActionLinearRewardFeature(move, self, move_action)
                 reward_features.append(r_move)
                 rf_weights.append(.01)
-            # f_up = NumericLinearRewardFeature(self.name, stateKey(self.name, Y_FEATURE))
-            # f_up.set_reward(self, 3)
-            # f_right = NumericLinearRewardFeature(self.name, stateKey(self.name, X_FEATURE))
-            # f_right.set_reward(self, 3)
+
         if 'SubGoal' in self.roles:  # small reward for sub-goal: rescue when found
             rescue_action = self.find_action({'action': 'rescue'})
             r_rescue_found = PropertyActionComparisonLinearRewardFeature(
-                'rescue_found', self, env, rescue_action, PROPERTY_LIST[1], PROPERTY_LIST[2], '==')
+                'rescue_found', self.name, env, rescue_action, PROPERTY_LIST[1], PROPERTY_LIST[2], '==')
             reward_features.append(r_rescue_found)
             rf_weights.append(0.1)
+
+            evacuate_action = self.find_action({'action': 'evacuate'})
+            r_rescue_found = PropertyActionComparisonLinearRewardFeature(
+                'evacuate_ready', self.name, env, evacuate_action, PROPERTY_LIST[2], PROPERTY_LIST[3], '==')
+            reward_features.append(r_rescue_found)
+            rf_weights.append(0.2)
         return reward_features, rf_weights
 
 

@@ -4,7 +4,7 @@ import os
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.colors import ListedColormap
 from typing import List, Dict, NamedTuple, Optional, Tuple, Literal, Set, Any
 from psychsim.world import World
@@ -23,8 +23,9 @@ __email__ = 'pedrodbs@gmail.com'
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
+VISIT_FEATURE = 'v'
 PROPERTY_FEATURE = 'p'
-PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear']
+PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 GOAL_FEATURE = 'g'
 
 TITLE_FONT_SIZE = 12
@@ -70,22 +71,25 @@ class PropertyGridWorld(GridWorld):
 
         # set property for exist locations
         self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
+        self.non_exist_locations = list(set(range(width * height)) - set(self.exist_locations))
+
         self.property_length = len(PROPERTY_LIST)
-        self.n_p_state = self.property_length ** self.num_exist
+        self.n_p_state = self.property_length ** (width * height)
         self.p_state = {}
 
         all_loc_all_p: List[List] = []
-        for loci, loc in enumerate(self.exist_locations):
+        for loc_i in range(width * height):
             loc_all_p = []
             for pi, p in enumerate(PROPERTY_LIST):
-                loc_all_p.append(LocationInfo(loc, p))
+                loc_all_p.append(LocationInfo(loc_i, p))
             all_loc_all_p.append(loc_all_p)
+        # print(all_loc_all_p)
 
         for i, comb in enumerate(itertools.product(*all_loc_all_p)):
             self.p_state[i] = {}
             for loc_info in comb:
                 self.p_state[i][loc_info.loci] = loc_info.p
-        print(self.p_state)
+        # print(self.p_state)
 
         self.p = self.world.defineState(WORLD, PROPERTY_FEATURE,
                                         int, 0, self.n_p_state - 1, description=f'Each location\'s property')
@@ -97,6 +101,36 @@ class PropertyGridWorld(GridWorld):
         # find # of GOAL location for each property state, p_idx: n_loc
         self.property_goal_count: Dict[int, int] = {}
         self.get_property_goal_count()
+
+        # # set property for exist locations
+        # self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
+        # self.property_length = len(PROPERTY_LIST)
+        # self.n_p_state = self.property_length ** self.num_exist
+        # self.p_state = {}
+        #
+        # all_loc_all_p: List[List] = []
+        # for loci, loc in enumerate(self.exist_locations):
+        #     loc_all_p = []
+        #     for pi, p in enumerate(PROPERTY_LIST):
+        #         loc_all_p.append(LocationInfo(loc, p))
+        #     all_loc_all_p.append(loc_all_p)
+        #
+        # for i, comb in enumerate(itertools.product(*all_loc_all_p)):
+        #     self.p_state[i] = {}
+        #     for loc_info in comb:
+        #         self.p_state[i][loc_info.loci] = loc_info.p
+        # print(self.p_state)
+        #
+        # self.p = self.world.defineState(WORLD, PROPERTY_FEATURE,
+        #                                 int, 0, self.n_p_state - 1, description=f'Each location\'s property')
+        # self.world.setFeature(self.p, 0)
+        # self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
+        #                                 description=f'GOAL: # of cleared locations')
+        # self.world.setFeature(self.g, 0)
+        #
+        # # find # of GOAL location for each property state, p_idx: n_loc
+        # self.property_goal_count: Dict[int, int] = {}
+        # self.get_property_goal_count()
 
     def vis_agent_dynamics_in_xy(self):
         for k, v in self.world.dynamics.items():
@@ -110,8 +144,8 @@ class PropertyGridWorld(GridWorld):
     def get_property_goal_count(self):
         for i in range(self.n_p_state):
             self.property_goal_count[i] = 0
-        for p_idx in self.get_all_p_idx_has_p(PROPERTY_LIST[-1]):
-            n_goal = sum([p == PROPERTY_LIST[-1] for p in self.p_state[p_idx].values()])
+        for p_idx in self.get_all_p_idx_has_p(PROPERTY_LIST[3]):
+            n_goal = sum([p == PROPERTY_LIST[3] for p in self.p_state[p_idx].values()])
             self.property_goal_count[p_idx] = n_goal
 
     def remove_action(self, agent: Agent, action: str):
@@ -127,8 +161,8 @@ class PropertyGridWorld(GridWorld):
 
     def get_possible_p_idx(self, loc, p):
         possible_p_idx = []
-        if loc not in self.exist_locations:
-            return possible_p_idx
+        # if loc not in self.exist_locations:
+        #     return possible_p_idx
         for pi, _loc_p in self.p_state.items():
             if _loc_p[loc] == p:
                 possible_p_idx.append(pi)
@@ -147,24 +181,64 @@ class PropertyGridWorld(GridWorld):
         self.add_agent_dynamics(agent)
         if not idle:
             self.remove_action(agent, 'nowhere')
+        else:
+            action = agent.find_action({'action': 'nowhere'})
+            legal_dict = {'if': equalRow(self.g, self.num_exist), True: True, False: False}
+            agent.setLegal(action, makeTree(legal_dict))
         x, y = self.get_location_features(agent)
 
         # property related action
         action = agent.addAction({'verb': 'handle', 'action': 'search'})
-        # search is valid everywhere
+        # search is valid when location is unknown
         # model dynamics when agent is at a possible location
-        tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
-        for i, loc in enumerate(self.exist_locations):
+        legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), list(range(self.width*self.height)), 0)}
+        for i, loc in enumerate(list(range(self.width*self.height))):
             all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[0])
-            subtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            # model dynamics for all possible property states at the location
+            sublegal_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
             for j, p_idx in enumerate(all_p_idx):
-                subtree_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[1]))
-            subtree_dict[None] = noChangeMatrix(self.p)
-            tree_dict[i] = subtree_dict
-        tree_dict[None] = noChangeMatrix(self.p)
-        self.world.setDynamics(self.p, action, makeTree(tree_dict))
+                sublegal_dict[j] = True
+            sublegal_dict[None] = False
+            legal_dict[i] = sublegal_dict
+        legal_dict[None] = False
+        agent.setLegal(action, makeTree(legal_dict))
+
+        exist_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
+        for exist_i, exist_loc in enumerate(self.exist_locations):
+            all_p_idx = self.get_possible_p_idx(exist_loc, PROPERTY_LIST[0])
+            sub_exist_tree = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+            for j, p_idx in enumerate(all_p_idx):
+                sub_exist_tree[j] = setToConstantMatrix(self.p,
+                                                        self.get_next_p_idx(p_idx, exist_loc, PROPERTY_LIST[1]))
+            sub_exist_tree[None] = noChangeMatrix(self.p)
+            exist_tree[exist_i] = sub_exist_tree
+        non_exist_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.non_exist_locations, 0)}
+        for non_exist_i, non_exist_loc in enumerate(self.non_exist_locations):
+            all_p_idx = self.get_possible_p_idx(non_exist_loc, PROPERTY_LIST[0])
+            sub_non_exist_tree = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+            for j, p_idx in enumerate(all_p_idx):
+                sub_non_exist_tree[j] = setToConstantMatrix(self.p,
+                                                            self.get_next_p_idx(p_idx, non_exist_loc, PROPERTY_LIST[4]))
+            sub_non_exist_tree[None] = noChangeMatrix(self.p)
+            non_exist_tree[non_exist_i] = sub_non_exist_tree
+        exist_tree[None] = non_exist_tree
+        self.world.setDynamics(self.p, action, makeTree(exist_tree))
         self.agent_actions[agent.name].append(action)
+
+        # action = agent.addAction({'verb': 'handle', 'action': 'search'})
+        # # search is valid everywhere
+        # # model dynamics when agent is at a possible location
+        # tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
+        # for i, loc in enumerate(self.exist_locations):
+        #     all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[0])
+        #     subtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
+        #     # model dynamics for all possible property states at the location
+        #     for j, p_idx in enumerate(all_p_idx):
+        #         subtree_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[1]))
+        #     subtree_dict[None] = noChangeMatrix(self.p)
+        #     tree_dict[i] = subtree_dict
+        # tree_dict[None] = noChangeMatrix(self.p)
+        # self.world.setDynamics(self.p, action, makeTree(tree_dict))
+        # self.agent_actions[agent.name].append(action)
 
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
         # legality assumption: agent has observation on property state
@@ -344,7 +418,7 @@ class PropertyGridWorld(GridWorld):
                 ax = axes[ag_i]
                 ax.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
                 for x, y in itertools.product(range(self.width), range(self.height)):
-                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .1), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
                 # turn off tick labels
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -357,6 +431,8 @@ class PropertyGridWorld(GridWorld):
             t_colors = distinct_colors(len(team))
             team_xs, team_ys, team_as, world_ps = {}, {}, {}, {}
             for loci, loc in enumerate(self.exist_locations):
+                world_ps[loc] = [None] * l_traj
+            for loci, loc in enumerate(self.non_exist_locations):
                 world_ps[loc] = [None] * l_traj
             for ag_i, agent in enumerate(team):
                 team_xs[agent.name] = [0] * l_traj
@@ -375,6 +451,8 @@ class PropertyGridWorld(GridWorld):
                         p_t = sa.world.getFeature(p, unique=True)
                         for loci, loc in enumerate(self.exist_locations):
                             world_ps[loc][i] = self.p_state[p_t][loc]
+                        for loci, loc in enumerate(self.non_exist_locations):
+                            world_ps[loc][i] = self.p_state[p_t][loc]
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5
                     team_as[agent.name][i] = a
@@ -383,8 +461,6 @@ class PropertyGridWorld(GridWorld):
             world_ann_list = []
 
             def update(ti):
-                label = 'timestep {0}'.format(ti)
-                # print(label)
                 for ann in world_ann_list:
                     ann.remove()
                 world_ann_list[:] = []
@@ -397,24 +473,35 @@ class PropertyGridWorld(GridWorld):
                     team_ann_list[ag_i][:] = []
                 for ag_i, agent in enumerate(team):
                     x_t, y_t, a = team_xs[agent.name][ti], team_ys[agent.name][ti], team_as[agent.name][ti]
-                    act = axes[ag_i].annotate(f'{a}', xy=(x_t - .4, y_t + .1), fontsize=NOTES_FONT_SIZE, c=NOTES_FONT_COLOR)
-                    team_ann_list[ag_i].append(act)
+                    act = axes[ag_i].annotate(f'{a}', xy=(x_t - .4, y_t + .1),
+                                              fontsize=NOTES_FONT_SIZE, c=NOTES_FONT_COLOR)
                     xs = team_xs[agent.name][ti - 1:ti + 1]
                     ys = team_ys[agent.name][ti - 1:ti + 1]
-                    for loci, loc in enumerate(self.exist_locations):
-                        x, y = self.idx_to_xy(loc)
-                        p = world_ps[loc][ti]
+                    traj_line = axes[ag_i].plot(xs, ys, c=t_colors[ag_i], linewidth=TRAJECTORY_LINE_WIDTH)
+                    curr_pos = axes[ag_i].annotate('O', xy=(x_t - .05, y_t - .05), c=t_colors[ag_i],
+                                                   fontsize=NOTES_FONT_SIZE)
+                    ts_ann = axes[ag_i].annotate(f'Time Step: {ti}', xy=(.05, .05),
+                                                 fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    team_ann_list[ag_i].append(ts_ann)
+                    team_ann_list[ag_i].append(act)
+                    team_ann_list[ag_i].append(curr_pos)
+                    team_ann_list[ag_i].append(traj_line)
+                for loci, loc in enumerate(self.exist_locations):
+                    x, y = self.idx_to_xy(loc)
+                    p = world_ps[loc][ti]
+                    for ag_i, agent in enumerate(team):
                         status_ann = axes[ag_i].annotate(f'*V{loci + 1}\n{p}', xy=(x + .47, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
-
-                    lines = axes[ag_i].plot(xs, ys, c=t_colors[ag_i], linewidth=TRAJECTORY_LINE_WIDTH)
-                    curr_pos = axes[ag_i].annotate('O', xy=(x_t - .05, y_t - .05), c=t_colors[ag_i],
-                                                   fontsize=NOTES_FONT_SIZE)
-                    team_ann_list[ag_i].append(curr_pos)
-                    team_ann_list[ag_i].append(lines)
+                for loci, loc in enumerate(self.non_exist_locations):
+                    x, y = self.idx_to_xy(loc)
+                    p = world_ps[loc][ti]
+                    for ag_i, agent in enumerate(team):
+                        status_ann = axes[ag_i].annotate(f'\n{p}', xy=(x + .47, y + .3),
+                                                         fontsize=NOTES_FONT_SIZE, c='k')
+                        world_ann_list.append(status_ann)
                 return axes
 
             anim = FuncAnimation(fig, update, len(team_traj[team[0].name]))
-            out_file = os.path.join(file_name, f'traj{traj_i}.gif')
-            anim.save(out_file, dpi=300, fps=1)
+            out_file = os.path.join(file_name, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_exist}.gif')
+            anim.save(out_file, dpi=300, fps=1, writer='pillow')

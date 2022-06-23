@@ -189,7 +189,8 @@ def generate_team_trajectory(team: List[Agent],
 
         # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
-
+        #joint_action TODO
+        #append(sapair())
         for agent in team:
             action = world.getAction(agent.name)
             team_trajectory[agent.name].append(StateActionPair(prev_world, action, prev_prob))
@@ -311,7 +312,6 @@ def generate_team_trajectories(team: List[Agent],
                      f'{timer() - start:.3f}s')
 
     return trajectories
-
 
 def sample_random_sub_trajectories(trajectory: Trajectory,
                                    n_trajectories: int,

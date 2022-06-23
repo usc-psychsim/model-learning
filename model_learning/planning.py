@@ -36,7 +36,7 @@ def get_state_policy(agent: Agent,
         agent.world.setFeature(modelKey(agent.name), model, state)
     p = agent.world.step(state=state, real=True, updateBeliefs=True,
                          horizon=horizon, tiebreak=selection, threshold=threshold)
-    return agent.world.getAction(agent.name, state)
+    return agent.world.getAction(agent.name, agent.world.state)
 
 
 def get_policy(agent: Agent,
