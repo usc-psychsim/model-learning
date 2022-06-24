@@ -34,31 +34,26 @@ DEBUG = 0
 
 if __name__ == '__main__':
     world = World()
-    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE-2, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
+    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE-1, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
-    p_feat = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE), unique=True)
-    p_state = env.p_state[p_feat]
-    # print("Starting Property State:", p_state)
-    # print(env.property_goal_count)
 
     # team of two agents
     team = [world.addAgent(AgentRoles('AHA', ['Goal'])),
-            world.addAgent(AgentRoles('Helper1', ['Navigator', 'SubGoal']))]
+            world.addAgent(AgentRoles('Helper1', ['SubGoal', 'Navigator']))]
 
     # # define agent dynamics
     for agent in team:
         env.add_location_property_dynamics(agent, idle=True)
     env.add_collaboration_dynamics([agent for agent in team])
-    print('Action Dynamics')
+    # print('Action Dynamics')
     # env.vis_agent_dynamics_in_xy()
 
-
     # set agent rewards, and attributes
-    print('Reward Dynamics and Features')
-    print(env.world.symbolList)
-    for agent in team:
+    # print(env.world.symbolList)
+    for ag_i, agent in enumerate(team):
         rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
         agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
+        print(f'{agent.name} Reward Features')
         print(agent_lrv.names, agent_lrv.rwd_weights)
         # agent.printReward(agent.get_true_model())
 
@@ -68,8 +63,6 @@ if __name__ == '__main__':
     # example run
     my_turn_order = [{agent.name for agent in team}]
     env.world.setOrder(my_turn_order)
-
-    states = env.get_all_states_with_properties(team[0], team[1])
 
     # "compile" reward functions to get trees
     world.dependency.getEvaluation()
@@ -99,15 +92,15 @@ if __name__ == '__main__':
                       f'y={world.getFeature(y, unique=True)}, '
                       f'v={world.getFeature(visits[loc_i], unique=True)}, '
                       f'r={agent.reward(env.world.state)}')
-            p_feat = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE), unique=True)
-            p_state = env.p_state[p_feat]
+            p_state = []
+            for loc_i in range(env.width * env.height):
+                p = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE + f'{loc_i}'), unique=True)
+                p_state.append(PROPERTY_LIST[p])
+            # p_state = env.p_state[p_feat]
             g_state = env.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)
             print('Locations:', env.exist_locations, 'Properties:', f'p={p_state}', 'Clear:', f'g={g_state}')
 
-            if list(p_state.values()) == [PROPERTY_LIST[-1]] * env.num_exist:
-                p_feat = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE), unique=True)
-                p_state = env.p_state[p_feat]
-                print(p_feat, p_state)
-                print(env.property_goal_count)
+            if sum([p == 'clear'for p in p_state]) == env.num_exist:
+                print(p_state)
                 print('Reward:', team[1].reward(env.world.state))
-                # break
+                break

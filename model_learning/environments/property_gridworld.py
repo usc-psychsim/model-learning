@@ -14,7 +14,7 @@ from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix, equalRow, makeFuture, actionKey, state2feature, \
     equalFeatureRow, WORLD
 from model_learning.environments.gridworld import GridWorld
-from model_learning import Trajectory
+from model_learning import Trajectory, TeamTrajectory
 from model_learning.trajectory import generate_team_trajectories
 from model_learning.util.plot import distinct_colors
 
@@ -49,11 +49,6 @@ class LocationInfo(NamedTuple):
 
 
 # define object property
-def get_property_features() -> str:
-    p = stateKey(WORLD, PROPERTY_FEATURE)
-    return p
-
-
 def get_goal_features() -> str:
     g = stateKey(WORLD, GOAL_FEATURE)
     return g
@@ -73,64 +68,17 @@ class PropertyGridWorld(GridWorld):
         self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
         self.non_exist_locations = list(set(range(width * height)) - set(self.exist_locations))
 
-        self.property_length = len(PROPERTY_LIST)
-        self.n_p_state = self.property_length ** (width * height)
-        self.p_state = {}
-
-        all_loc_all_p: List[List] = []
-        for loc_i in range(width * height):
-            loc_all_p = []
-            for pi, p in enumerate(PROPERTY_LIST):
-                loc_all_p.append(LocationInfo(loc_i, p))
-            all_loc_all_p.append(loc_all_p)
-        # print(all_loc_all_p)
-
-        for i, comb in enumerate(itertools.product(*all_loc_all_p)):
-            self.p_state[i] = {}
-            for loc_info in comb:
-                self.p_state[i][loc_info.loci] = loc_info.p
+        self.p_state = []
+        for loc_i in range(self.width * self.height):
+            p = self.world.defineState(WORLD, PROPERTY_FEATURE + f'{loc_i}',
+                                       int, 0, len(PROPERTY_LIST) - 1, description=f'Each location\'s property')
+            self.world.setFeature(p, 0)
+            self.p_state.append(p)
         # print(self.p_state)
 
-        self.p = self.world.defineState(WORLD, PROPERTY_FEATURE,
-                                        int, 0, self.n_p_state - 1, description=f'Each location\'s property')
-        self.world.setFeature(self.p, 0)
         self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
                                         description=f'GOAL: # of cleared locations')
         self.world.setFeature(self.g, 0)
-
-        # find # of GOAL location for each property state, p_idx: n_loc
-        self.property_goal_count: Dict[int, int] = {}
-        self.get_property_goal_count()
-
-        # # set property for exist locations
-        # self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
-        # self.property_length = len(PROPERTY_LIST)
-        # self.n_p_state = self.property_length ** self.num_exist
-        # self.p_state = {}
-        #
-        # all_loc_all_p: List[List] = []
-        # for loci, loc in enumerate(self.exist_locations):
-        #     loc_all_p = []
-        #     for pi, p in enumerate(PROPERTY_LIST):
-        #         loc_all_p.append(LocationInfo(loc, p))
-        #     all_loc_all_p.append(loc_all_p)
-        #
-        # for i, comb in enumerate(itertools.product(*all_loc_all_p)):
-        #     self.p_state[i] = {}
-        #     for loc_info in comb:
-        #         self.p_state[i][loc_info.loci] = loc_info.p
-        # print(self.p_state)
-        #
-        # self.p = self.world.defineState(WORLD, PROPERTY_FEATURE,
-        #                                 int, 0, self.n_p_state - 1, description=f'Each location\'s property')
-        # self.world.setFeature(self.p, 0)
-        # self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
-        #                                 description=f'GOAL: # of cleared locations')
-        # self.world.setFeature(self.g, 0)
-        #
-        # # find # of GOAL location for each property state, p_idx: n_loc
-        # self.property_goal_count: Dict[int, int] = {}
-        # self.get_property_goal_count()
 
     def vis_agent_dynamics_in_xy(self):
         for k, v in self.world.dynamics.items():
@@ -141,39 +89,18 @@ class PropertyGridWorld(GridWorld):
                     print(kk)
                     print(vv)
 
-    def get_property_goal_count(self):
-        for i in range(self.n_p_state):
-            self.property_goal_count[i] = 0
-        for p_idx in self.get_all_p_idx_has_p(PROPERTY_LIST[3]):
-            n_goal = sum([p == PROPERTY_LIST[3] for p in self.p_state[p_idx].values()])
-            self.property_goal_count[p_idx] = n_goal
+    def get_property_features(self):
+        p_features = []
+        for loc_i in range(self.width * self.height):
+            p = stateKey(WORLD, PROPERTY_FEATURE + f'{loc_i}')
+            p_features.append(p)
+        return p_features
 
     def remove_action(self, agent: Agent, action: str):
         illegal_action = agent.find_action({'action': action})
         agent.setLegal(illegal_action, makeTree(False))
         self.agent_actions[agent.name].remove(illegal_action)
 
-    def get_all_p_idx_has_p(self, p) -> Set:
-        all_p_idx: Set = set()
-        for loc in self.exist_locations:
-            all_p_idx.update(self.get_possible_p_idx(loc, p))
-        return all_p_idx
-
-    def get_possible_p_idx(self, loc, p):
-        possible_p_idx = []
-        # if loc not in self.exist_locations:
-        #     return possible_p_idx
-        for pi, _loc_p in self.p_state.items():
-            if _loc_p[loc] == p:
-                possible_p_idx.append(pi)
-        return possible_p_idx
-
-    def get_next_p_idx(self, p_idx, new_loc, new_p):
-        next_p = self.p_state[p_idx].copy()
-        next_p[new_loc] = new_p
-        for next_p_idx, _loc_p in self.p_state.items():
-            if list(_loc_p.values()) == list(next_p.values()):
-                return next_p_idx
 
     def add_location_property_dynamics(self, agent: Agent, idle: bool = True):
         assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
@@ -191,80 +118,40 @@ class PropertyGridWorld(GridWorld):
         action = agent.addAction({'verb': 'handle', 'action': 'search'})
         # search is valid when location is unknown
         # model dynamics when agent is at a possible location
-        legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), list(range(self.width*self.height)), 0)}
-        for i, loc in enumerate(list(range(self.width*self.height))):
-            all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[0])
-            sublegal_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            for j, p_idx in enumerate(all_p_idx):
-                sublegal_dict[j] = True
-            sublegal_dict[None] = False
-            legal_dict[i] = sublegal_dict
+        legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), list(range(self.width * self.height)), 0)}
+        for i, loc in enumerate(list(range(self.width * self.height))):
+            p_loc = self.p_state[loc]
+            sub_legal_dict = {'if': equalRow(p_loc, 0), True: True, False: False}
+            legal_dict[i] = sub_legal_dict
         legal_dict[None] = False
         agent.setLegal(action, makeTree(legal_dict))
 
-        exist_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
-        for exist_i, exist_loc in enumerate(self.exist_locations):
-            all_p_idx = self.get_possible_p_idx(exist_loc, PROPERTY_LIST[0])
-            sub_exist_tree = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            for j, p_idx in enumerate(all_p_idx):
-                sub_exist_tree[j] = setToConstantMatrix(self.p,
-                                                        self.get_next_p_idx(p_idx, exist_loc, PROPERTY_LIST[1]))
-            sub_exist_tree[None] = noChangeMatrix(self.p)
-            exist_tree[exist_i] = sub_exist_tree
-        non_exist_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.non_exist_locations, 0)}
-        for non_exist_i, non_exist_loc in enumerate(self.non_exist_locations):
-            all_p_idx = self.get_possible_p_idx(non_exist_loc, PROPERTY_LIST[0])
-            sub_non_exist_tree = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            for j, p_idx in enumerate(all_p_idx):
-                sub_non_exist_tree[j] = setToConstantMatrix(self.p,
-                                                            self.get_next_p_idx(p_idx, non_exist_loc, PROPERTY_LIST[4]))
-            sub_non_exist_tree[None] = noChangeMatrix(self.p)
-            non_exist_tree[non_exist_i] = sub_non_exist_tree
-        exist_tree[None] = non_exist_tree
-        self.world.setDynamics(self.p, action, makeTree(exist_tree))
+        for loc_i in range(self.width * self.height):
+            p_loc = self.p_state[loc_i]
+            search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
+            if loc_i in self.exist_locations:
+                search_tree[True] = setToConstantMatrix(p_loc, 1)
+            else:
+                search_tree[True] = setToConstantMatrix(p_loc, 4)
+            search_tree[False] = noChangeMatrix(p_loc)
+            self.world.setDynamics(p_loc, action, makeTree(search_tree))
         self.agent_actions[agent.name].append(action)
 
-        # action = agent.addAction({'verb': 'handle', 'action': 'search'})
-        # # search is valid everywhere
-        # # model dynamics when agent is at a possible location
-        # tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
-        # for i, loc in enumerate(self.exist_locations):
-        #     all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[0])
-        #     subtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-        #     # model dynamics for all possible property states at the location
-        #     for j, p_idx in enumerate(all_p_idx):
-        #         subtree_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[1]))
-        #     subtree_dict[None] = noChangeMatrix(self.p)
-        #     tree_dict[i] = subtree_dict
-        # tree_dict[None] = noChangeMatrix(self.p)
-        # self.world.setDynamics(self.p, action, makeTree(tree_dict))
-        # self.agent_actions[agent.name].append(action)
-
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
-        # legality assumption: agent has observation on property state
-        # rescue is valid only when agent reach a location and the property state is rescue needed
-        # future: this action could be role-dependent, legality dynamics could be removed
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
-            all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[1])
-            sublegal_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            for j, p_idx in enumerate(all_p_idx):
-                sublegal_dict[j] = True
-            sublegal_dict[None] = False
-            legal_dict[i] = sublegal_dict
+            p_loc = self.p_state[loc]
+            sub_legal_dict = {'if': equalRow(p_loc, 1), True: True, False: False}
+            legal_dict[i] = sub_legal_dict
         legal_dict[None] = False
         agent.setLegal(action, makeTree(legal_dict))
 
-        rescue_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
-        for i, loc in enumerate(self.exist_locations):
-            all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[1])
-            subrescue_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-            for j, p_idx in enumerate(all_p_idx):
-                subrescue_dict[j] = setToConstantMatrix(self.p, self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[2]))
-            subrescue_dict[None] = noChangeMatrix(self.p)
-            rescue_dict[i] = subrescue_dict
-        rescue_dict[None] = noChangeMatrix(self.p)
-        self.world.setDynamics(self.p, action, makeTree(rescue_dict))
+        for loc_i in self.exist_locations:
+            p_loc = self.p_state[loc_i]
+            search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
+            search_tree[True] = setToConstantMatrix(p_loc, 2)
+            search_tree[False] = noChangeMatrix(p_loc)
+            self.world.setDynamics(p_loc, action, makeTree(search_tree))
         self.agent_actions[agent.name].append(action)
 
         return self.agent_actions[agent.name]
@@ -288,45 +175,35 @@ class PropertyGridWorld(GridWorld):
             agent2 = agents[j]
             x1, y1 = self.get_location_features(agent1)
             x2, y2 = self.get_location_features(agent2)
-            # carry1, carry2 = action_list[i], action_list[j]
 
-            # legality assumption: agent has observation on every agent's location
             legal_dict = {'if': equalFeatureRow(x1, x2) & equalFeatureRow(y1, y2)}
-            sublegal_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), self.exist_locations, 0)}
-            for loci, loc in enumerate(self.exist_locations):
-                all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[2])
-                subsublegal_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-                for pj, p_idx in enumerate(all_p_idx):
-                    subsublegal_dict[pj] = True
-                subsublegal_dict[None] = False
-                sublegal_dict[loci] = subsublegal_dict
-            sublegal_dict[None] = False
-            legal_dict[True] = sublegal_dict
+            sub_legal_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), self.exist_locations, 0)}
+            for exist_i, exist_loc in enumerate(self.exist_locations):
+                p_loc = self.p_state[exist_loc]
+                subsub_legal_dict = {'if': equalRow(p_loc, 2), True: True, False: False}
+                sub_legal_dict[exist_i] = subsub_legal_dict
+            sub_legal_dict[None] = False
+            legal_dict[True] = sub_legal_dict
             legal_dict[False] = False
             agents[i].setLegal(action_list[i], makeTree(legal_dict))
 
-            tree_dict = {'if': equalRow(actionKey(agents[j].name, True), action_list[j])}
-            subtree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), self.exist_locations, 0)}
-            for loci, loc in enumerate(self.exist_locations):
-                all_p_idx = self.get_possible_p_idx(loc, PROPERTY_LIST[2])
-                subsubtree_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}), all_p_idx, 0)}
-                for pj, p_idx in enumerate(all_p_idx):
-                    subsubtree_dict[pj] = setToConstantMatrix(self.p,
-                                                              self.get_next_p_idx(p_idx, loc, PROPERTY_LIST[3]))
-                subsubtree_dict[None] = noChangeMatrix(self.p)
-                subtree_dict[loci] = subsubtree_dict
-            subtree_dict[None] = noChangeMatrix(self.p)
-            tree_dict[True] = subtree_dict
-            tree_dict[False] = noChangeMatrix(self.p)
-            self.world.setDynamics(self.p, action_list[i], makeTree(tree_dict))
+            for loc_i in self.exist_locations:
+                p_loc = self.p_state[loc_i]
+                tree_dict = {'if': equalRow(actionKey(agents[j].name, True), action_list[j])}
+                subtree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), loc_i, 0),
+                                True: setToConstantMatrix(p_loc, 3),
+                                False: noChangeMatrix(p_loc)}
+                tree_dict[True] = subtree_dict
+                tree_dict[False] = noChangeMatrix(p_loc)
+                self.world.setDynamics(p_loc, action_list[i], makeTree(tree_dict))
 
             # update GOAL_FEATURE
-            tree_dict = {
-                'if': KeyedPlane(KeyedVector({makeFuture(self.p): 1}), list(self.property_goal_count.keys()), 0)}
-            for gi, (k, v) in enumerate(self.property_goal_count.items()):
-                tree_dict[gi] = setToConstantMatrix(self.g, v)
-            tree_dict[None] = noChangeMatrix(self.g)
-            self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
+            for loc_i in self.exist_locations:
+                p_loc = self.p_state[loc_i]
+                tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 3, 0),
+                             True: incrementMatrix(self.g, 1/len(agents)),
+                             False: noChangeMatrix(self.g)}
+                self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
 
     def get_all_states_with_properties(self, agent1: Agent, agent2: Agent) -> List[Optional[VectorDistributionSet]]:
         assert agent1.world == self.world, 'Agent\'s world different from the environment\'s world!'
@@ -355,18 +232,6 @@ class PropertyGridWorld(GridWorld):
         self.world.state = old_state
         return states_wp
 
-    # reward function
-    def set_achieve_property_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
-        reward_dict = {'if': equalRow(actionKey(agent.name), agent.find_action({'action': 'evacuate'}))}
-        subreward_dict = {'if': KeyedPlane(KeyedVector({self.p: 1}),
-                                           list(self.property_goal_count.keys()), 0)}
-        for i, (p_idx, count) in enumerate(self.property_goal_count.items()):
-            subreward_dict[i] = setToConstantMatrix(rewardKey(agent.name), count)
-        subreward_dict[None] = setToConstantMatrix(rewardKey(agent.name), 0)
-        reward_dict[True] = subreward_dict
-        reward_dict[False] = setToConstantMatrix(rewardKey(agent.name), 0)
-        agent.setReward(makeTree(reward_dict), weight, model)
-
     def generate_team_trajectories(self, team: List[Agent], trajectory_length: int,
                                    n_trajectories: int = 1, init_feats: Optional[Dict[str, Any]] = None,
                                    model: Optional[str] = None, select: bool = True,
@@ -374,11 +239,11 @@ class PropertyGridWorld(GridWorld):
                                        Literal['distribution', 'random', 'uniform', 'consistent']] = None,
                                    horizon: Optional[int] = None, threshold: Optional[float] = None,
                                    processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
-                                   use_tqdm: bool = True) -> List[Dict[str, Trajectory]]:
+                                   use_tqdm: bool = True) -> List[TeamTrajectory]:
         assert len(team) > 0, 'No agent in the team'
 
         x, y = self.get_location_features(team[0])
-        p = get_property_features()
+        p_features = self.get_property_features()
         # if not specified, set random values for x, y pos, and property
         if init_feats is None:
             init_feats = {}
@@ -386,27 +251,28 @@ class PropertyGridWorld(GridWorld):
             init_feats[x] = None
         if y not in init_feats:
             init_feats[y] = None
-        if p not in init_feats:
-            init_feats[p] = 0
+        for p in p_features:
+            if p not in init_feats:
+                init_feats[p] = 0
 
         # generate trajectories starting from random locations in the property gridworld
         return generate_team_trajectories(team, n_trajectories, trajectory_length,
                                           init_feats, model, select, horizon, selection, threshold,
                                           processes, seed, verbose, use_tqdm)
 
-    def play_team_trajectories(self, team_trajectories: List[Dict[str, Trajectory]],
+    def play_team_trajectories(self, team_trajectories: List[TeamTrajectory],
                                team: List[Agent],
                                file_name: str,
                                title: str = 'Team Trajectories'):
         assert len(team_trajectories) > 0 and len(team) > 0
-        assert len(team_trajectories[0][team[0].name]) > 0
 
         for agent in team:
             x, y = self.get_location_features(agent)
             assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
             assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
-        p = get_property_features()
-        assert p in self.world.variables, f'World does not have property feature'
+        p_features = self.get_property_features()
+        for p in p_features:
+            assert p in self.world.variables, f'World does not have property feature'
 
         for traj_i, team_traj in enumerate(team_trajectories):
             fig, axes = plt.subplots(len(team))
@@ -418,7 +284,7 @@ class PropertyGridWorld(GridWorld):
                 ax = axes[ag_i]
                 ax.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
                 for x, y in itertools.product(range(self.width), range(self.height)):
-                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .1), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .12), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
                 # turn off tick labels
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -427,7 +293,7 @@ class PropertyGridWorld(GridWorld):
                     ax.set_title(title, fontsize=TITLE_FONT_SIZE)
 
             # plots trajectories
-            l_traj = len(team_traj[team[0].name])
+            l_traj = len(team_traj)
             t_colors = distinct_colors(len(team))
             team_xs, team_ys, team_as, world_ps = {}, {}, {}, {}
             for loci, loc in enumerate(self.exist_locations):
@@ -438,24 +304,22 @@ class PropertyGridWorld(GridWorld):
                 team_xs[agent.name] = [0] * l_traj
                 team_ys[agent.name] = [0] * l_traj
                 team_as[agent.name] = [None] * l_traj
-            for ag_i, agent in enumerate(team):
-                agent_trajectory = team_traj[agent.name]
-                x, y = self.get_location_features(agent)
-                action = actionKey(agent.name)
-                for i, sa in enumerate(agent_trajectory):
-                    x_t = sa.world.getFeature(x, unique=True)
-                    y_t = sa.world.getFeature(y, unique=True)
-                    a = sa.world.getFeature(action, unique=True)
+            for i, tsa in enumerate(team_traj):
+                for ag_i, agent in enumerate(team):
+                    x, y = self.get_location_features(agent)
+                    action = actionKey(agent.name)
+                    x_t = tsa.world.getFeature(x, unique=True)
+                    y_t = tsa.world.getFeature(y, unique=True)
+                    a = tsa.world.getFeature(action, unique=True)
                     a = a['subject'] + '-' + a['action']
                     if ag_i == 0:
-                        p_t = sa.world.getFeature(p, unique=True)
-                        for loci, loc in enumerate(self.exist_locations):
-                            world_ps[loc][i] = self.p_state[p_t][loc]
-                        for loci, loc in enumerate(self.non_exist_locations):
-                            world_ps[loc][i] = self.p_state[p_t][loc]
+                        for loc in range(self.width * self.height):
+                            p_t = tsa.world.getFeature(self.p_state[loc], unique=True)
+                            world_ps[loc][i] = PROPERTY_LIST[p_t]
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5
                     team_as[agent.name][i] = a
+                # for ag_i, agent in enumerate(team)
 
             team_ann_list = [[]] * len(team)
             world_ann_list = []
@@ -480,7 +344,7 @@ class PropertyGridWorld(GridWorld):
                     traj_line = axes[ag_i].plot(xs, ys, c=t_colors[ag_i], linewidth=TRAJECTORY_LINE_WIDTH)
                     curr_pos = axes[ag_i].annotate('O', xy=(x_t - .05, y_t - .05), c=t_colors[ag_i],
                                                    fontsize=NOTES_FONT_SIZE)
-                    ts_ann = axes[ag_i].annotate(f'Time Step: {ti}', xy=(.05, .05),
+                    ts_ann = axes[ag_i].annotate(f'Time Step: {ti}', xy=(.05, .03),
                                                  fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
                     team_ann_list[ag_i].append(ts_ann)
                     team_ann_list[ag_i].append(act)
@@ -502,6 +366,6 @@ class PropertyGridWorld(GridWorld):
                         world_ann_list.append(status_ann)
                 return axes
 
-            anim = FuncAnimation(fig, update, len(team_traj[team[0].name]))
+            anim = FuncAnimation(fig, update, len(team_traj))
             out_file = os.path.join(file_name, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_exist}.gif')
             anim.save(out_file, dpi=300, fps=1, writer='pillow')

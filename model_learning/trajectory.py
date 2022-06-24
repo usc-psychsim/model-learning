@@ -9,7 +9,7 @@ from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, turnKey
-from model_learning import Trajectory, StateActionPair
+from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair
 from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
@@ -130,7 +130,7 @@ def generate_team_trajectory(team: List[Agent],
                              selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
                              threshold: Optional[float] = None,
                              seed: int = 0,
-                             verbose: bool = False) -> Dict[str, Trajectory]:
+                             verbose: bool = False) -> TeamTrajectory:
     """
     Generates one fixed-length agent trajectory (state-action pairs) by running the agent in the world.
     :param List[Agent] team: the team of agents for which to record the actions.
@@ -161,9 +161,10 @@ def generate_team_trajectory(team: List[Agent],
     random.seed(seed)
 
     # for each step, takes action and registers state-action pairs
-    team_trajectory: Dict[str, Trajectory] = {}
-    for agent in team:
-        team_trajectory[agent.name] = []
+    team_trajectory = []
+    # team_trajectory: Dict[str, Trajectory] = {}
+    # for agent in team:
+    #     team_trajectory[agent.name] = []
 
     total = 0
     prob = 1.
@@ -189,11 +190,13 @@ def generate_team_trajectory(team: List[Agent],
 
         # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
-        #joint_action TODO
-        #append(sapair())
+        # joint_action TODO
+        # append(sapair())
+        team_action: Dict[str, Distribution] = {}
         for agent in team:
             action = world.getAction(agent.name)
-            team_trajectory[agent.name].append(StateActionPair(prev_world, action, prev_prob))
+            team_action[agent.name] = action
+        team_trajectory.append(TeamStateActionPair(prev_world, team_action, prev_prob))
 
         step_time = timer() - start
         total += step_time
@@ -271,7 +274,7 @@ def generate_team_trajectories(team: List[Agent],
                                processes: int = -1,
                                seed: int = 0,
                                verbose: bool = False,
-                               use_tqdm: bool = True) -> List[Dict[str, Trajectory]]:
+                               use_tqdm: bool = True) -> List[TeamTrajectory]:
     """
     Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
     :param List[Agent] team: the team of agents for which to record the actions.
@@ -304,8 +307,8 @@ def generate_team_trajectories(team: List[Agent],
     start = timer()
     args = [(team, trajectory_length, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
             for t in range(n_trajectories)]
-    trajectories: List[Dict[str, Trajectory]] = run_parallel(generate_team_trajectory, args, processes=processes,
-                                                             use_tqdm=use_tqdm)
+    trajectories: List[TeamTrajectory] = run_parallel(generate_team_trajectory, args, processes=processes,
+                                                      use_tqdm=use_tqdm)
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '

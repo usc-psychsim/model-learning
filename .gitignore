@@ -127,3 +127,4 @@ dmypy.json
 tests/
 output/
 **/.DS_Store
+*.stignore

@@ -12,7 +12,7 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
     """
 
     def __init__(self, name: str, agent_name: str, env: PropertyGridWorld,
-                 action_value: str, property_value: str, property_value_next: str,
+                 action_value: str, property_value_next: int,
                  comparison: str):
         """
         Creates a new reward feature.
@@ -22,7 +22,7 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         :param str action_key: the named action key associated with this feature.
         :param str or int or float action_value: the value to be compared against the feature to determine its truth (boolean) value.
         :param str property_key: the named property key associated with this feature.
-        :param int property_value: the value to be compared against the feature to determine its truth (boolean) value.
+        :param int property_value_next: the value to be compared against the feature to determine its truth (boolean) value.
         :param str comparison: the comparison to be performed, one of `{'==', '>', '<'}`.
         """
         super().__init__(name)
@@ -30,10 +30,8 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         self.world = env.world
         self.action_key = actionKey(agent_name)
         self.action_value = action_value
-        self.property_key = get_property_features()
-        self.property_value = property_value
         self.property_value_next = property_value_next
-        self.locations = list(range(env.width*env.height))
+        self.locations = list(range(env.width * env.height))
 
         assert comparison in KeyedPlane.COMPARISON_MAP, \
             f'Invalid comparison provided: {comparison}; valid: {KeyedPlane.COMPARISON_MAP}'
@@ -52,17 +50,15 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         rwd_key = rewardKey(agent.name)
         x, y = self.env.get_location_features(agent)
         property_action_tree = {'if': KeyedPlane(KeyedVector({self.action_key: 1}), self.action_value, self.comparison)}
-        property_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.env.width}), self.locations, self.comparison)}
-        for i, loc in enumerate(self.locations):
-            all_p_idx = self.env.get_possible_p_idx(loc, self.property_value)
-            all_next_p_idx = [self.env.get_next_p_idx(p_idx, loc, self.property_value_next) for p_idx in all_p_idx]
-            subproperty_tree = {'if': KeyedPlane(KeyedVector({self.property_key: 1}), all_next_p_idx, self.comparison)}
-            for j, p_idx in enumerate(all_p_idx):
-                subproperty_tree[j] = setToConstantMatrix(rwd_key, 1.)
-            subproperty_tree[None] = setToConstantMatrix(rwd_key, 0.)
-            property_tree[i] = subproperty_tree
-        property_tree[None] = setToConstantMatrix(rwd_key, 0.)
-        property_action_tree[True] = property_tree
+        sub_pa_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.env.width}), self.locations, 0)}
+        for loc_i, loc in enumerate(self.locations):
+            p_loc = self.env.p_state[loc]
+            property_tree = {'if': KeyedPlane(KeyedVector({p_loc: 1}), self.property_value_next, self.comparison),
+                             True: setToConstantMatrix(rwd_key, 1.),
+                             False: setToConstantMatrix(rwd_key, 0.)}
+            sub_pa_tree[loc_i] = property_tree
+        sub_pa_tree[None] = setToConstantMatrix(rwd_key, 0.)
+        property_action_tree[True] = sub_pa_tree
         property_action_tree[False] = setToConstantMatrix(rwd_key, 0.)
         agent.setReward(makeTree(property_action_tree), weight * self.normalize_factor, model)
 
@@ -90,21 +86,9 @@ class AgentRoles(Agent):
                 move_action = self.find_action({'action': move})
                 r_move = ActionLinearRewardFeature(move, self, move_action)
                 reward_features.append(r_move)
-                rf_weights.append(-.01)
+                rf_weights.append(-.05)
 
         if 'Navigator' in self.roles:  # move
-            # search_action = self.find_action({'action': 'search'})
-            # r_search_unknown = PropertyActionComparisonLinearRewardFeature(
-            #     'search_unknown_empty', self.name, env, search_action, PROPERTY_LIST[0], PROPERTY_LIST[4], '==')
-            # reward_features.append(r_search_unknown)
-            # rf_weights.append(.05)
-            #
-            # search_action = self.find_action({'action': 'search'})
-            # r_search_unknown = PropertyActionComparisonLinearRewardFeature(
-            #     'search_unknown_found', self.name, env, search_action, PROPERTY_LIST[0], PROPERTY_LIST[1], '==')
-            # reward_features.append(r_search_unknown)
-            # rf_weights.append(.1)
-
             search_action = self.find_action({'action': 'search'})
             r_search = ActionLinearRewardFeature('search', self, search_action)
             reward_features.append(r_search)
@@ -126,15 +110,16 @@ class AgentRoles(Agent):
         if 'SubGoal' in self.roles:  # small reward for sub-goal: rescue when found
             rescue_action = self.find_action({'action': 'rescue'})
             r_rescue_found = PropertyActionComparisonLinearRewardFeature(
-                'rescue_found', self.name, env, rescue_action, PROPERTY_LIST[1], PROPERTY_LIST[2], '==')
+                'rescue_found', self.name, env, rescue_action, 2, '==')
             reward_features.append(r_rescue_found)
             rf_weights.append(0.1)
 
             evacuate_action = self.find_action({'action': 'evacuate'})
             r_rescue_found = PropertyActionComparisonLinearRewardFeature(
-                'evacuate_ready', self.name, env, evacuate_action, PROPERTY_LIST[2], PROPERTY_LIST[3], '==')
+                'evacuate_ready', self.name, env, evacuate_action, 3, '==')
             reward_features.append(r_rescue_found)
             rf_weights.append(0.2)
+
         return reward_features, rf_weights
 
 

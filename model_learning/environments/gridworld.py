@@ -103,15 +103,15 @@ class GridWorld(object):
             agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, f'{agent.name}\'s vertical location')
         self.world.setFeature(y, 0)
 
-        visits: Dict[int, str] = {}
-        for x_i, y_i in itertools.product(range(self.width), range(self.height)):
-            loc_i = self.xy_to_idx(x_i, y_i)
-            visits[loc_i] = self.world.defineState(agent.name, VISIT_FEATURE + f'{loc_i}' + self.name,
-                                                   int, 0, 2, f'{agent.name}\'s # of visits for each location')
-            if loc_i == 0:
-                self.world.setFeature(visits[loc_i], 1)
-            else:
-                self.world.setFeature(visits[loc_i], 0)
+        # visits: Dict[int, str] = {}
+        # for x_i, y_i in itertools.product(range(self.width), range(self.height)):
+        #     loc_i = self.xy_to_idx(x_i, y_i)
+        #     visits[loc_i] = self.world.defineState(agent.name, VISIT_FEATURE + f'{loc_i}' + self.name,
+        #                                            int, 0, 2, f'{agent.name}\'s # of visits for each location')
+        #     if loc_i == 0:
+        #         self.world.setFeature(visits[loc_i], 1)
+        #     else:
+        #         self.world.setFeature(visits[loc_i], 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
         action = agent.addAction({'verb': 'move', 'action': 'nowhere'})
@@ -127,11 +127,11 @@ class GridWorld(object):
         self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        for loc_i, visit in enumerate(visits):
-            visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
-                          True: incrementMatrix(visits[loc_i], 1),
-                          False: noChangeMatrix(visits[loc_i])}
-            self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        # for loc_i, visit in enumerate(visits):
+        #     visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
+        #                   True: incrementMatrix(visits[loc_i], 1),
+        #                   False: noChangeMatrix(visits[loc_i])}
+        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
 
         # move left
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'left'})
@@ -141,11 +141,11 @@ class GridWorld(object):
         self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        for loc_i, visit in enumerate(visits):
-            visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
-                          True: incrementMatrix(visits[loc_i], 1),
-                          False: noChangeMatrix(visits[loc_i])}
-            self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        # for loc_i, visit in enumerate(visits):
+        #     visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
+        #                   True: incrementMatrix(visits[loc_i], 1),
+        #                   False: noChangeMatrix(visits[loc_i])}
+        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
 
         # move up
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'up'})
@@ -155,11 +155,11 @@ class GridWorld(object):
         self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        for loc_i, visit in enumerate(visits):
-            visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
-                          True: incrementMatrix(visits[loc_i], 1),
-                          False: noChangeMatrix(visits[loc_i])}
-            self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        # for loc_i, visit in enumerate(visits):
+        #     visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
+        #                   True: incrementMatrix(visits[loc_i], 1),
+        #                   False: noChangeMatrix(visits[loc_i])}
+        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
 
         # move down
         action = agent.addAction({'verb': 'move' + self.name, 'action': 'down'})
@@ -169,11 +169,11 @@ class GridWorld(object):
         self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        for loc_i, visit in enumerate(visits):
-            visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
-                          True: incrementMatrix(visits[loc_i], 1),
-                          False: noChangeMatrix(visits[loc_i])}
-            self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        # for loc_i, visit in enumerate(visits):
+        #     visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
+        #                   True: incrementMatrix(visits[loc_i], 1),
+        #                   False: noChangeMatrix(visits[loc_i])}
+        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
 
         return self.agent_actions[agent.name]
 
