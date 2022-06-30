@@ -149,7 +149,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             expected_fc = estimate_feature_counts(agent, initial_states, traj_len, feature_func,
                                                   exact=self.exact, num_mc_trajectories=self.num_mc_trajectories,
                                                   horizon=self.horizon, threshold=self.prune_threshold,
-                                                  selection='distribution', processes=self.processes, seed=self.seed,
+                                                  processes=self.processes, seed=self.seed,
                                                   verbose=False, use_tqdm=True)
 
             # gradient descent step, update reward weights

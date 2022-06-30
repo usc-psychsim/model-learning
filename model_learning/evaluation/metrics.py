@@ -77,7 +77,7 @@ def policy_divergence(policy1: List[Distribution], policy2: List[Distribution]) 
         actions = list(set(list(a1.domain()) + list(a2.domain())))
         a1 = np.array([a1.get(a) for a in actions])  # shape (num_actions, )
         a2 = np.array([a2.get(a) for a in actions])  # shape (num_actions, )
-        dists = np.array([a1, a2])  # shape (2, num_actions)
+        dists = np.array([a1, a2])+1e-5  # shape (2, num_actions)
         div += jensen_shannon_divergence(dists)
 
     return div / len(policy1)

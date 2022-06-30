@@ -76,8 +76,8 @@ class ValueComparisonLinearRewardFeature(LinearRewardFeature):
 
     def get_value(self, state: State) -> float:
         # collects feature value distribution and returns weighted sum
-        dist = np.array([[float(self.comp_func(self.world.float2value(self.key, kv[self.key]), self.value)), p]
-                         for kv, p in state.distributions[state.keyMap[self.key]].items()])
+        dist = np.array([[float(self.comp_func(self.world.float2value(self.key, v), self.value)), p]
+                         for v, p in state.marginal(self.key).items()])
         return dist[:, 0].dot(dist[:, 1]) * self.normalize_factor
 
     def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):

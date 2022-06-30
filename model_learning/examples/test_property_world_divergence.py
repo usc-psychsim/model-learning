@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import random
 from typing import List, Dict, NamedTuple, Optional, Tuple, Literal
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from psychsim.world import World
@@ -7,6 +8,8 @@ from psychsim.agent import Agent
 from model_learning.planning import get_policy, get_action_values
 from psychsim.pwl import makeTree, equalRow, incrementMatrix, stateKey, WORLD, rewardKey, KeyedPlane, KeyedVector
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
+from model_learning.evaluation.metrics import policy_divergence, policy_mismatch_prob
+
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
@@ -22,9 +25,7 @@ ENV_SEED = 48
 NUM_EXIST = 2
 
 TEAM_AGENTS = ['AHA', 'Helper1']
-# AGENT_ROLES = [{'Goal': 1}, {'SubGoal': 0.1, 'Navigator': 0.1}]
 AGENT_ROLES = [{'Goal': 1, 'Navigator': -0.1}, {'Goal': 0.05, 'Navigator': 1}]
-
 HORIZON = 2  # 0 for random actions
 PRUNE_THRESHOLD = 5e-2
 ACT_SELECTION = 'random'
@@ -57,11 +58,13 @@ if __name__ == '__main__':
 
     # set agent rewards, and attributes
     # print(env.world.symbolList)
+    team_rwd = []
     for ag_i, agent in enumerate(team):
         rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
         agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
         print(f'{agent.name} Reward Features')
         print(agent_lrv.names, agent_lrv.rwd_weights)
+        team_rwd.append(agent_lrv)
         # agent.printReward(agent.get_true_model())
 
         agent.setAttribute('selection', ACT_SELECTION)
@@ -71,46 +74,39 @@ if __name__ == '__main__':
     my_turn_order = [{agent.name for agent in team}]
     env.world.setOrder(my_turn_order)
 
-    # "compile" reward functions to get trees
-    world.dependency.getEvaluation()
+    # gets all env states
+    states = env.get_all_states_with_properties(team[0], team[1])
+    print('Number of possible states: ', len(states))
+    random.seed(ENV_SEED)
+    states = random.sample(states, 100)
+    print('Number of selected states: ', len(states))
 
-    # generate trajectories using agent's policy #ACT_SELECTION
-    # Team trajectory functions
-    if not DEBUG:
-        team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
-                                                           horizon=HORIZON, selection=ACT_SELECTION,
-                                                           processes=PROCESSES,
-                                                           threshold=1e-2, seed=ENV_SEED)
-        env.play_team_trajectories(team_trajectories, team, OUTPUT_DIR)
+    # for s in states[100:200]:
+    #     print(s)
+    team_expert_pi = []
+    for ag_i, agent in enumerate(team):
+        expert_pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
+        team_expert_pi.append(expert_pi)
 
-    if DEBUG:
-        for i in range(20):
-            print('Step', i)
-            # print(env.world.state.items())
-            prob = env.world.step()
-            print(f'probability: {prob}')
-            for ag_i, agent in enumerate(team):
-                print(f'{agent.name} action: {world.getAction(agent.name)}')
-                x, y = env.get_location_features(agent)
-                # visits = env.get_visit_feature(agent)
-                f = env.get_navi_features(agent)
-                loc_i = env.xy_to_idx(world.getFeature(x, unique=True), world.getFeature(y, unique=True))
-                print(f'{agent.name} state: '
-                      f'x={world.getFeature(x, unique=True)}, '
-                      f'y={world.getFeature(y, unique=True)}, '
-                      # f'v={world.getFeature(visits[loc_i], unique=True)}, '
-                      f'f={world.getFeature(f, unique=True)}, '
-                      f'r={agent.reward(env.world.state)}')
-            p_state = []
-            for loc_i in range(env.width * env.height):
-                p = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE + f'{loc_i}'), unique=True)
-                p_state.append(PROPERTY_LIST[p])
-            # p_state = env.p_state[p_feat]
-            g_state = env.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)
-            print('Locations:', env.exist_locations, 'Properties:',
-                  f'p={p_state}', 'Clear:', f'g={g_state}')
+    # reset reward to learner's reward
+    for ag_i, agent in enumerate(team):
+        agent_lrv = team_rwd[ag_i]
+        if ag_i == 0:
+            # agent_lrv.set_rewards(agent, np.array([0,0,0,0,0,0]))
+            weights = np.array([0.43,  0.08,  0.08,  0.05,  0.04, -0.32])
+        else:
+            # agent_lrv.set_rewards(agent, np.array([0,0,0,0,0,0]))
+            weights = np.array([0.37, 0.12, 0.1,  0.03, 0.03, 0.35])
+        agent_lrv.rwd_weights = weights
+        agent_lrv.set_rewards(agent, agent_lrv.rwd_weights)
+        print(f'{agent.name} Reward Features')
+        print(agent_lrv.names, agent_lrv.rwd_weights)
 
-            if sum([p == 'clear'for p in p_state]) == env.num_exist:
-                print(p_state)
-                print('Reward:', team[1].reward(env.world.state))
-                break
+    team_learner_pi = []
+    for ag_i, agent in enumerate(team):
+        learner_pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
+        team_learner_pi.append(learner_pi)
+    for ag_i, agent in enumerate(team):
+        print(f'Policy divergence: {policy_divergence(team_expert_pi[ag_i], team_learner_pi[ag_i]):.3f}')
+        print(f'Policy mismatch: {policy_mismatch_prob(team_expert_pi[ag_i], team_learner_pi[ag_i]):.3f}')
+

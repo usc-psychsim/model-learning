@@ -34,9 +34,11 @@ def get_state_policy(agent: Agent,
     if model is not None:
         state = copy.deepcopy(state)
         agent.world.setFeature(modelKey(agent.name), model, state)
-    p = agent.world.step(state=state, real=True, updateBeliefs=True,
-                         horizon=horizon, tiebreak=selection, threshold=threshold)
-    return agent.world.getAction(agent.name, agent.world.state)
+    # p = agent.world.step(state=state, real=True, updateBeliefs=False,
+    #                      horizon=horizon, tiebreak=selection, threshold=threshold)
+    decision = agent.decide(state, horizon=horizon, selection=selection)
+    return decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)]['action']
+    # return agent.world.getAction(agent.name, agent.world.state)
 
 
 def get_policy(agent: Agent,

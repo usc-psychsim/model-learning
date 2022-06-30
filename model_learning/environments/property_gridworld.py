@@ -27,6 +27,7 @@ VISIT_FEATURE = 'v'
 PROPERTY_FEATURE = 'p'
 PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 GOAL_FEATURE = 'g'
+NAVI_FEATURE = 'f'
 
 TITLE_FONT_SIZE = 12
 VALUE_CMAP = 'gray'  # 'viridis' # 'inferno'
@@ -45,7 +46,7 @@ class Location(NamedTuple):
 
 class LocationInfo(NamedTuple):
     loci: int
-    p: str
+    p: int
 
 
 # define object property
@@ -96,23 +97,28 @@ class PropertyGridWorld(GridWorld):
             p_features.append(p)
         return p_features
 
+    def get_navi_features(self, agent: Agent):
+        f = stateKey(agent.name, NAVI_FEATURE + self.name)
+        return f
+
     def remove_action(self, agent: Agent, action: str):
         illegal_action = agent.find_action({'action': action})
         agent.setLegal(illegal_action, makeTree(False))
         self.agent_actions[agent.name].remove(illegal_action)
 
-
     def add_location_property_dynamics(self, agent: Agent, idle: bool = True):
         assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
 
         self.add_agent_dynamics(agent)
+        x, y = self.get_location_features(agent)
+
         if not idle:
             self.remove_action(agent, 'nowhere')
         else:
-            action = agent.find_action({'action': 'nowhere'})
-            legal_dict = {'if': equalRow(self.g, self.num_exist), True: True, False: False}
-            agent.setLegal(action, makeTree(legal_dict))
-        x, y = self.get_location_features(agent)
+            pass
+            # action = agent.find_action({'action': 'nowhere'})
+            # legal_dict = {'if': equalRow(self.g, self.num_exist), True: True, False: False}
+            # agent.setLegal(action, makeTree(legal_dict))
 
         # property related action
         action = agent.addAction({'verb': 'handle', 'action': 'search'})
@@ -126,6 +132,17 @@ class PropertyGridWorld(GridWorld):
         legal_dict[None] = False
         agent.setLegal(action, makeTree(legal_dict))
 
+        # for loc_i in range(self.width * self.height):
+        #     p_loc = self.p_state[loc_i]
+        #     search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
+        #     if loc_i in self.exist_locations:
+        #         search_tree[True] = setToConstantMatrix(p_loc, 1)
+        #     else:
+        #         search_tree[True] = setToConstantMatrix(p_loc, 4)
+        #     search_tree[False] = noChangeMatrix(p_loc)
+        #     self.world.setDynamics(p_loc, action, makeTree(search_tree))
+        # self.agent_actions[agent.name].append(action)
+
         for loc_i in range(self.width * self.height):
             p_loc = self.p_state[loc_i]
             search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
@@ -136,6 +153,18 @@ class PropertyGridWorld(GridWorld):
             search_tree[False] = noChangeMatrix(p_loc)
             self.world.setDynamics(p_loc, action, makeTree(search_tree))
         self.agent_actions[agent.name].append(action)
+
+        # update NAVI_FEATURE
+        f = self.world.defineState(agent.name, NAVI_FEATURE + self.name, int, 0, len(self.non_exist_locations),
+                                   description=f'Navigator: # of empty locations')
+        self.world.setFeature(f, 0)
+        for loc_i in self.non_exist_locations:
+            p_loc = self.p_state[loc_i]
+            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 4, 0),
+                         True: incrementMatrix(f, 1),
+                         False: noChangeMatrix(f)}
+            # self.world.setDynamics(f, action, makeTree(tree_dict))
+            self.world.setDynamics(f, action, makeTree(tree_dict))
 
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
@@ -201,32 +230,88 @@ class PropertyGridWorld(GridWorld):
             for loc_i in self.exist_locations:
                 p_loc = self.p_state[loc_i]
                 tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 3, 0),
-                             True: incrementMatrix(self.g, 1/len(agents)),
+                             True: incrementMatrix(self.g, 1 / len(agents)),
                              False: noChangeMatrix(self.g)}
                 self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
 
     def get_all_states_with_properties(self, agent1: Agent, agent2: Agent) -> List[Optional[VectorDistributionSet]]:
         assert agent1.world == self.world, 'Agent\'s world different from the environment\'s world!'
+        exist_p_list = [0, 1, 2, 3]
+        non_exist_p_list = [0, 4]
+        g_list = list(range(self.num_exist + 1))
+        f_list = list(range(len(self.non_exist_locations) + 1))
 
         old_state = copy.deepcopy(self.world.state)
-        states_wp = [None] * self.width * self.height * self.width * self.height * self.n_p_state
+        states_wp = [None] * self.width * self.height * len(f_list) * self.width * self.height * len(f_list) * \
+                    len(exist_p_list) ** len(self.exist_locations) * \
+                    len(non_exist_p_list) ** len(self.non_exist_locations) * \
+                    len(g_list)
 
         # iterate through all agent positions and copy world state
         x, y = self.get_location_features(agent1)
         x1, y1 = self.get_location_features(agent2)
+        f = self.get_navi_features(agent1)
+        f1 = self.get_navi_features(agent2)
+        g = get_goal_features()
+
+        exist_loc_all_p: List[List] = []
+        for exist_loc in self.exist_locations:
+            exist_loc_p = []
+            for _, p in enumerate(exist_p_list):
+                exist_loc_p.append(LocationInfo(exist_loc, p))
+            exist_loc_all_p.append(exist_loc_p)
+
+        non_exist_loc_all_p: List[List] = []
+        for non_exist_loc in self.non_exist_locations:
+            non_exist_loc_p = []
+            for _, p in enumerate(non_exist_p_list):
+                non_exist_loc_p.append(LocationInfo(non_exist_loc, p))
+            non_exist_loc_all_p.append(non_exist_loc_p)
+
         for x1_i, y1_i in itertools.product(range(self.width), range(self.height)):
             self.world.setFeature(x1, x1_i)
             self.world.setFeature(y1, y1_i)
-            idxx = self.xy_to_idx(x1_i, y1_i) * self.width * self.height * self.n_p_state
+            idxx = self.xy_to_idx(x1_i, y1_i) * len(f_list) * self.width * self.height * len(f_list) * \
+                   len(exist_p_list) ** len(self.exist_locations) * \
+                   len(non_exist_p_list) ** len(self.non_exist_locations) * len(g_list)
 
-            for x_i, y_i in itertools.product(range(self.width), range(self.height)):
-                self.world.setFeature(x, x_i)
-                self.world.setFeature(y, y_i)
+            for idxf_i, f_i, in enumerate(f_list):
+                self.world.setFeature(f, f_i)
+                idxf = idxf_i * self.width * self.height * len(f_list) * \
+                       len(exist_p_list) ** len(self.exist_locations) * \
+                       len(non_exist_p_list) ** len(self.non_exist_locations) * len(g_list)
 
-                idx = self.xy_to_idx(x_i, y_i) * self.n_p_state
-                for i, p in enumerate(self.p_state):
-                    self.world.setFeature(self.p, p)
-                    states_wp[idxx + idx + i] = copy.deepcopy(self.world.state)
+                for x_i, y_i in itertools.product(range(self.width), range(self.height)):
+                    self.world.setFeature(x, x_i)
+                    self.world.setFeature(y, y_i)
+
+                    idx = self.xy_to_idx(x_i, y_i) * len(f_list) * len(exist_p_list) ** len(self.exist_locations) * \
+                          len(non_exist_p_list) ** len(self.non_exist_locations) * len(g_list)
+
+                    for idxf1_i, f1_i, in enumerate(f_list):
+                        self.world.setFeature(f1, f1_i)
+                        idxf1 = idxf1_i * len(exist_p_list) ** len(self.exist_locations) * \
+                                len(non_exist_p_list) ** len(self.non_exist_locations) * len(g_list)
+
+                        id = 0
+                        for _, exist_comb in enumerate(itertools.product(*exist_loc_all_p)):
+                            for exist_loc_info in exist_comb:
+                                exist_p_loc = self.p_state[exist_loc_info.loci]
+                                self.world.setFeature(exist_p_loc, exist_loc_info.p)
+
+                                i = 0
+                                for _, non_exist_comb in enumerate(itertools.product(*non_exist_loc_all_p)):
+                                    for non_exist_loc_info in non_exist_comb:
+                                        non_exist_p_loc = self.p_state[non_exist_loc_info.loci]
+                                        self.world.setFeature(non_exist_p_loc, non_exist_loc_info.p)
+
+                                        for g_i in g_list:
+                                            self.world.setFeature(g, g_i)
+                                            states_wp[idxx + idxf + idx + idxf1 + id + i + g_i] \
+                                                = copy.deepcopy(self.world.state)
+
+                                    i += 1 * len(g_list)
+                            id += 1 * len(non_exist_p_list) ** len(self.non_exist_locations) * len(g_list)
 
         # undo world state
         self.world.state = old_state
