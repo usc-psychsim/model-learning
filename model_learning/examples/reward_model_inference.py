@@ -4,7 +4,7 @@ from model_learning.inference import track_reward_model_inference
 from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
 from psychsim.world import World
-from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey
+from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey, actionKey
 from psychsim.reward import maximizeFeature
 from psychsim.helper_functions import get_true_model_name
 from model_learning.environments.gridworld import GridWorld
@@ -58,6 +58,7 @@ if __name__ == '__main__':
     agent.setAttribute('horizon', HORIZON)
     agent.setAttribute('selection', AGENT_SELECTION)
     observer = world.addAgent(OBSERVER_NAME)
+    observer.addAction('dummy')
 
     # create grid-world and add world dynamics to agent
     env = GridWorld(world, ENV_SIZE, ENV_SIZE)
@@ -67,15 +68,17 @@ if __name__ == '__main__':
     x, y = env.get_location_features(agent)
     env.set_achieve_locations_reward(agent, [(4, 4)], 1.)
 
-    world.setOrder([{agent.name}])
+    world.setOrder([{agent.name, observer.name}])
 
     # observer does not model itself
-    observer.resetBelief(ignore={modelKey(observer.name)})
+    # observer.resetBelief(ignore={modelKey(observer.name)})
+    # observer.resetBelief()
+
 
     # agent does not model itself and sees everything except true models and its reward
-    agent.resetBelief(ignore={modelKey(observer.name)})
-    agent.omega = [key for key in world.state.keys()
-                   if key not in {rewardKey(agent.name), modelKey(observer.name)}]
+    # agent.resetBelief(ignore={modelKey(observer.name)})
+    # agent.omega = [key for key in world.state.keys()
+    #                if key not in {rewardKey(agent.name), modelKey(observer.name)}]
 
     # get the canonical name of the "true" agent model
     true_model = get_true_model_name(agent)
@@ -89,25 +92,30 @@ if __name__ == '__main__':
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
 
     if INCLUDE_RANDOM_MODEL:
-        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
-        agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
+        RANDOM_MODEL = agent.zero_level(sample=True)
+        # agent.addModel(RANDOM_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
+        # agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
 
     model_names = [name for name in agent.models.keys() if name != true_model]
 
-    for name in model_names:
-        agent.resetBelief(model=name, ignore={modelKey(observer.name)})
+    # for name in model_names:
+    #     agent.resetBelief(model=name, ignore={modelKey(observer.name)})
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,
                          Distribution({name: 1. / (len(agent.models) - 1) for name in model_names}))
-
+    observer.set_observations()
+    observer.setBelief(actionKey(agent.name))
     # observer sees everything except true models
-    observer.omega = [key for key in world.state.keys()
-                      if key not in {modelKey(agent.name), modelKey(observer.name)}]  # rewardKey(agent.name),
-
+    # observer.omega = [key for key in world.state.keys()
+                      # if key not in {modelKey(agent.name), modelKey(observer.name)}]  # rewardKey(agent.name),
+    # observer.omega = [key for key in world.state.keys()
+    #                   if key not in {modelKey(agent.name)}]  # rewardKey(agent.name),
     # generates trajectory
     logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
-    trajectory = env.generate_trajectories(1, NUM_STEPS, agent, [[0, 0]])[0]
+    x, y = env.get_location_features(agent)
+    trajectory = env.generate_trajectories(1, NUM_STEPS, agent, {x: 0, y: 0})[0]
+    print(trajectory)
     env.plot_trajectories([trajectory], agent, os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
     # gets evolution of inference over reward models of the agent

@@ -30,7 +30,9 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
 
     probs = np.zeros((len(trajectory), len(models)))
     for t, sa in enumerate(trajectory):
-        world, action = sa
+        world = sa.world
+        action = sa.action
+        # world, action = sa
 
         if verbose and features is not None:
             logging.info('===============================================')
