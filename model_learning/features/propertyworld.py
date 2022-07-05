@@ -83,11 +83,16 @@ class AgentRoles(Agent):
             reward_features.append(r_goal)
             rf_weights.append(self.roles['Goal'])
 
+            d2c = env.get_d2c_feature(self)
+            r_d2c = NumericLinearRewardFeature(DISTANCE2CLEAR_FEATURE, d2c)
+            reward_features.append(r_d2c)
+            rf_weights.append(-0.05 * self.roles['Goal'])
+
             for move in MOVEMENT:
                 move_action = self.find_action({'action': move})
                 r_move = ActionLinearRewardFeature(move, self, move_action)
                 reward_features.append(r_move)
-                rf_weights.append(-.05)
+                rf_weights.append(-.02 * self.roles['Goal'])
 
         if 'Navigator' in self.roles:  # move
             # search_action = self.find_action({'action': 'search'})

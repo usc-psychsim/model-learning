@@ -10,6 +10,7 @@ from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardV
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
+CLEARINDICATOR_FEATURE = 'ci'
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
@@ -17,13 +18,15 @@ PROPERTY_FEATURE = 'p'
 PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 WORLD_NAME = 'PGWorld'
 
-ENV_SIZE = 2
+ENV_SIZE = 4
 ENV_SEED = 48
-NUM_EXIST = 2
+NUM_EXIST = 3
 
 TEAM_AGENTS = ['AHA', 'Helper1']
 # AGENT_ROLES = [{'Goal': 1}, {'SubGoal': 0.1, 'Navigator': 0.1}]
-AGENT_ROLES = [{'Goal': 1, 'Navigator': -0.1}, {'Goal': 0.05, 'Navigator': 1}]
+AGENT_ROLES = [{'Goal': 1, 'SubGoal': 0.2}, {'SubGoal': 0.2, 'Navigator': 0.1}]
+# AGENT_ROLES = [{'Goal': 1, 'SubGoal': 0.2}, {'Goal': 1, 'SubGoal': 0.2}]
+
 
 HORIZON = 2  # 0 for random actions
 PRUNE_THRESHOLD = 5e-2
@@ -33,7 +36,7 @@ ACT_SELECTION = 'random'
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/property-world')
 NUM_TRAJECTORIES = 3  # 10
-TRAJ_LENGTH = 15  # 15
+TRAJ_LENGTH = 50  # 15
 PROCESSES = -1
 DEBUG = 0
 
@@ -84,7 +87,7 @@ if __name__ == '__main__':
         env.play_team_trajectories(team_trajectories, team, OUTPUT_DIR)
 
     if DEBUG:
-        for i in range(20):
+        for i in range(30):
             print('Step', i)
             # print(env.world.state.items())
             prob = env.world.step()
@@ -95,11 +98,14 @@ if __name__ == '__main__':
                 # visits = env.get_visit_feature(agent)
                 f = env.get_navi_features(agent)
                 loc_i = env.xy_to_idx(world.getFeature(x, unique=True), world.getFeature(y, unique=True))
+                d2c = env.get_d2c_feature(agent)
                 print(f'{agent.name} state: '
                       f'x={world.getFeature(x, unique=True)}, '
                       f'y={world.getFeature(y, unique=True)}, '
+                      f'loc={loc_i}, '
                       # f'v={world.getFeature(visits[loc_i], unique=True)}, '
                       f'f={world.getFeature(f, unique=True)}, '
+                      f'd2c={world.getFeature(d2c, unique=True)}, '
                       f'r={agent.reward(env.world.state)}')
             p_state = []
             for loc_i in range(env.width * env.height):
@@ -107,10 +113,11 @@ if __name__ == '__main__':
                 p_state.append(PROPERTY_LIST[p])
             # p_state = env.p_state[p_feat]
             g_state = env.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)
+            ci_state = env.world.getFeature(stateKey(WORLD, CLEARINDICATOR_FEATURE), unique=True)
             print('Locations:', env.exist_locations, 'Properties:',
-                  f'p={p_state}', 'Clear:', f'g={g_state}')
+                  f'p={p_state}','Indicator:', f'ci={ci_state}', 'Clear:', f'g={g_state}')
 
             if sum([p == 'clear'for p in p_state]) == env.num_exist:
                 print(p_state)
                 print('Reward:', team[1].reward(env.world.state))
-                break
+                # break
