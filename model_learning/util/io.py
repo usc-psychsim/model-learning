@@ -6,10 +6,26 @@ import re
 import shutil
 import tempfile
 import zipfile
+import numpy as np
 from typing import List, Dict
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedro.sequeira@sri.com'
+
+
+class _NpEncoder(json.JSONEncoder):
+    """
+    Supports encoding of numpy data types.
+    See: https://stackoverflow.com/a/57915246/16031961
+    """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 
 def get_file_changed_extension(file_path: str, ext: str) -> str:
@@ -89,7 +105,7 @@ def save_dict_json(dictionary: Dict, file_path: str):
     :param str file_path: the path to the json file where to save the dictionary.
     """
     with open(file_path, 'w') as fp:
-        json.dump(dictionary, fp, indent=4)
+        json.dump(dictionary, fp, indent=4, cls=_NpEncoder)
 
 
 def save_object(obj, file_path: str, compress_gzip: bool = True):
