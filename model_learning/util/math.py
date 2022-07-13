@@ -607,9 +607,9 @@ def finite_diff(y: np.ndarray,
     num_side = num_central // 2
 
     def _insuf_data(idx):
-        return ((fd_type == 'backward' and idx < num_coef) or
+        return ((fd_type == 'backward' and idx < num_coef - 1) or
                 (fd_type == 'center' and (idx < num_side or idx >= len(y) - num_side)) or
-                (fd_type == 'forward' and idx >= len(y) - num_coef))
+                (fd_type == 'forward' and idx > len(y) - num_coef))
 
     # check uniformity of space
     dy_dx = np.full_like(y, default_value)
