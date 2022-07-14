@@ -77,7 +77,6 @@ def estimate_feature_counts(agent: Agent,
     for t, initial_state in enumerate(initial_states):
         args.append((agent, initial_state, trajectory_length, exact, num_mc_trajectories, model, horizon,
                      threshold, processes, seed + t, verbose))
-
     trajectories = run_parallel(_generate_trajectories, args, processes=processes, use_tqdm=use_tqdm)
     trajectories = list(it.chain(*trajectories))
 

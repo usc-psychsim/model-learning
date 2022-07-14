@@ -1,15 +1,19 @@
 import os
 import numpy as np
+import copy
 from typing import List, Dict, NamedTuple, Optional, Tuple, Literal
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from psychsim.world import World
 from psychsim.agent import Agent
 from model_learning.planning import get_policy, get_action_values
-from psychsim.pwl import makeTree, equalRow, incrementMatrix, stateKey, WORLD, rewardKey, KeyedPlane, KeyedVector
+from psychsim.pwl import modelKey, equalRow, incrementMatrix, stateKey, WORLD, rewardKey, KeyedPlane, KeyedVector
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
+from model_learning import StateActionPair
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
+CLEARINDICATOR_FEATURE = 'ci'
+MARK_FEATURE = 'm'
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
@@ -17,25 +21,28 @@ PROPERTY_FEATURE = 'p'
 PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 WORLD_NAME = 'PGWorld'
 
-ENV_SIZE = 2
+ENV_SIZE = 3
 ENV_SEED = 48
-NUM_EXIST = 2
+NUM_EXIST = 3
 
 TEAM_AGENTS = ['AHA', 'Helper1']
-# AGENT_ROLES = [{'Goal': 1}, {'SubGoal': 0.1, 'Navigator': 0.1}]
-AGENT_ROLES = [{'Goal': 1, 'Navigator': -0.1}, {'Goal': 0.05, 'Navigator': 1}]
+# AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
+# AGENT_ROLES = [{'Goal': 1, 'SubGoal': 0.2}, {'Goal': 0.2, 'SubGoal': 0.2, 'Navigator': 1}]
+AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
-PRUNE_THRESHOLD = 5e-2
+PRUNE_THRESHOLD = 1e-2
 ACT_SELECTION = 'random'
+RATIONALITY = 1 / 0.1
 
 # common params
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/property-world')
 NUM_TRAJECTORIES = 3  # 10
-TRAJ_LENGTH = 15  # 15
+TRAJ_LENGTH = 15  # 30
 PROCESSES = -1
 DEBUG = 0
+np.set_printoptions(precision=3)
 
 if __name__ == '__main__':
     world = World()
@@ -48,24 +55,29 @@ if __name__ == '__main__':
     for i in range(len(TEAM_AGENTS)):
         team.append(world.addAgent(AgentRoles(TEAM_AGENTS[i], AGENT_ROLES[i])))
 
-    # # define agent dynamics
+    # define agent dynamics
     for agent in team:
         env.add_location_property_dynamics(agent, idle=True)
     env.add_collaboration_dynamics([agent for agent in team])
-    # print('Action Dynamics')
-    # env.vis_agent_dynamics_in_xy()
 
     # set agent rewards, and attributes
     # print(env.world.symbolList)
     for ag_i, agent in enumerate(team):
         rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
         agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
+        agent_lrv.rwd_weights = np.array(agent_lrv.rwd_weights) / np.linalg.norm(agent_lrv.rwd_weights, 1)
+        agent_lrv.set_rewards(agent, agent_lrv.rwd_weights)
         print(f'{agent.name} Reward Features')
         print(agent_lrv.names, agent_lrv.rwd_weights)
         # agent.printReward(agent.get_true_model())
 
         agent.setAttribute('selection', ACT_SELECTION)
         agent.setAttribute('horizon', HORIZON)
+        agent.setAttribute('rationality', RATIONALITY)
+        agent.setAttribute('discount', 0.7)
+
+    # print('Action Dynamics')
+    # env.vis_agent_dynamics_in_xy()
 
     # example run
     my_turn_order = [{agent.name for agent in team}]
@@ -82,35 +94,107 @@ if __name__ == '__main__':
                                                            processes=PROCESSES,
                                                            threshold=1e-2, seed=ENV_SEED)
         env.play_team_trajectories(team_trajectories, team, OUTPUT_DIR)
+        if len(team_trajectories) == 1:
+            team_trajs = [] * len(team)
+            for ag_i, agent in enumerate(team):
+                if ag_i in [1]:
+                    agent_trajs = []
+                    for team_traj in team_trajectories:
+                        agent_traj = []
+                        for step, team_step in enumerate(team_traj):
+                            print('Step:', step)
+                            tsa = team_step
+                            sa = StateActionPair(tsa.world, tsa.action[agent.name], tsa.prob)
+                            state = copy.deepcopy(tsa.world.state)
+                            # print(state)
+                            print(f'{agent.name} action: {tsa.world.getAction(agent.name)}')
+                            x, y = env.get_location_features(agent)
+                            # visits = env.get_visit_feature(agent)
+                            f = env.get_navi_features(agent)
+                            loc_i = env.xy_to_idx(tsa.world.getFeature(x, unique=True),
+                                                  tsa.world.getFeature(y, unique=True))
+                            d2c = env.get_d2c_feature(agent)
+                            d2h = env.get_d2h_feature(agent)
+                            print(f'{agent.name} state: '
+                                  f'x={tsa.world.getFeature(x, unique=True)}, '
+                                  f'y={tsa.world.getFeature(y, unique=True)}, '
+                                  f'loc={loc_i}, '
+                                  # f'v={world.getFeature(visits[loc_i], unique=True)}, '
+                                  f'f={tsa.world.getFeature(f, unique=True)}, '
+                                  f'd2c={tsa.world.getFeature(d2c, unique=True)}, '
+                                  f'd2h={world.getFeature(d2h, unique=True)}, '
+                                  f'r={agent.reward(tsa.world.state)}')
+
+                            p_state = []
+                            for loc_i in range(env.width * env.height):
+                                p = tsa.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE + f'{loc_i}'), unique=True)
+                                p_state.append(PROPERTY_LIST[p])
+                            # p_state = env.p_state[p_feat]
+                            g_state = tsa.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)
+                            ci_state = tsa.world.getFeature(stateKey(WORLD, CLEARINDICATOR_FEATURE), unique=True)
+                            m_state = tsa.world.getFeature(stateKey(WORLD, MARK_FEATURE), unique=True)
+                            print('Locations:', env.exist_locations, 'Properties:',
+                                  f'p={p_state}\n', 'Indicator:', f'ci={ci_state}', 'Clear:', f'g={g_state}', 'Mark:',
+                                  f'm={m_state}')
+
+                            decision = agent.decide(state, horizon=HORIZON, selection='distribution')
+                            if 'V' in decision[
+                                agent.world.getFeature(modelKey(agent.name), state=state, unique=True)].keys():
+                                for k, v in \
+                                decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)][
+                                    'V'].items():
+                                    print(k)
+                                    print('EV', v['__EV__'])
+                                    print('ER', v['__ER__'])
+                            print(decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)][
+                                      'action'])
 
     if DEBUG:
-        for i in range(20):
+        for i in range(TRAJ_LENGTH):
             print('Step', i)
             # print(env.world.state.items())
             prob = env.world.step()
             print(f'probability: {prob}')
             for ag_i, agent in enumerate(team):
-                print(f'{agent.name} action: {world.getAction(agent.name)}')
-                x, y = env.get_location_features(agent)
-                # visits = env.get_visit_feature(agent)
-                f = env.get_navi_features(agent)
-                loc_i = env.xy_to_idx(world.getFeature(x, unique=True), world.getFeature(y, unique=True))
-                print(f'{agent.name} state: '
-                      f'x={world.getFeature(x, unique=True)}, '
-                      f'y={world.getFeature(y, unique=True)}, '
-                      # f'v={world.getFeature(visits[loc_i], unique=True)}, '
-                      f'f={world.getFeature(f, unique=True)}, '
-                      f'r={agent.reward(env.world.state)}')
+                if ag_i in [0, 1]:
+                    print(f'{agent.name} action: {world.getAction(agent.name)}')
+                    x, y = env.get_location_features(agent)
+                    # visits = env.get_visit_feature(agent)
+                    f = env.get_navi_features(agent)
+                    loc_i = env.xy_to_idx(world.getFeature(x, unique=True), world.getFeature(y, unique=True))
+                    d2c = env.get_d2c_feature(agent)
+                    d2h = env.get_d2h_feature(agent)
+                    print(f'{agent.name} state: '
+                          f'x={world.getFeature(x, unique=True)}, '
+                          f'y={world.getFeature(y, unique=True)}, '
+                          f'loc={loc_i}, '
+                          # f'v={world.getFeature(visits[loc_i], unique=True)}, '
+                          f'f={world.getFeature(f, unique=True)}, '
+                          f'd2c={world.getFeature(d2c, unique=True)}, '
+                          f'd2h={world.getFeature(d2h, unique=True)}, '
+                          f'r={agent.reward(env.world.state)}')
             p_state = []
             for loc_i in range(env.width * env.height):
                 p = env.world.getFeature(stateKey(WORLD, PROPERTY_FEATURE + f'{loc_i}'), unique=True)
                 p_state.append(PROPERTY_LIST[p])
             # p_state = env.p_state[p_feat]
             g_state = env.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)
+            ci_state = env.world.getFeature(stateKey(WORLD, CLEARINDICATOR_FEATURE), unique=True)
+            m_state = env.world.getFeature(stateKey(WORLD, MARK_FEATURE), unique=True)
             print('Locations:', env.exist_locations, 'Properties:',
-                  f'p={p_state}', 'Clear:', f'g={g_state}')
+                  f'p={p_state}\n', 'Indicator:', f'ci={ci_state}', 'Clear:', f'g={g_state}', 'Mark:', f'm={m_state}')
 
-            if sum([p == 'clear'for p in p_state]) == env.num_exist:
+            state = copy.deepcopy(world.state)
+            agent = team[1]
+            decision = agent.decide(state, horizon=HORIZON, selection='distribution')
+            if 'V' in decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)].keys():
+                for k, v in decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)]['V'].items():
+                    print(k)
+                    print('EV', v['__EV__'])
+                    print('ER', v['__ER__'])
+            print(decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)]['action'])
+
+            if sum([p == 'clear' for p in p_state]) == env.num_exist:
                 print(p_state)
                 print('Reward:', team[1].reward(env.world.state))
-                break
+                # break

@@ -91,7 +91,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
 
     @staticmethod
     def log_progress(e: int, theta: np.ndarray, diff: float, learning_rate: float, step_time: float):
-        with np.printoptions(precision=2, suppress=True):
+        with np.printoptions(precision=4, suppress=True):
+            print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
             logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
 
     def learn(self,
@@ -116,6 +117,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         initial_states = [t[0].world.state for t in trajectories]  # initial states for fc estimation
         world = copy_world(trajectories[0][0].world)
         agent = world.agents[self.agent_name]
+        old_rationality = agent.getAtrribute('rationality')
         agent.setAttribute('rationality', 1.)
         traj_len = len(trajectories[0])
 
@@ -142,6 +144,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             learning_rate = self.learning_rate
             if self.decrease_rate:
                 learning_rate *= np.power(1 - (10 / self.max_epochs), e)
+
+            self.reward_vector.set_rewards(agent, self.theta)
 
             # gets expected feature counts (mean feature path)
             # by computing the efc using a MaxEnt stochastic policy given the current reward
@@ -172,6 +176,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         if verbose:
             self.log_progress(e, self.theta, diff, learning_rate, step_time)
             logging.info('Finished, total time: {:.2f} secs.'.format(sum(times)))
+        agent.setAttribute('rationality', old_rationality)
 
         # returns stats dictionary
         return ModelLearningResult(data_id, trajectories, {
