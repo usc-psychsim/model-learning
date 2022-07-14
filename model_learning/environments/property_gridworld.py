@@ -15,7 +15,7 @@ from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow
     equalFeatureRow, WORLD
 from model_learning.environments.gridworld import GridWorld
 from model_learning import Trajectory, TeamTrajectory
-from model_learning.trajectory import generate_team_trajectories
+from model_learning.trajectory import generate_team_trajectories, generate_expert_learner_trajectories
 from model_learning.util.plot import distinct_colors
 
 __author__ = 'Pedro Sequeira'
@@ -26,7 +26,9 @@ Y_FEATURE = 'y'
 VISIT_FEATURE = 'v'
 PROPERTY_FEATURE = 'p'
 DISTANCE2CLEAR_FEATURE = 'dc'
+DISTANCE2HELP_FEATURE = 'dh'
 CLEARINDICATOR_FEATURE = 'ci'
+MARK_FEATURE = 'm'
 PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
@@ -90,24 +92,37 @@ class PropertyGridWorld(GridWorld):
             self.clear_indicator[i] = {}
             for loc_info in comb:
                 self.clear_indicator[i][loc_info.loci] = loc_info.p
-        print(self.clear_indicator)
+        # print(self.clear_indicator)
 
         self.clear_counter = {}
         self.dist_to_clear = {}
         for i, clear_status in self.clear_indicator.items():
-            self.dist_to_clear[i] = [0] * self.width * self.height
+            self.dist_to_clear[i] = [1] * self.width * self.height
             locs = [k for k, v in clear_status.items() if v == 0]
             for loc_i in range(self.width * self.height):
                 self.clear_counter[i] = sum([v == 1 for v in clear_status.values()])
                 if len(locs) > 0:
-                    self.dist_to_clear[i][loc_i] = self.dist_to_closest_loc(loc_i, locs)
+                    self.dist_to_clear[i][loc_i] = 1 - self.dist_to_closest_loc(loc_i, locs)
         print(self.dist_to_clear)
-        print(self.clear_counter)
+        # print(self.clear_counter)
+
+        self.dist_to_help = {}
+        for loc in [-1]+self.exist_locations:
+            self.dist_to_help[loc] = [0] * self.width * self.height
+            if loc > -1:
+                for loc_i in range(self.width * self.height):
+                    self.dist_to_help[loc][loc_i] = 1 - self.dist_to_closest_loc(loc_i, [loc])
+        print(self.dist_to_help)
+
 
         self.n_ci = 2 ** self.num_exist
         self.ci = self.world.defineState(WORLD, CLEARINDICATOR_FEATURE, int, 0, self.n_ci - 1,
                                          description=f'indicator of clear property')
         self.world.setFeature(self.ci, 0)
+
+        self.m = self.world.defineState(WORLD, MARK_FEATURE, int, -1, len(self.exist_locations)-1,
+                                        description=f'MARK: which location needs help')
+        self.world.setFeature(self.m, -1)
 
         self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
                                         description=f'GOAL: # of cleared locations')
@@ -117,14 +132,14 @@ class PropertyGridWorld(GridWorld):
         locs = set(locs)
         if curr_loc in locs:
             return 0
-        dist = self.width + self.height - 1
+        dist = self.width + self.height - 2
         curr_x, curr_y = self.idx_to_xy(curr_loc)
         for loc in locs:
             loc_x, loc_y = self.idx_to_xy(loc)
             _dist = abs(curr_x - loc_x) + abs(curr_y - loc_y)
             if _dist < dist:
                 dist = _dist
-        return dist
+        return dist/(self.width + self.height - 2)
 
     def get_possible_uncleared_idx(self, loc):
         possible_p_idx = []
@@ -166,10 +181,15 @@ class PropertyGridWorld(GridWorld):
         d2c = stateKey(agent.name, DISTANCE2CLEAR_FEATURE + self.name)
         return d2c
 
+    def get_d2h_feature(self, agent: Agent):
+        d2h = stateKey(agent.name, DISTANCE2HELP_FEATURE + self.name)
+        return d2h
+
     def remove_action(self, agent: Agent, action: str):
         illegal_action = agent.find_action({'action': action})
         agent.setLegal(illegal_action, makeTree(False))
-        self.agent_actions[agent.name].remove(illegal_action)
+        if illegal_action in self.agent_actions[agent.name]:
+            self.agent_actions[agent.name].remove(illegal_action)
 
     def add_location_property_dynamics(self, agent: Agent, idle: bool = True):
         assert agent.name not in self.agent_actions, f'An agent was already registered with the name \'{agent.name}\''
@@ -186,7 +206,7 @@ class PropertyGridWorld(GridWorld):
             # agent.setLegal(action, makeTree(legal_dict))
 
         d2c = self.world.defineState(agent.name, DISTANCE2CLEAR_FEATURE + self.name,
-                                     int, 0, self.width * self.height - 1,
+                                     float, 0, 1,
                                      description=f'distance to the closest exist')
         init_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
         self.world.setFeature(d2c, self.dist_to_clear[0][init_loc])
@@ -223,6 +243,40 @@ class PropertyGridWorld(GridWorld):
             action = agent.find_action({'action': move})
             self.world.setDynamics(d2c, action, makeTree(ci_dict))
 
+        d2h = self.world.defineState(agent.name, DISTANCE2HELP_FEATURE + self.name,
+                                     float, 0, 1,
+                                     description=f'distance to help the others')
+        init_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
+        self.world.setFeature(d2h, self.dist_to_help[-1][init_loc])
+
+        tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}),
+                                      list(range(self.width * self.height)), 0)}
+        for loc_i in range(self.width * self.height):
+            sub_tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.m): 1}), list(range(self.num_exist)), 0)}
+            for j in range(self.num_exist):
+                loc = self.exist_locations[j]
+                sub_tree_dict[j] = setToConstantMatrix(d2h, self.dist_to_help[loc][loc_i])
+            sub_tree_dict[None] = setToConstantMatrix(d2h, self.dist_to_help[-1][loc_i])
+            tree_dict[loc_i] = sub_tree_dict
+        tree_dict[None] = noChangeMatrix(d2h)
+        for move in {'right', 'left'}:
+            action = agent.find_action({'action': move})
+            self.world.setDynamics(d2h, action, makeTree(tree_dict))
+
+        tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}),
+                                      list(range(self.width * self.height)), 0)}
+        for loc_i in range(self.width * self.height):
+            sub_tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.m): 1}), list(range(self.num_exist)), 0)}
+            for j in range(self.num_exist):
+                loc = self.exist_locations[j]
+                sub_tree_dict[j] = setToConstantMatrix(d2h, self.dist_to_help[loc][loc_i])
+            sub_tree_dict[None] = setToConstantMatrix(d2h, self.dist_to_help[-1][loc_i])
+            tree_dict[loc_i] = sub_tree_dict
+        tree_dict[None] = noChangeMatrix(d2h)
+        for move in {'up', 'down'}:
+            action = agent.find_action({'action': move})
+            self.world.setDynamics(d2h, action, makeTree(tree_dict))
+
         # property related action
         action = agent.addAction({'verb': 'handle', 'action': 'search'})
         # search is valid when location is unknown
@@ -255,7 +309,6 @@ class PropertyGridWorld(GridWorld):
             tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 4, 0),
                          True: incrementMatrix(f, 1),
                          False: noChangeMatrix(f)}
-            # self.world.setDynamics(f, action, makeTree(tree_dict))
             self.world.setDynamics(f, action, makeTree(tree_dict))
 
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
@@ -275,6 +328,21 @@ class PropertyGridWorld(GridWorld):
             self.world.setDynamics(p_loc, action, makeTree(search_tree))
         self.agent_actions[agent.name].append(action)
 
+        action = agent.addAction({'verb': 'handle', 'action': 'call'})
+        legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
+        for i, loc in enumerate(self.exist_locations):
+            p_loc = self.p_state[loc]
+            sub_legal_dict = {'if': equalRow(p_loc, 2), True: True, False: False}
+            legal_dict[i] = sub_legal_dict
+        legal_dict[None] = False
+        agent.setLegal(action, makeTree(legal_dict))
+
+        call_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
+        for i, loc in enumerate(self.exist_locations):
+            call_tree[i] = setToConstantMatrix(self.m, i)
+        call_tree[None] = setToConstantMatrix(self.m, -1)
+        self.world.setDynamics(self.m, action, makeTree(call_tree))
+        self.agent_actions[agent.name].append(action)
         return self.agent_actions[agent.name]
 
     def add_collaboration_dynamics(self, agents: List[Agent]):
@@ -350,19 +418,22 @@ class PropertyGridWorld(GridWorld):
             #     self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
             d2c = self.get_d2c_feature(agents[i])
             ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), self.n_ci - 1, 0)}
-            ci_dict[True] = setToConstantMatrix(d2c, self.dist_to_clear[self.n_ci - 1][0])
+            ci_dict[True] =\
+                setToConstantMatrix(d2c, self.dist_to_clear[self.n_ci - 1][0])
             tree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}),
                                           list(range(self.width * self.height)), 0)}
             for loc_i in range(self.width * self.height):
                 sub_tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), list(range(self.n_ci - 1)), 0)}
                 for k in range(self.n_ci - 1):
-                    sub_tree_dict[k] = setToConstantMatrix(d2c, self.dist_to_clear[k][loc_i])
+                    sub_tree_dict[k] = \
+                        setToConstantMatrix(d2c, self.dist_to_clear[k][loc_i])
                 sub_tree_dict[None] = noChangeMatrix(d2c)
                 tree_dict[loc_i] = sub_tree_dict
             tree_dict[None] = noChangeMatrix(d2c)
             ci_dict[False] = tree_dict
             self.world.setDynamics(d2c, action_list[i], makeTree(ci_dict))
 
+    '''
     def get_all_states_with_properties(self, agent1: Agent, agent2: Agent) -> List[Optional[VectorDistributionSet]]:
         assert agent1.world == self.world, 'Agent\'s world different from the environment\'s world!'
         exist_p_list = [0, 1, 2, 3]
@@ -445,6 +516,7 @@ class PropertyGridWorld(GridWorld):
         # undo world state
         self.world.state = old_state
         return states_wp
+    '''
 
     def generate_team_trajectories(self, team: List[Agent], trajectory_length: int,
                                    n_trajectories: int = 1, init_feats: Optional[Dict[str, Any]] = None,
@@ -457,22 +529,43 @@ class PropertyGridWorld(GridWorld):
         assert len(team) > 0, 'No agent in the team'
 
         x, y = self.get_location_features(team[0])
-        p_features = self.get_property_features()
-        # if not specified, set random values for x, y pos, and property
+        # if not specified, set random values for x, y pos
         if init_feats is None:
             init_feats = {}
         if x not in init_feats:
             init_feats[x] = None
         if y not in init_feats:
             init_feats[y] = None
-        for p in p_features:
-            if p not in init_feats:
-                init_feats[p] = 0
-
         # generate trajectories starting from random locations in the property gridworld
         return generate_team_trajectories(team, n_trajectories, trajectory_length,
                                           init_feats, model, select, horizon, selection, threshold,
                                           processes, seed, verbose, use_tqdm)
+
+    def generate_expert_learner_trajectories(self, expert_team: List[Agent], learner_team: List[Agent],
+                                             trajectory_length: int, n_trajectories: int = 1,
+                                             init_feats: Optional[Dict[str, Any]] = None,
+                                             model: Optional[str] = None, select: bool = True,
+                                             selection: Optional[
+                                                 Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                             horizon: Optional[int] = None, threshold: Optional[float] = None,
+                                             processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
+                                             use_tqdm: bool = True) -> List[TeamTrajectory]:
+        assert len(expert_team) > 0, 'No agent in the team'
+        assert len(learner_team) > 0, 'No agent in the team'
+
+        x, y = self.get_location_features(expert_team[0])
+        # if not specified, set random values for x, y pos
+        if init_feats is None:
+            init_feats = {}
+        if x not in init_feats:
+            init_feats[x] = None
+        if y not in init_feats:
+            init_feats[y] = None
+
+        # generate trajectories starting from random locations in the property gridworld
+        return generate_expert_learner_trajectories(expert_team, learner_team, n_trajectories, trajectory_length,
+                                                    init_feats, model, select, horizon, selection, threshold,
+                                                    processes, seed, verbose, use_tqdm)
 
     def play_team_trajectories(self, team_trajectories: List[TeamTrajectory],
                                team: List[Agent],

@@ -81,7 +81,7 @@ if __name__ == '__main__':
     #                if key not in {rewardKey(agent.name), modelKey(observer.name)}]
 
     # get the canonical name of the "true" agent model
-    true_model = get_true_model_name(agent)
+    true_model = agent.get_true_model()
 
     # agent's models
     agent.addModel(MIDDLE_LOC_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
@@ -92,25 +92,25 @@ if __name__ == '__main__':
     agent.setReward(maximizeFeature(y, agent.name), 1., MAXIMIZE_LOC_MODEL)
 
     if INCLUDE_RANDOM_MODEL:
-        RANDOM_MODEL = agent.zero_level(sample=True)
-        # agent.addModel(RANDOM_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
-        # agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
+        # RANDOM_MODEL = agent.zero_level(sample=True)
+        agent.addModel(RANDOM_MODEL, parent=true_model, rationality=MODEL_RATIONALITY, selection=MODEL_SELECTION)
+        agent.setReward(makeTree(setToConstantMatrix(rewardKey(agent.name), 0)), model=RANDOM_MODEL)
 
     model_names = [name for name in agent.models.keys() if name != true_model]
-
-    # for name in model_names:
-    #     agent.resetBelief(model=name, ignore={modelKey(observer.name)})
 
     # observer has uniform prior distribution over possible agent models
     world.setMentalModel(observer.name, agent.name,
                          Distribution({name: 1. / (len(agent.models) - 1) for name in model_names}))
+
+    # agent models ignore the observer
+    agent.ignore(observer.name)
+    for model in model_names:
+        agent.setAttribute('beliefs', True, model=model)
+        agent.ignore(observer.name, model=model)
+
+    # observer does not observe agent's true model
     observer.set_observations()
-    observer.setBelief(actionKey(agent.name))
-    # observer sees everything except true models
-    # observer.omega = [key for key in world.state.keys()
-                      # if key not in {modelKey(agent.name), modelKey(observer.name)}]  # rewardKey(agent.name),
-    # observer.omega = [key for key in world.state.keys()
-    #                   if key not in {modelKey(agent.name)}]  # rewardKey(agent.name),
+
     # generates trajectory
     logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
     x, y = env.get_location_features(agent)
