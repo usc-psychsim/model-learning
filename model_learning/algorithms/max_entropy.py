@@ -117,7 +117,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         initial_states = [t[0].world.state for t in trajectories]  # initial states for fc estimation
         world = copy_world(trajectories[0][0].world)
         agent = world.agents[self.agent_name]
-        old_rationality = agent.getAtrribute('rationality')
+        old_rationality = agent.getAttribute('rationality', model=agent.get_true_model())
         agent.setAttribute('rationality', 1.)
         traj_len = len(trajectories[0])
 
