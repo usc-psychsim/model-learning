@@ -100,13 +100,12 @@ if __name__ == '__main__':
         if ag_i == 0:
             # weights = np.array([1, 1, 1, 1, 1])  # feature random reward
             # weights = np.array([0, 0, 0, 0, 0])  # random reward
-            # weights = np.array([0.2,    0.181,  0.1814, 0.4105, 0.0271])  # IRL
-            weights = np.array([0.2, 0.181, 0.1814, 0.0105, 0.0271])  # IRL
-            # weights = np.array([0.129, 0.129, 0.645, 0.032, 0.065])  # gt
+            weights = np.array([0.0184, 0.0992, 0.1805, 0.6931, 0.0088])  # IRL
+            # weights = np.array([0.1176, 0.1765, 0.5882, 0.0588, 0.0588])  # gt
         else:
             # weights = np.array([1, 1, 1])  # feature random reward
             # weights = np.array([0, 0, 0])  # random reward
-            weights = np.array([0.4567, 0.2724, 0.2709])  # IRL
+            weights = np.array([0.0827, 0.2838, 0.6335])  # IRL
             # weights = np.array([0.25, 0.25, 0.5])  # gt
         agent_lrv.rwd_weights = np.array(weights) / np.linalg.norm(weights, 1)
         # agent_lrv.rwd_weights = weights
@@ -159,7 +158,7 @@ if __name__ == '__main__':
 
                 feature_func = lambda s: team_rwd[ag_i].get_values(s)
                 empirical_fc = expected_feature_counts(agent_trajs, feature_func)
-                print(empirical_fc)
+                print('Empirical:', empirical_fc)
 
                 initial_states = [t[0].world.state for t in agent_trajs]  # initial states for fc estimation
                 learner_world = copy_world(learner_team[ag_i].world)
@@ -172,7 +171,7 @@ if __name__ == '__main__':
                                                       horizon=HORIZON, threshold=PRUNE_THRESHOLD,
                                                       processes=PROCESSES, seed=ENV_SEED,
                                                       verbose=False, use_tqdm=True)
-                print(expected_fc)
+                print('Estimated:', expected_fc)
                 diff = empirical_fc - expected_fc
                 print(agent.name)
                 print(f'Feature count different:', diff, f'={np.sum(np.abs(diff))}')

@@ -39,17 +39,17 @@ AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 EXPERT_RATIONALITY = 1/0.1  # inverse temperature
 EXPERT_ACT_SELECTION = 'random'
 EXPERT_SEED = 17
-NUM_TRAJECTORIES = 32 #3
+NUM_TRAJECTORIES = 16 #3
 TRAJ_LENGTH = 25
 
 # learning params
 NORM_THETA = True
-LEARNING_RATE = 1e-1  # 0.05
+TEAM_LEARNING_RATE = [5e-2, 1e-1]  # 0.05
 MAX_EPOCHS = 100
 THRESHOLD = 5e-3
 DECREASE_RATE = True
 EXACT = False
-NUM_MC_TRAJECTORIES = 32 #10
+NUM_MC_TRAJECTORIES = 16 #10
 LEARNING_SEED = 17
 
 # common params
@@ -144,6 +144,7 @@ if __name__ == '__main__':
                 agent_trajs.append(agent_traj)
             team_trajs.append(agent_trajs)
 
+            LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
             alg = MaxEntRewardLearning(
                 'max-ent', agent.name, rwd_vector,
                 processes=PROCESSES,
