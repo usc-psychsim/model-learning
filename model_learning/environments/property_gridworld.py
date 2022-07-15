@@ -549,14 +549,15 @@ class PropertyGridWorld(GridWorld):
         assert len(expert_team) > 0, 'No agent in the team'
         assert len(learner_team) > 0, 'No agent in the team'
 
-        x, y = self.get_location_features(expert_team[0])
         # if not specified, set random values for x, y pos
         if init_feats is None:
             init_feats = {}
-        if x not in init_feats:
-            init_feats[x] = None
-        if y not in init_feats:
-            init_feats[y] = None
+        for agent in expert_team:
+            x, y = self.get_location_features(agent)
+            if x not in init_feats:
+                init_feats[x] = None
+            if y not in init_feats:
+                init_feats[y] = None
 
         # generate trajectories starting from random locations in the property gridworld
         return generate_expert_learner_trajectories(expert_team, learner_team, n_trajectories, trajectory_length,
