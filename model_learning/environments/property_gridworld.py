@@ -528,14 +528,15 @@ class PropertyGridWorld(GridWorld):
                                    use_tqdm: bool = True) -> List[TeamTrajectory]:
         assert len(team) > 0, 'No agent in the team'
 
-        x, y = self.get_location_features(team[0])
         # if not specified, set random values for x, y pos
         if init_feats is None:
             init_feats = {}
-        if x not in init_feats:
-            init_feats[x] = None
-        if y not in init_feats:
-            init_feats[y] = None
+        for agent in team:
+            x, y = self.get_location_features(agent)
+            if x not in init_feats:
+                init_feats[x] = None
+            if y not in init_feats:
+                init_feats[y] = None
         # generate trajectories starting from random locations in the property gridworld
         return generate_team_trajectories(team, n_trajectories, trajectory_length,
                                           init_feats, model, select, horizon, selection, threshold,
