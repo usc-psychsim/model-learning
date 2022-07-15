@@ -1,17 +1,16 @@
 import os
 import logging
 import numpy as np
-from model_learning.inference import track_reward_model_inference
-from model_learning.util.plot import plot_evolution
-from model_learning import StateActionPair
+from typing import List, Dict, Tuple
+from psychsim.agent import Agent
 from psychsim.probability import Distribution
+from psychsim.pwl import modelKey
 from psychsim.world import World
+from model_learning import StateActionPair, TeamTrajectory, Trajectory
 from model_learning.environments.property_gridworld import PropertyGridWorld
-from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey, actionKey, \
-    makeTree, equalRow, incrementMatrix, stateKey, WORLD, MODEL, ACTION, rewardKey, KeyedPlane, KeyedVector
-from psychsim.reward import maximizeFeature
-from model_learning.util.io import create_clear_dir
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
+from model_learning.trajectory import copy_world
+from model_learning.util.io import create_clear_dir
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -34,7 +33,7 @@ NUM_EXIST = 3
 
 TEAM_AGENTS = ['Goal', 'Navigator']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
-MODEL_ROLES = ['Self', 'Uniform', 'Random']
+MODEL_ROLES = ['Self', 'Uniform']  # TODO, 'Random']
 OBSERVER_NAME = 'observer'
 
 HORIZON = 2  # 0 for random actions
@@ -50,11 +49,9 @@ PROCESSES = -1
 DEBUG = 0
 np.set_printoptions(precision=3)
 
-NUM_STEPS = TRAJ_LENGTH
 RANDOM_MODEL = 'zero_rwd'
-MODEL_RATIONALITY = .5
-
-# MODEL_SELECTION = 'distribution'  # TODO 'consistent' or 'random' gives an error
+MODEL_RATIONALITY = 1  # .5
+MODEL_SELECTION = 'distribution'  # 'random'  # 'distribution'
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/reward-model-multiagent')
 SHOW = True
@@ -63,14 +60,6 @@ INCLUDE_RANDOM_MODEL = True
 
 def _get_fancy_name(name):
     return name.title().replace('_', ' ')
-
-
-from typing import List, Dict, Tuple, Any
-from model_learning import StateActionPair, TeamTrajectory, TeamStateActionPair, Trajectory
-from model_learning.trajectory import copy_world
-import copy
-from psychsim.agent import Agent
-from psychsim.world import VectorDistributionSet
 
 
 def _get_belief(world: World, feature: str, ag: Agent, model: str = None) -> Distribution:
@@ -95,6 +84,7 @@ def agent_trajectories_in_team(team_trajs: List[TeamTrajectory]) -> Tuple[Dict[s
         for agent_name in agent_names:
             all_agent_trajs[agent_name].append(agent_traj[agent_name])
     return all_agent_trajs, len(team_trajs), len(team_trajs[0])
+
 
 '''
 def set_observer_agent_models(env: PropertyGridWorld,
@@ -139,71 +129,74 @@ def set_observer_agent_models(env: PropertyGridWorld,
 '''
 
 
-def generate_model_distribution(env: PropertyGridWorld,
+def generate_model_distribution(world: World,
+                                env: PropertyGridWorld,
                                 team: List[AgentRoles],
-                                observer: Agent,
-                                team_trajectories: List[TeamTrajectory]
-                                ) -> List[TeamTrajectory]:
-    # add agent models
-    for ag_i, agent in enumerate(team):
-        true_model = agent.get_true_model()
-        for model_name in MODEL_ROLES:
-            agent.addModel(model_name, parent=true_model)
-            rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
-            agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights, model=model_name)
-            if model_name == 'Uniform':
-                agent_lrv.rwd_weights = [1] * len(agent_lrv.rwd_weights)
-                agent_lrv.rwd_weights = np.array(agent_lrv.rwd_weights) / np.linalg.norm(agent_lrv.rwd_weights, 1)
-            if model_name == 'Random':
-                agent_lrv.rwd_weights = [0] * len(agent_lrv.rwd_weights)
-
-            agent_lrv.set_rewards(agent, agent_lrv.rwd_weights, model=model_name)
-            print(agent.name, model_name, agent_lrv.names, agent_lrv.rwd_weights)
-
-        model_names = [name for name in agent.models.keys() if name != true_model]
-        # dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
-        # env.world.setMentalModel(observer.name, agent.name, dist)
-
-        agent.ignore(observer.name)
-        for model in model_names:
-            agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
-            agent.setAttribute('selection', 'distribution', model=model)  # also set selection to distribution
-            agent.setAttribute('beliefs', True, model=model)
-            agent.ignore(observer.name, model=model)
-
+                                team_trajectories: List[TeamTrajectory]) -> List[TeamTrajectory]:
+    # perform inference for each trajectory
     n_traj = len(team_trajectories)
     n_step = len(team_trajectories[0])
     initial_states = [t[0].world.state for t in team_trajectories]
-    for traj_i in range(n_traj):
+    for traj_i in range(n_traj):  # TODO parallelize this
+
         # reset to initial state and uniform dist of models
-        world = copy_world(env.world)
-        world.state = initial_states[traj_i]
-        for ag_i, agent in enumerate(team):
-            agent = world.agents[agent.name]
+        _world = copy_world(world)
+        _world.state = initial_states[traj_i]
+        observer = _world.addAgent(OBSERVER_NAME)  # create observer
+        _team = [_world.agents[agent.name] for agent in team]  # get new world's agents
+
+        # add agent models
+        for ag_i, agent in enumerate(_team):
             true_model = agent.get_true_model()
+            for model_name in MODEL_ROLES:
+                model_name = f'{agent.name}_{model_name}'
+                agent.addModel(model_name, parent=true_model)
+                rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
+                agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights, model=model_name)
+                if model_name == 'Uniform':
+                    agent_lrv.rwd_weights = [1] * len(agent_lrv.rwd_weights)
+                    agent_lrv.rwd_weights = np.array(agent_lrv.rwd_weights) / np.linalg.norm(agent_lrv.rwd_weights, 1)
+                if model_name == 'Random':
+                    agent_lrv.rwd_weights = [0] * len(agent_lrv.rwd_weights)
+
+                agent_lrv.set_rewards(agent, agent_lrv.rwd_weights, model=model_name)
+                print(agent.name, model_name, agent_lrv.names, agent_lrv.rwd_weights)
+
             model_names = [name for name in agent.models.keys() if name != true_model]
-            print(model_names)
             dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
-            world.setMentalModel(observer.name, agent.name, dist)
+            _world.setMentalModel(observer.name, agent.name, dist)
+
+            # ignore observer
+            agent.ignore(observer.name)
+            for model in model_names:
+                agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
+                agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
+                agent.setAttribute('beliefs', True, model=model)
+                agent.ignore(observer.name, model=model)
 
             agent_model = modelKey(agent.name)
             x, y = env.get_location_features(agent)
-            init_x = world.getFeature(x, state=initial_states[traj_i], unique=True)
-            init_y = world.getFeature(y, state=initial_states[traj_i], unique=True)
-            print(f'Initial loc: x:{init_x}, y:{init_y}')
-            print(f'Initial belief about Agent {agent.name} model:\n{_get_belief(world, agent_model, observer)}')
+            init_x = _world.getFeature(x, unique=True)
+            init_y = _world.getFeature(y, unique=True)
+            print(f'{agent.name} initial loc: x:{init_x}, y:{init_y}')
+            print(f'Observer initial belief about {agent.name} model:\n{_get_belief(_world, agent_model, observer)}')
 
+        # observer does not observe agents' true models
         observer.set_observations()
+
+        _world.dependency.getEvaluation()
 
         for step_i in range(n_step):
             team_action = team_trajectories[traj_i][step_i].action
-            team_action = {agent.name: team_action[agent.name].first() for agent in team}
-            env.world.step(state=world.state, actions=team_action)
+            team_action = {agent.name: team_action[agent.name].first() for agent in _team}
+            _world.step(actions=team_action)
 
+            print('====================')
+            print(f'Step {step_i}:')
 
-            for ag_i, agent in enumerate(team):
+            for ag_i, agent in enumerate(_team):
                 agent_model = modelKey(agent.name)
-                print(f'Belief about Agent {agent.name} model:\n{_get_belief(world, agent_model, observer)}')
+                print(f'Belief about Agent {agent.name} model:\n{_get_belief(_world, agent_model, observer)}')
 
     return None
 
@@ -215,9 +208,8 @@ if __name__ == '__main__':
     # create output
     create_clear_dir(OUTPUT_DIR)
 
-    # create world, agent and observer
+    # create world
     world = World()
-    observer = world.addAgent(OBSERVER_NAME)
     env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
 
@@ -248,12 +240,9 @@ if __name__ == '__main__':
     world.setOrder([{agent.name for agent in team}])
     world.dependency.getEvaluation()
 
-    # for ag_i, agent in enumerate(team):
-    #     agent.ignore(observer.name)
-
     team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
                                                        horizon=HORIZON, selection=ACT_SELECTION,
                                                        processes=PROCESSES,
                                                        threshold=1e-2, seed=ENV_SEED)
     print(team_trajectories)
-    model_dist = generate_model_distribution(env, team, observer, team_trajectories)
+    model_dist = generate_model_distribution(world, env, team, team_trajectories)
