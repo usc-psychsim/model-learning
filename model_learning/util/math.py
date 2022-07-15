@@ -612,7 +612,7 @@ def finite_diff(y: np.ndarray,
                 (fd_type == 'forward' and idx > len(y) - num_coef))
 
     # check uniformity of space
-    dy_dx = np.full_like(y, default_value)
+    dy_dx = np.full_like(y, default_value, dtype=np.float64)
     if isinstance(x, np.ndarray):
         # non-uniform grid, diff coefficients for each index
         for idx in range(len(y)):
