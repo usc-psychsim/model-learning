@@ -84,9 +84,10 @@ class AgentRoles(Agent):
             reward_features.append(r_d2c)
             rf_weights.append(0.2 * self.roles['Goal'])
 
-            # r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
-            # reward_features.append(r_goal)
-            # rf_weights.append(self.roles['Goal'])
+            # if self.track_feature:
+            #     r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
+            #     reward_features.append(r_goal)
+            #     rf_weights.append(self.roles['Goal'])
 
             rescue_action = self.find_action({'action': 'rescue'})
             r_rescue = ActionLinearRewardFeature('rescue', self, rescue_action)
@@ -101,7 +102,7 @@ class AgentRoles(Agent):
             nowhere_action = self.find_action({'action': 'nowhere'})
             r_nowhere = ActionLinearRewardFeature('nowhere', self, nowhere_action)
             reward_features.append(r_nowhere)
-            rf_weights.append(0.05 * self.roles['Goal'])
+            rf_weights.append(0.1 * self.roles['Goal'])
 
             call_action = self.find_action({'action': 'call'})
             r_call = ActionLinearRewardFeature('call', self, call_action)
@@ -129,10 +130,11 @@ class AgentRoles(Agent):
             reward_features.append(r_search)
             rf_weights.append(self.roles['Navigator'])
 
-            # f = env.get_navi_features(self)
-            # r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
-            # reward_features.append(r_navi)
-            # rf_weights.append(self.roles['Navigator'])
+            # if env.track_feature:
+            #     f = env.get_navi_features(self)
+            #     r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
+            #     reward_features.append(r_navi)
+            #     rf_weights.append(self.roles['Navigator'])
 
             evacuate_action = self.find_action({'action': 'evacuate'})
             r_evacuate = ActionLinearRewardFeature('evacuate', self, evacuate_action)

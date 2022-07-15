@@ -62,10 +62,11 @@ def get_goal_features() -> str:
 class PropertyGridWorld(GridWorld):
 
     def __init__(self, world: World, width: int, height: int, num_exist: int,
-                 name: str = '', seed: int = 0, show_objects: bool = True):
+                 name: str = '', track_feature: bool = False, seed: int = 0, show_objects: bool = True):
         super().__init__(world, width, height, name)
 
         self.num_exist = num_exist
+        self.track_feature = track_feature
         self.seed = seed
         rng = np.random.RandomState(self.seed)
 
@@ -103,7 +104,7 @@ class PropertyGridWorld(GridWorld):
                 self.clear_counter[i] = sum([v == 1 for v in clear_status.values()])
                 if len(locs) > 0:
                     self.dist_to_clear[i][loc_i] = 1 - self.dist_to_closest_loc(loc_i, locs)
-        print(self.dist_to_clear)
+        # print(self.dist_to_clear)
         # print(self.clear_counter)
 
         self.dist_to_help = {}
@@ -112,7 +113,7 @@ class PropertyGridWorld(GridWorld):
             if loc > -1:
                 for loc_i in range(self.width * self.height):
                     self.dist_to_help[loc][loc_i] = 1 - self.dist_to_closest_loc(loc_i, [loc])
-        print(self.dist_to_help)
+        # print(self.dist_to_help)
 
 
         self.n_ci = 2 ** self.num_exist
@@ -124,9 +125,10 @@ class PropertyGridWorld(GridWorld):
                                         description=f'MARK: which location needs help')
         self.world.setFeature(self.m, -1)
 
-        self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
-                                        description=f'GOAL: # of cleared locations')
-        self.world.setFeature(self.g, 0)
+        if self.track_feature:
+            self.g = self.world.defineState(WORLD, GOAL_FEATURE, int, 0, len(self.exist_locations),
+                                            description=f'GOAL: # of cleared locations')
+            self.world.setFeature(self.g, 0)
 
     def dist_to_closest_loc(self, curr_loc, locs):
         locs = set(locs)
@@ -200,10 +202,9 @@ class PropertyGridWorld(GridWorld):
         if not idle:
             self.remove_action(agent, 'nowhere')
         else:
-            pass
-            # action = agent.find_action({'action': 'nowhere'})
-            # legal_dict = {'if': equalRow(self.g, self.num_exist), True: True, False: False}
-            # agent.setLegal(action, makeTree(legal_dict))
+            action = agent.find_action({'action': 'nowhere'})
+            legal_dict = {'if': equalRow(self.ci, self.n_ci - 1), True: True, False: False}
+            agent.setLegal(action, makeTree(legal_dict))
 
         d2c = self.world.defineState(agent.name, DISTANCE2CLEAR_FEATURE + self.name,
                                      float, 0, 1,
@@ -301,15 +302,16 @@ class PropertyGridWorld(GridWorld):
             self.world.setDynamics(p_loc, action, makeTree(search_tree))
 
         # update NAVI_FEATURE
-        f = self.world.defineState(agent.name, NAVI_FEATURE + self.name, int, 0, len(self.non_exist_locations),
-                                   description=f'Navigator: # of empty locations')
-        self.world.setFeature(f, 0)
-        for loc_i in self.non_exist_locations:
-            p_loc = self.p_state[loc_i]
-            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 4, 0),
-                         True: incrementMatrix(f, 1),
-                         False: noChangeMatrix(f)}
-            self.world.setDynamics(f, action, makeTree(tree_dict))
+        if self.track_feature:
+            f = self.world.defineState(agent.name, NAVI_FEATURE + self.name, int, 0, len(self.non_exist_locations),
+                                       description=f'Navigator: # of empty locations')
+            self.world.setFeature(f, 0)
+            for loc_i in self.non_exist_locations:
+                p_loc = self.p_state[loc_i]
+                tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 4, 0),
+                             True: incrementMatrix(f, 1),
+                             False: noChangeMatrix(f)}
+                self.world.setDynamics(f, action, makeTree(tree_dict))
 
         action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
@@ -402,20 +404,13 @@ class PropertyGridWorld(GridWorld):
             self.world.setDynamics(self.ci, action_list[i], makeTree(ci_dict))
 
             # update GOAL_FEATURE
-            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), list(range(self.n_ci)), 0)}
-            for k in range(self.n_ci):
-                tree_dict[k] = setToConstantMatrix(self.g, self.clear_counter[k])
-            tree_dict[None] = noChangeMatrix(self.g)
-            self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
+            if self.track_feature:
+                tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), list(range(self.n_ci)), 0)}
+                for k in range(self.n_ci):
+                    tree_dict[k] = setToConstantMatrix(self.g, self.clear_counter[k])
+                tree_dict[None] = noChangeMatrix(self.g)
+                self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
 
-            # for loc_i in self.exist_locations:
-            #     p_loc = self.p_state[loc_i]
-            #     print(p_loc)
-            #     tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 3, 0),
-            #                  True: incrementMatrix(self.g, 1.0 / len(agents)),
-            #                  False: noChangeMatrix(self.g)}
-            #     print(tree_dict)
-            #     self.world.setDynamics(self.g, action_list[i], makeTree(tree_dict))
             d2c = self.get_d2c_feature(agents[i])
             ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), self.n_ci - 1, 0)}
             ci_dict[True] =\
