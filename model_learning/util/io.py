@@ -18,6 +18,7 @@ class _NpEncoder(json.JSONEncoder):
     Supports encoding of numpy data types.
     See: https://stackoverflow.com/a/57915246/16031961
     """
+
     def default(self, obj):
         if isinstance(obj, np.integer):
             return int(obj)
@@ -28,16 +29,19 @@ class _NpEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def get_file_changed_extension(file_path: str, ext: str) -> str:
+def get_file_changed_extension(file_path: str, ext: str, prefix: str = '', suffix: str = '') -> str:
     """
     Changes the extension of the given file.
     :param str file_path: the path to the file.
     :param str ext: the new file extension.
+    :param str prefix: the prefix to add to the resulting file name.
+    :param str suffix: the suffix to add to the resulting file name.
     :rtype: str
     :return: the file path with the new extension.
     """
+    ext = ext.replace('.', '')
     return os.path.join(os.path.dirname(file_path),
-                        '{}.{}'.format(get_file_name_without_extension(file_path), ext.replace('.', '')))
+                        f'{prefix}{get_file_name_without_extension(file_path)}{suffix}.{ext}')
 
 
 def get_file_name_without_extension(file_path: str) -> str:
