@@ -1,4 +1,6 @@
 import random
+import time
+
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -54,13 +56,11 @@ if __name__ == '__main__':
         tree = makeTree(incrementMatrix(loc, 1))
         world.setDynamics(loc, action, tree)
 
-        # define true reward (maximize loc)
+        # define true reward (1 maximize loc 2 minimize loc)
         if ag_i == 0:
             agent.setReward(maximizeFeature(loc, agent.name), 1)
         else:
             agent.setReward(minimizeFeature(loc, agent.name), 1)
-
-        world.setOrder([{agent.name}])
 
         # add agent models (prefer positive vs negative location vs random agent)
         true_model = agent.get_true_model()
@@ -79,6 +79,7 @@ if __name__ == '__main__':
         # null_model = agent.zero_level(sample=True)  # TODO this seems to lead to a leak into the agent's true model?
         team.append(agent)
 
+    world.setOrder([{agent.name for agent in team}])
     # create observer (no actions)
     observer = world.addAgent(OBSERVER_NAME)
     for agent in team:
@@ -94,6 +95,7 @@ if __name__ == '__main__':
             # make models less rational to get smoother (more cautious) inference
             agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
             agent.setAttribute('selection', 'distribution', model=model)  # also set selection to distribution
+            agent.setAttribute('horizon', HORIZON, model=model)
             agent.setAttribute('beliefs', True, model=model)
             agent.ignore(observer.name, model=model)
 
@@ -107,11 +109,15 @@ if __name__ == '__main__':
         print(f'Initial {agent.name} loc: {world.getFeature(loc)}')
         print(f'Initial belief about {agent.name}\'s model:\n{_get_belief(agent_model, observer)}')
 
+    start_time = time.time()
     for i in range(MAX_STEPS):
         print('====================================')
+        print('Step:', i)
         step = world.step()
         for agent in team:
             agent_model = modelKey(agent.name)
             loc = stateKey(agent.name, 'location')
             print(f'Current {agent.name} loc: {world.getFeature(loc)}')
             print(f'Updated belief about {agent.name}\'s model:\n{_get_belief(agent_model, observer)}')
+        print(f'Time spent: {time.time()-start_time: .2f}s')
+        start_time = time.time()

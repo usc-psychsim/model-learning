@@ -17,6 +17,7 @@ from model_learning.environments.gridworld import GridWorld
 from model_learning import Trajectory, TeamTrajectory
 from model_learning.trajectory import generate_team_trajectories, generate_expert_learner_trajectories
 from model_learning.util.plot import distinct_colors
+from model_learning.features.linear import *
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -673,3 +674,82 @@ class PropertyGridWorld(GridWorld):
             anim = FuncAnimation(fig, update, len(team_traj))
             out_file = os.path.join(file_name, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_exist}.gif')
             anim.save(out_file, dpi=300, fps=1, writer='pillow')
+
+    def get_role_reward_vector(self, agent: Agent, roles: Dict[str, float] = None):
+        reward_features = []
+        rf_weights = []
+
+        if roles is None:
+            nowhere_action = agent.find_action({'action': 'nowhere'})
+            r_nowhere = ActionLinearRewardFeature('nowhere', agent, nowhere_action)
+            reward_features.append(r_nowhere)
+            rf_weights.append(1)
+            return reward_features, rf_weights
+
+        if 'Goal' in roles:  # scale -1 to 1
+            d2c = self.get_d2c_feature(agent)
+            r_d2c = NumericLinearRewardFeature(DISTANCE2CLEAR_FEATURE, d2c)
+            reward_features.append(r_d2c)
+            rf_weights.append(0.2 * roles['Goal'])
+
+            # if self.track_feature:
+            #     r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
+            #     reward_features.append(r_goal)
+            #     rf_weights.append(self.roles['Goal'])
+
+            rescue_action = agent.find_action({'action': 'rescue'})
+            r_rescue = ActionLinearRewardFeature('rescue', agent, rescue_action)
+            reward_features.append(r_rescue)
+            rf_weights.append(0.3 * roles['Goal'])
+
+            evacuate_action = agent.find_action({'action': 'evacuate'})
+            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
+            reward_features.append(r_evacuate)
+            rf_weights.append(roles['Goal'])
+
+            nowhere_action = agent.find_action({'action': 'nowhere'})
+            r_nowhere = ActionLinearRewardFeature('nowhere', agent, nowhere_action)
+            reward_features.append(r_nowhere)
+            rf_weights.append(0.1 * roles['Goal'])
+
+            call_action = agent.find_action({'action': 'call'})
+            r_call = ActionLinearRewardFeature('call', agent, call_action)
+            reward_features.append(r_call)
+            rf_weights.append(0.1 * roles['Goal'])
+
+            for act in {'right', 'left', 'up', 'down', 'nowhere', 'search', 'rescue', 'evacuate'}:
+                action = agent.find_action({'action': act})
+                self.world.setDynamics(self.m, action, makeTree(setToConstantMatrix(self.m, -1)))
+
+            # for move in MOVEMENT:
+            #     move_action = self.find_action({'action': move})
+            #     r_move = ActionLinearRewardFeature(move, self, move_action)
+            #     reward_features.append(r_move)
+            #     rf_weights.append(-0.01 * self.roles['Goal'])
+
+        if 'Navigator' in roles:
+            d2h = self.get_d2h_feature(agent)
+            r_d2h = NumericLinearRewardFeature(DISTANCE2HELP_FEATURE, d2h)
+            reward_features.append(r_d2h)
+            rf_weights.append(roles['Navigator'])
+
+            search_action = agent.find_action({'action': 'search'})
+            r_search = ActionLinearRewardFeature('search', agent, search_action)
+            reward_features.append(r_search)
+            rf_weights.append(roles['Navigator'])
+
+            # if env.track_feature:
+            #     f = env.get_navi_features(self)
+            #     r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
+            #     reward_features.append(r_navi)
+            #     rf_weights.append(self.roles['Navigator'])
+
+            evacuate_action = agent.find_action({'action': 'evacuate'})
+            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
+            reward_features.append(r_evacuate)
+            rf_weights.append(2 * roles['Navigator'])
+
+            self.remove_action(agent, 'nowhere')
+            self.remove_action(agent, 'call')
+
+        return reward_features, rf_weights

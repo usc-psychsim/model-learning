@@ -1,4 +1,3 @@
-from model_learning.features.linear import *
 from model_learning.environments.property_gridworld import *
 
 GOAL_FEATURE = 'g'
@@ -6,7 +5,7 @@ NAVI_FEATURE = 'f'
 VISIT_FEATURE = 'v'
 MOVEMENT = ['right', 'left', 'up', 'down']
 
-
+# use this or property-action pair reward
 class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
     """
     Represents a reward feature that returns `1` under a property-action pair and `0` otherwise.
@@ -64,6 +63,7 @@ class PropertyActionComparisonLinearRewardFeature(LinearRewardFeature):
         agent.setReward(makeTree(property_action_tree), weight * self.normalize_factor, model)
 
 
+# moved to property_gridworld, using regular Agent class
 class AgentRoles(Agent):
     """
     setup agent roles and the corresponding reward features
@@ -172,6 +172,7 @@ class AgentRoles(Agent):
         return reward_features, rf_weights
 
 
+# moved to property_gridworld, using regular LinearRewardVector class
 class AgentLinearRewardVector(LinearRewardVector):
     """
     same as LinearRewardVector now, automatically set reward
@@ -182,7 +183,7 @@ class AgentLinearRewardVector(LinearRewardVector):
         super().__init__(rf)
         self.rwd_features = rf
         self.rwd_weights = weights
-        self.set_rewards(agent, weights, model)
+        # self.set_rewards(agent, weights, model)
 
     # def set_rewards(self, agent: Agent, weights: np.ndarray, model: Optional[str] = None):
     #
