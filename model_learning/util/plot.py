@@ -14,7 +14,7 @@ __email__ = 'pedrodbs@gmail.com'
 TITLE_FONT_SIZE = 12
 
 
-def plot_evolution(data, labels, title, colors=None, output_img=None, x_label='', y_label='', show=False):
+def plot_evolution(data, labels, title, colors=None, output_img=None, x_label='', y_label='', show=False, y_lim=None):
     """
     Plots the given data, assumed to be a collection of variables evolving over time.
     :param np.ndarray data: the data to be plotted, in the shape (num_variables, time).
@@ -26,6 +26,7 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
     :param str x_label: the label of the X axis.
     :param str y_label: the label of the Y axis.
     :param bool show: whether to show the plot on the screen.
+    :param list y_lim: set lim of the Y axis
     :return:
     """
     assert len(labels) == data.shape[0], 'Number of given labels does not match data size!'
@@ -47,7 +48,13 @@ def plot_evolution(data, labels, title, colors=None, output_img=None, x_label=''
         plt.plot(data[i], label=labels[i], color=colors[i])
 
     plt.xlim([0, data.shape[1] - 1])
-    format_and_save_plot(plt.gca(), title, output_img, x_label, y_label, data.shape[0] > 1, True, show)
+    if y_lim is not None:
+        plt.ylim(y_lim)
+    if labels.count(labels[0]) == len(labels):
+        show_legend = False
+    else:
+        show_legend = True
+    format_and_save_plot(plt.gca(), title, output_img, x_label, y_label, show_legend, True, show)
 
 
 def plot_bar(data, title, output_img=None, colors=None, plot_mean=True, plot_error=True, x_label='', y_label='',
