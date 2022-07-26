@@ -3,18 +3,20 @@ import logging
 import numpy as np
 import string
 import pickle
+import bz2
+import time
 from typing import List, Dict, Tuple, Optional
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
 from psychsim.world import World
-from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateActionModelTuple
+from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateActionModelTuple,\
+    StateinfoActionModelTuple, TeamStateinfoActionModelTuple
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.trajectory import copy_world
 from model_learning.util.io import create_clear_dir
 from model_learning.features.linear import LinearRewardVector
 from model_learning.util.mp import run_parallel
-import copy
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -47,17 +49,18 @@ RATIONALITY = 1 / 0.1
 
 # common params
 
-NUM_TRAJECTORIES = 16  # 10
+NUM_TRAJECTORIES = 32  # 10
 TRAJ_LENGTH = 25  # 30
 PROCESSES = -1
 DEBUG = 0
 np.set_printoptions(precision=3)
 
 RANDOM_MODEL = 'zero_rwd'
-MODEL_RATIONALITY = 10  # .5
+MODEL_RATIONALITY = 5  # .5
 MODEL_SELECTION = 'distribution'  # 'random'  # 'distribution'
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/reward-model-multiagent')
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}_base.pkl')
 SHOW = True
 INCLUDE_RANDOM_MODEL = True
 
@@ -90,7 +93,6 @@ def agent_trajectories_in_team(team_trajs: List[TeamTrajectory]) -> Tuple[Dict[s
     return all_agent_trajs, len(team_trajs), len(team_trajs[0])
 
 
-# world, env, team, team_trajectories, n_step, initial_states
 def generate_trajectory_model_distribution(world: World,
                                            env: PropertyGridWorld,
                                            team: List[Agent],
@@ -163,7 +165,7 @@ def generate_trajectory_model_distribution(world: World,
         prob = team_trajs[traj_i][step_i].prob
         team_action = {agent.name: team_action[agent.name].first() for agent in _team}
         [print(a) for a in team_action.values()]
-        team_trajectory.append(TeamStateActionModelTuple(copy_world(_world), team_action, model_dist, prob))
+        team_trajectory.append(TeamStateinfoActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
 
         if step_i == n_step - 1:
             break
@@ -265,7 +267,7 @@ def _generate_trajectories_model_distribution(world: World,
                 team_action = {agent.name: team_action[agent.name].first() for agent in _team}
                 # print(_world.state)
                 [print(a) for a in team_action.values()]
-                team_trajectory.append(TeamStateActionModelTuple(copy_world(_world), team_action, model_dist, prob))
+                team_trajectory.append(TeamStateActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
 
                 if step_i == n_step - 1:
                     break
@@ -329,6 +331,7 @@ if __name__ == '__main__':
     world.setOrder([{agent.name for agent in team}])
     world.dependency.getEvaluation()
 
+    print(OUTPUT_FILE)
     team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
                                                        horizon=HORIZON, selection=ACT_SELECTION,
                                                        processes=PROCESSES,
@@ -336,6 +339,8 @@ if __name__ == '__main__':
     print(team_trajectories)
     team_trajs_w_model_dist = _generate_trajectories_model_distribution(world, env, team, team_trajectories,
                                                                         processes=PROCESSES)
-    f = open(os.path.join(OUTPUT_DIR, f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}.pkl'), 'wb')
+    start_time = time.time()
+    f = bz2.BZ2File(OUTPUT_FILE, 'wb')
     pickle.dump(team_trajs_w_model_dist, f)
     f.close()
+    print(f'Loading Time (s): {(time.time()-start_time):.3f}')

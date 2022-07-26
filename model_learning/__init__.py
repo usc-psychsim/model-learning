@@ -33,14 +33,31 @@ class TeamStateActionPair(object):
 
 
 class TeamStateActionModelTuple(object):
-    def __init__(self, world: World, action: Dict[str, Distribution], model_dist: Distribution, prob: float = 1.):
+    def __init__(self, world: World, action: Distribution, model_dist: Distribution, prob: float = 1.):
         self.world: World = world
+        self.action: Distribution = action
+        self.model_dist: Distribution = model_dist
+        self.prob: float = prob
+
+
+class StateinfoActionModelTuple(object):
+    def __init__(self, state: VectorDistributionSet, action: Dict[str, Distribution],
+                 model_dist: Distribution, prob: float = 1.):
+        self.world: VectorDistributionSet = state
         self.action: Dict[str, Distribution] = action
         self.model_dist: Distribution = model_dist
         self.prob: float = prob
 
 
+class TeamStateinfoActionModelTuple(object):
+    def __init__(self, state: VectorDistributionSet, action: Dict[str, Distribution],
+                 model_dist: Distribution, prob: float = 1.):
+        self.state: VectorDistributionSet = state
+        self.action: Dict[str, Distribution] = action
+        self.model_dist: Distribution = model_dist
+        self.prob: float = prob
+
 PsychSimType = Union[float, int, str]
 State = VectorDistributionSet
-Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
-TeamTrajectory = Union[List[TeamStateActionPair], List[TeamStateActionModelTuple]]
+Trajectory = Union[List[StateActionPair], List[StateinfoActionModelTuple]]  # list of state (world) - action (distribution) pairs
+TeamTrajectory = Union[List[TeamStateActionPair], List[TeamStateActionModelTuple], List[TeamStateinfoActionModelTuple]]

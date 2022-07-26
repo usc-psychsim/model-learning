@@ -128,3 +128,4 @@ tests/
 output/
 **/.DS_Store
 *.stignore
+*.ipynb
