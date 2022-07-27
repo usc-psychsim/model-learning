@@ -1,9 +1,11 @@
 import logging
 import numpy as np
+from typing import List
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
 from psychsim.pwl import modelKey
+from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -59,3 +61,24 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
             logging.info(action if len(action) > 1 else action.first())
 
     return probs
+
+
+def add_agent_models(agent: Agent, reward_vector: LinearRewardVector,
+                     reward_weights: List, model_names: List):
+    for model_name in model_names:
+        true_model = agent.get_true_model()
+        model_name = f'{agent.name}_{model_name}'
+        agent.addModel(model_name, parent=true_model)
+        agent_lrv = reward_vector
+        rwd_f_weights = reward_weights
+        if model_name == f'{agent.name}_Opposite':
+            rwd_f_weights = -1. * np.array(rwd_f_weights)
+            rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+        if model_name == f'{agent.name}_Uniform':
+            rwd_f_weights = [1] * len(rwd_f_weights)
+            rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+        if model_name == f'{agent.name}_Random':
+            rwd_f_weights = [0] * len(rwd_f_weights)
+        agent_lrv.set_rewards(agent, rwd_f_weights, model=model_name)
+        print(agent.name, model_name, agent_lrv.names, rwd_f_weights)
+    return agent

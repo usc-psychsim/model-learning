@@ -27,7 +27,10 @@ def expected_feature_counts(trajectories: List[Trajectory], feature_func: Callab
         probs = []
         for sap in trajectory:
             # gets feature values at this state weighted by its probability, shape: (num_features, )
-            fcs.append(feature_func(sap.world.state) * sap.prob)
+            if hasattr(sap, 'world'):
+                fcs.append(feature_func(sap.world.state) * sap.prob)
+            else:
+                fcs.append(feature_func(sap.state) * sap.prob)
             probs.append(sap.prob)
         t_probs.append(np.array(probs).reshape(-1, 1))  # get probs during trajectory, shape: (timesteps, 1)
         t_fcs.append(np.array(fcs))  # shape: (timesteps, num_features)

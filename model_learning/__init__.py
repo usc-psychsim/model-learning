@@ -43,7 +43,7 @@ class TeamStateActionModelTuple(object):
 class StateinfoActionModelTuple(object):
     def __init__(self, state: VectorDistributionSet, action: Dict[str, Distribution],
                  model_dist: Distribution, prob: float = 1.):
-        self.world: VectorDistributionSet = state
+        self.state: VectorDistributionSet = state
         self.action: Dict[str, Distribution] = action
         self.model_dist: Distribution = model_dist
         self.prob: float = prob
