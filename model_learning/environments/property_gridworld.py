@@ -753,3 +753,23 @@ class PropertyGridWorld(GridWorld):
             self.remove_action(agent, 'call')
 
         return reward_features, rf_weights
+
+    def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]):
+        for model_name in model_names:
+            true_model = agent.get_true_model()
+            model_name = f'{agent.name}_{model_name}'
+            agent.addModel(model_name, parent=true_model)
+            rwd_features, rwd_weights = self.get_role_reward_vector(agent, roles)
+            agent_lrv = LinearRewardVector(rwd_features)
+            rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Opposite':
+                rwd_weights = -1. * np.array(rwd_weights)
+                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Uniform':
+                rwd_weights = [1] * len(rwd_weights)
+                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Random':
+                rwd_weights = [0] * len(rwd_weights)
+            agent_lrv.set_rewards(agent, rwd_weights, model=model_name)
+            print(agent.name, model_name, agent_lrv.names, rwd_weights)
+        return agent

@@ -15,7 +15,6 @@ from psychsim.pwl import stateKey, WORLD, modelKey, turnKey
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningAlgorithm, ModelLearningResult
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.features import expected_feature_counts
-from model_learning.inference import add_agent_models
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 from model_learning.util.mp import run_parallel
@@ -43,7 +42,7 @@ NUM_EXIST = 3
 
 # expert params
 TEAM_AGENTS = ['Goal', 'Navigator']
-AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
+AGENT_ROLES = [{'Goal': 1.}, {'Navigator': 0.5}]
 MODEL_ROLES = ['Self', 'Uniform']  # TODO, 'Random']
 OBSERVER_NAME = 'observer'
 
@@ -82,169 +81,6 @@ def multi_agent_reward_learning(alg: MaxEntRewardLearning,
                                 verbose: bool) -> ModelLearningResult:
     result = alg.learn(agent_trajs, verbose=verbose)
     return result
-
-
-def generate_trajectory_with_inference(learner_agent: Agent,
-                                       reward_vector: LinearRewardVector,
-                                       reward_weights: List,
-                                       team_trajs: List[TeamTrajectory],
-                                       traj_i: int,
-                                       learner_model: Optional[str] = None,
-                                       select: Optional[bool] = None,
-                                       horizon: Optional[int] = None,
-                                       selection: Optional[
-                                           Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-                                       threshold: Optional[float] = None,
-                                       seed: int = 0,
-                                       verbose: bool = False
-                                       ) -> Trajectory:
-    random.seed(seed)
-    n_step = len(team_trajs[traj_i])
-    init_state = team_trajs[traj_i][0].state
-
-    trajectory: Trajectory = []
-    # reset to initial state and uniform dist of models
-    _world = copy_world(learner_agent.world)
-    init_state = copy.deepcopy(init_state)
-    del init_state[modelKey('observer')]
-    _world.state = init_state
-
-    team_agents = ['Goal', 'Navigator']  # TODO
-    _team = [_world.agents[agent_name] for agent_name in team_agents]  # get new world's agents
-    learner_agent = _team[team_agents.index(learner_agent.name)]
-    if learner_model is not None:
-        _world.setFeature(modelKey(learner_agent.name), learner_model)
-
-    model_roles = ['Self', 'Uniform']  # TODO
-    # add agent models
-    for ag_i, _agent in enumerate(_team):
-        if _agent.name != learner_agent.name:
-            add_agent_models(_agent, reward_vector, reward_weights, model_roles)
-            true_model = _agent.get_true_model()
-            model_names = [name for name in _agent.models.keys() if name != true_model]
-            dist = Distribution({model: 1. / (len(_agent.models) - 1) for model in model_names})
-            _world.setMentalModel(learner_agent.name, _agent.name, dist)
-
-            for model in model_names:
-                _agent.setAttribute('rationality', 10, model=model)
-                _agent.setAttribute('selection', selection, model=model)  # also set selection to distribution
-                _agent.setAttribute('horizon', horizon, model=model)
-                _agent.setAttribute('discount', 0.7, model=model)
-                # _agent.setAttribute('beliefs', False, model=model)
-
-    # learner_agent.set_observations()
-
-    _world.dependency.getEvaluation()
-
-    total = 0
-    prob = 1
-    for step_i in range(5):
-        # print('====================')
-        # print(f'Step {step_i}:')
-        start = timer()
-
-        # step the world until it's this agent's turn
-        turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
-        while turn != 0:
-            _world.step()
-            turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
-
-        prev_world = copy_world(_world)
-        prev_prob = prob
-        if select:
-            # select if state is stochastic and update probability of reaching state
-            prob *= _world.state.select()
-
-        # steps the world (do not select), gets the agent's action
-        _world.step(select=False, horizon=horizon, tiebreak=selection,
-                    threshold=threshold)  # TODO remove updateBeliefs
-        action = _world.getAction(_team[0].name)
-
-        for ag_i, _agent in enumerate(_team):
-            if _agent.name != learner_agent.name:
-                true_model = _agent.get_true_model()
-                model_names = [name for name in _agent.models.keys() if name != true_model]
-
-                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
-                learner_agent.setBelief(modelKey(_agent.name), dist)
-                # model = _world.getModel(learner_agent.name, unique=True)
-                # print(_world.getFeature(modelKey(_agent.name), state=learner_agent.getBelief(model=model)))
-
-        # print(_world.state)
-        # print(team_trajs[traj_i][step_i].action)
-        # print(action)
-        # print(_world.getAction(_team[1].name))
-        trajectory.append(StateinfoActionModelTuple(prev_world.state,
-                                                    action,
-                                                    team_trajs[traj_i][step_i].model_dist,
-                                                    prev_prob))
-
-        step_time = timer() - start
-        total += step_time
-        if verbose:
-            logging.info(f'Step {step_i} took {step_time:.2f}')
-
-    if verbose:
-        logging.info(f'Total time: {total:.2f}s')
-
-    return trajectory
-
-
-def generate_trajectories_with_inference(learner_agent: Agent,
-                                         reward_vector: LinearRewardVector,
-                                         reward_weights: List,
-                                         team_trajs: List[TeamTrajectory],
-                                         traj_i: int,
-                                         n_trajectories: int,
-                                         learner_model: Optional[str] = None,
-                                         select: Optional[bool] = None,
-                                         horizon: Optional[int] = None,
-                                         selection: Optional[
-                                             Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-                                         threshold: Optional[float] = None,
-                                         processes: int = -1,
-                                         seed: int = 0,
-                                         verbose: bool = False,
-                                         use_tqdm: bool = True
-                                         ) -> List[Trajectory]:
-    start = timer()
-    args = [(learner_agent, reward_vector, reward_weights, team_trajs, traj_i, learner_model, select,
-             horizon, selection, threshold, seed + t, verbose)
-            for t in range(n_trajectories)]
-    trajectories: List[Trajectory] = run_parallel(generate_trajectory_with_inference, args, processes=processes,
-                                                  use_tqdm=False)
-
-    if verbose:
-        logging.info(f'Total time for generating {n_trajectories} trajectories: '
-                     f'{timer() - start:.3f}s')
-
-    return trajectories
-
-
-def estimate_feature_counts_with_inference(learner_agent: Agent,
-                                           reward_vector: LinearRewardVector,
-                                           reward_weights: List,
-                                           team_trajs: List[Trajectory],
-                                           n_trajectories: int,
-                                           feature_func: Callable[[State], np.ndarray],
-                                           learner_model: Optional[str] = None,
-                                           select: Optional[bool] = None,
-                                           horizon: Optional[int] = None,
-                                           selection: Optional[
-                                               Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-                                           threshold: Optional[float] = None,
-                                           processes: int = -1,
-                                           seed: int = 0,
-                                           verbose: bool = False,
-                                           use_tqdm: bool = True) -> np.ndarray:
-    args = []
-    for traj_i, team_traj in enumerate(team_trajs):
-        args.append((learner_agent, reward_vector, reward_weights, team_trajs, traj_i, n_trajectories, learner_model,
-                     select, horizon, selection, threshold, processes, seed + traj_i, verbose))
-    trajectories = run_parallel(generate_trajectories_with_inference, args, processes=processes, use_tqdm=use_tqdm)
-    trajectories = list(it.chain(*trajectories))
-    # print(trajectories)
-    return expected_feature_counts(trajectories, feature_func)
 
 
 if __name__ == '__main__':
@@ -305,26 +141,51 @@ if __name__ == '__main__':
     # print(team_trajectories)
 
     # generate_trajectory_with_inference(team[0], env, team_trajectories, 0)
-    rwd_vector = team_rwd[1-learner_ag_i]
-    rwd_weights = team_rwd_w[1-learner_ag_i]
+    # rwd_vector = team_rwd[1-learner_ag_i]
+    # rwd_weights = team_rwd_w[1-learner_ag_i]
     # trajectories_mc = generate_trajectories_with_inference(team[learner_ag_i], rwd_vector, rwd_weights,
     #                                                        team_trajectories, 0,
     #                                                        NUM_MC_TRAJECTORIES, None,
     #                                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
     #                                                        seed=ENV_SEED, verbose=True, use_tqdm=True)
 
+    # #
+    # feature_func = lambda s: team_rwd[learner_ag_i].get_values(s)
+    # estimate_feature_counts_with_inference(team[learner_ag_i], rwd_vector, rwd_weights, team_trajectories,
+    #                                        NUM_MC_TRAJECTORIES, feature_func, None,
+    #                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
+    #                                        seed=LEARNING_SEED, verbose=False, use_tqdm=True)
     #
-    feature_func = lambda s: team_rwd[learner_ag_i].get_values(s)
-    estimate_feature_counts_with_inference(team[learner_ag_i], rwd_vector, rwd_weights, team_trajectories,
-                                           NUM_MC_TRAJECTORIES, feature_func, None,
-                                           True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
-                                           seed=LEARNING_SEED, verbose=False, use_tqdm=True)
+
+    # rwd_vector = team_rwd[1-learner_ag_i]
+    # rwd_weights = team_rwd_w[1-learner_ag_i]
+    # learner_agent = team[learner_ag_i]
+    # print(learner_agent.world.state)
     #
-    bb
+    # for ag_i, agent in enumerate(team):
+    #     if agent.name != learner_agent.name:
+    #         env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
+    #         true_model = agent.get_true_model()
+    #         model_names = [name for name in agent.models.keys() if name != true_model]
+    #         dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
+    #         world.setMentalModel(learner_agent.name, agent.name, dist)
+    #
+    #         for model in model_names:
+    #             agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
+    #             agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
+    #             agent.setAttribute('horizon', HORIZON, model=model)
+    #             agent.setAttribute('discount', DISCOUNT, model=model)
+    #
+    # team_agents = ['Goal', 'Navigator']  # TODO
+    # _team = [_world.agents[agent_name] for agent_name in team_agents]  # get new world's agents
+    # learner_agent = _team[team_agents.index(learner_agent.name)]
+    #
+    # bb
+
+
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
     learner_agent = team[learner_ag_i]
-    rwd_vector = team_rwd[1-learner_ag_i]
-    rwd_weights = team_rwd_w[1-learner_ag_i]
+    rwd_vector = team_rwd[learner_ag_i]
     alg = MaxEntRewardLearning(
         'max-ent', learner_agent.name, rwd_vector,
         processes=PROCESSES,
@@ -338,7 +199,9 @@ if __name__ == '__main__':
         num_mc_trajectories=NUM_MC_TRAJECTORIES,
         horizon=HORIZON,
         seed=LEARNING_SEED)
-    result = alg.learn_with_inference(learner_agent, rwd_weights, team_trajectories, verbose=True)
+    rwd_vector = team_rwd[1-learner_ag_i]
+    rwd_weights = team_rwd_w[1-learner_ag_i]
+    result = alg.learn_with_inference(learner_agent, rwd_vector, rwd_weights, team_trajectories, verbose=True)
     #
     # vb
     # # for loop, MaxEnt for each agent

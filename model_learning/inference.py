@@ -5,7 +5,6 @@ from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
 from psychsim.pwl import modelKey
-from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -63,7 +62,7 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
     return probs
 
 
-def add_agent_models(agent: Agent, reward_vector: LinearRewardVector,
+def add_agent_models(agent: Agent, reward_vector,
                      reward_weights: List, model_names: List):
     for model_name in model_names:
         true_model = agent.get_true_model()
