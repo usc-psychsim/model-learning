@@ -62,22 +62,22 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
     return probs
 
 
-def add_agent_models(agent: Agent, reward_vector,
-                     reward_weights: List, model_names: List):
-    for model_name in model_names:
-        true_model = agent.get_true_model()
-        model_name = f'{agent.name}_{model_name}'
-        agent.addModel(model_name, parent=true_model)
-        agent_lrv = reward_vector
-        rwd_f_weights = reward_weights
-        if model_name == f'{agent.name}_Opposite':
-            rwd_f_weights = -1. * np.array(rwd_f_weights)
-            rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-        if model_name == f'{agent.name}_Uniform':
-            rwd_f_weights = [1] * len(rwd_f_weights)
-            rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-        if model_name == f'{agent.name}_Random':
-            rwd_f_weights = [0] * len(rwd_f_weights)
-        agent_lrv.set_rewards(agent, rwd_f_weights, model=model_name)
-        print(agent.name, model_name, agent_lrv.names, rwd_f_weights)
-    return agent
+# def add_agent_models(agent: Agent, reward_vector,
+#                      reward_weights: List, model_names: List):
+#     for model_name in model_names:
+#         true_model = agent.get_true_model()
+#         model_name = f'{agent.name}_{model_name}'
+#         agent.addModel(model_name, parent=true_model)
+#         agent_lrv = reward_vector
+#         rwd_f_weights = reward_weights
+#         if model_name == f'{agent.name}_Opposite':
+#             rwd_f_weights = -1. * np.array(rwd_f_weights)
+#             rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+#         if model_name == f'{agent.name}_Uniform':
+#             rwd_f_weights = [1] * len(rwd_f_weights)
+#             rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+#         if model_name == f'{agent.name}_Random':
+#             rwd_f_weights = [0] * len(rwd_f_weights)
+#         agent_lrv.set_rewards(agent, rwd_f_weights, model=model_name)
+#         print(agent.name, model_name, agent_lrv.names, rwd_f_weights)
+#     return agent

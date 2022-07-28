@@ -191,8 +191,6 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
 
     def learn_with_inference(self,
                              learner_agent: Agent,
-                             reward_vector: LinearRewardVector,
-                             reward_weights: List,
                              trajectories: List[Trajectory],
                              data_id: Optional[str] = None,
                              verbose: bool = False) -> ModelLearningResult:
@@ -200,8 +198,6 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
         :param Agent learner_agent: the learning agent
-        :param LinearRewardVector reward_vector: for true model of the other agent
-        :param List reward_weights: reward weights for true model of the other agent
         :param list[Trajectory] trajectories: a list of trajectories, each
         containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
@@ -247,8 +243,8 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             # gets expected feature counts (mean feature path)
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses rational agent and we need the distribution over actions if exact
-            expected_fc = estimate_feature_counts_with_inference(learner_agent, reward_vector, reward_weights,
-                                                                 trajectories, self.num_mc_trajectories, feature_func,
+            expected_fc = estimate_feature_counts_with_inference(learner_agent, trajectories,
+                                                                 self.num_mc_trajectories, feature_func,
                                                                  None, True, self.horizon, 'distribution',
                                                                  self.prune_threshold, processes=self.processes,
                                                                  seed=self.seed, verbose=False, use_tqdm=True)

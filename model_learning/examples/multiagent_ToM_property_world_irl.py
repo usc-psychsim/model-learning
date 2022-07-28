@@ -20,7 +20,7 @@ from model_learning.util.io import create_clear_dir
 from model_learning.util.mp import run_parallel
 from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateActionModelTuple, \
     TeamStateinfoActionModelTuple, StateinfoActionModelTuple, State
-from model_learning.trajectory import copy_world
+from model_learning.trajectory import copy_world, generate_trajectories_with_inference
 from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
@@ -71,7 +71,7 @@ HORIZON = 2
 PRUNE_THRESHOLD = 1e-2
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/multiagent-ToM-property-world')
-PROCESSES = -1
+PROCESSES = 1
 VERBOSE = True
 np.set_printoptions(precision=3)
 
@@ -157,37 +157,64 @@ if __name__ == '__main__':
     #                                        seed=LEARNING_SEED, verbose=False, use_tqdm=True)
     #
 
-    # rwd_vector = team_rwd[1-learner_ag_i]
-    # rwd_weights = team_rwd_w[1-learner_ag_i]
-    # learner_agent = team[learner_ag_i]
-    # print(learner_agent.world.state)
-    #
-    # for ag_i, agent in enumerate(team):
-    #     if agent.name != learner_agent.name:
-    #         env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
-    #         true_model = agent.get_true_model()
-    #         model_names = [name for name in agent.models.keys() if name != true_model]
-    #         dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
-    #         world.setMentalModel(learner_agent.name, agent.name, dist)
-    #
-    #         for model in model_names:
-    #             agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
-    #             agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
-    #             agent.setAttribute('horizon', HORIZON, model=model)
-    #             agent.setAttribute('discount', DISCOUNT, model=model)
-    #
-    # team_agents = ['Goal', 'Navigator']  # TODO
-    # _team = [_world.agents[agent_name] for agent_name in team_agents]  # get new world's agents
-    # learner_agent = _team[team_agents.index(learner_agent.name)]
-    #
-    # bb
+    learner_agent = team[learner_ag_i]
 
+    for ag_i, agent in enumerate(team):
+        if agent.name != learner_agent.name:
+            env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
+            true_model = agent.get_true_model()
+            model_names = [name for name in agent.models.keys() if name != true_model]
+            dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
+            world.setMentalModel(learner_agent.name, agent.name, dist)
+
+            for model in model_names:
+                agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
+                agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
+                agent.setAttribute('horizon', HORIZON, model=model)
+                agent.setAttribute('discount', DISCOUNT, model=model)
+        # else:
+        #     agent.setAttribute('beliefs', True)
+
+    # for traj in team_trajectories:
+    #     for step in traj:
+    #         # print(step.state)
+    #         print(world.getFeature(stateKey(learner_agent.name, 'xPGWorld'), state=step.state, unique=True))
+
+    decision = learner_agent.decide(team_trajectories[0][0].state, horizon=2, selection='distribution')
+    print(decision[world.getFeature(modelKey(learner_agent.name), team_trajectories[0][0].state, unique=True)]['action'])
+    bb
+
+    init_state = team_trajectories[0][0].state
+    init_state = copy.deepcopy(init_state)
+    del init_state[modelKey('observer')]
+    world.state = init_state
+
+    # world.setOrder([{agent.name for agent in team}])
+    world.dependency.getEvaluation()
+    decision = learner_agent.decide(world.state, horizon=2, selection='distribution')
+    print(decision[world.getFeature(modelKey(learner_agent.name), state=world.state, unique=True)]['action'])
+    world.step(select=False, horizon=HORIZON, tiebreak='distribution',
+                threshold=PRUNE_THRESHOLD)
+    action = world.getAction(learner_agent.name)
+    print(action)
+    print(world.getAction(team[1].name))
+    print(team_trajectories[0][0].action)
+
+    bb
+    trajectories_mc = generate_trajectories_with_inference(team[learner_ag_i],
+                                                           team_trajectories, 0,
+                                                           NUM_MC_TRAJECTORIES, None,
+                                                           True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
+                                                           seed=ENV_SEED, verbose=True, use_tqdm=True)
+
+
+    print(trajectories_mc)
+    bb
 
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
-    learner_agent = team[learner_ag_i]
-    rwd_vector = team_rwd[learner_ag_i]
+    learner_rwd_vector = team_rwd[learner_ag_i]
     alg = MaxEntRewardLearning(
-        'max-ent', learner_agent.name, rwd_vector,
+        'max-ent', learner_agent.name, learner_rwd_vector,
         processes=PROCESSES,
         normalize_weights=NORM_THETA,
         learning_rate=LEARNING_RATE,
@@ -198,44 +225,26 @@ if __name__ == '__main__':
         exact=EXACT,
         num_mc_trajectories=NUM_MC_TRAJECTORIES,
         horizon=HORIZON,
-        seed=LEARNING_SEED)
-    rwd_vector = team_rwd[1-learner_ag_i]
-    rwd_weights = team_rwd_w[1-learner_ag_i]
-    result = alg.learn_with_inference(learner_agent, rwd_vector, rwd_weights, team_trajectories, verbose=True)
-    #
-    # vb
-    # # for loop, MaxEnt for each agent
-    # logging.info('=================================')
-    # logging.info('Starting MaxEnt IRL optimization...')
-    #
-    # team_trajs = []
-    # team_algs = []
-    # for ag_i, agent in enumerate(team):
-    #     if ag_i == learner_ag_i:
-    #         rwd_vector = team_rwd[ag_i]
-    #         agent_trajs = []
-    #         for team_traj in team_trajectories:
-    #             agent_traj = []
-    #             for team_step in team_traj:
-    #                 tsa = team_step
-    #                 sa = StateActionPair(tsa.world, tsa.action[agent.name], tsa.prob)
-    #                 agent_traj.append(sa)
-    #             agent_trajs.append(agent_traj)
-    #         team_trajs.append(agent_trajs)
-    #
-    #         LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
-    #         alg = MaxEntRewardLearning(
-    #             'max-ent', agent.name, rwd_vector,
-    #             processes=PROCESSES,
-    #             normalize_weights=NORM_THETA,
-    #             learning_rate=LEARNING_RATE,
-    #             max_epochs=MAX_EPOCHS,
-    #             diff_threshold=THRESHOLD,
-    #             decrease_rate=DECREASE_RATE,
-    #             prune_threshold=PRUNE_THRESHOLD,
-    #             exact=EXACT,
-    #             num_mc_trajectories=NUM_MC_TRAJECTORIES,
-    #             horizon=HORIZON,
-    #             seed=LEARNING_SEED)
-    #         result = alg.learn(agent_trajs, verbose=True)
-    #
+        seed=LEARNING_SEED
+    )
+    result = alg.learn_with_inference(learner_agent, team_trajectories, verbose=True)
+
+    # LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
+    # learner_agent = team[learner_ag_i]
+    # rwd_vector = team_rwd[learner_ag_i]
+    # alg = MaxEntRewardLearning(
+    #     'max-ent', learner_agent.name, rwd_vector,
+    #     processes=PROCESSES,
+    #     normalize_weights=NORM_THETA,
+    #     learning_rate=LEARNING_RATE,
+    #     max_epochs=MAX_EPOCHS,
+    #     diff_threshold=THRESHOLD,
+    #     decrease_rate=DECREASE_RATE,
+    #     prune_threshold=PRUNE_THRESHOLD,
+    #     exact=EXACT,
+    #     num_mc_trajectories=NUM_MC_TRAJECTORIES,
+    #     horizon=HORIZON,
+    #     seed=LEARNING_SEED)
+    # rwd_vector = team_rwd[1-learner_ag_i]
+    # rwd_weights = team_rwd_w[1-learner_ag_i]
+    # result = alg.learn_with_inference(learner_agent, rwd_vector, rwd_weights, team_trajectories, verbose=True)
