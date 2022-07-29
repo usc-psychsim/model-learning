@@ -514,7 +514,6 @@ def generate_trajectory_with_inference(learner_agent: Agent,
     init_state = copy.deepcopy(init_state)
     del init_state[modelKey('observer')]
     _world.state = init_state
-    print(_world.state)
 
     team_agents = list(_world.agents.keys())
     _team = [_world.agents[agent_name] for agent_name in team_agents]  # get new world's agents
@@ -528,10 +527,20 @@ def generate_trajectory_with_inference(learner_agent: Agent,
 
     total = 0
     prob = 1
-    for step_i in range(5):
+    for step_i in range(n_step):
         # print('====================')
         # print(f'Step {step_i}:')
         start = timer()
+
+        for ag_i, _agent in enumerate(_team):
+            if _agent.name != learner_agent.name:
+                true_model = _agent.get_true_model()
+                model_names = [name for name in _agent.models.keys() if name != true_model]
+
+                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
+                learner_agent.setBelief(modelKey(_agent.name), dist)
+                # model = _world.getModel(learner_agent.name, unique=True)
+                # print(_world.getFeature(modelKey(_agent.name), state=learner_agent.getBelief(model=model)))
 
         # step the world until it's this agent's turn
         turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
@@ -545,32 +554,13 @@ def generate_trajectory_with_inference(learner_agent: Agent,
             # select if state is stochastic and update probability of reaching state
             prob *= _world.state.select()
 
-        # print(learner_agent.getLegalActions())
-        assert learner_agent.world.state == _world.state
-        print(_world.agents['Goal'].getLegalActions(vector=_world.state))
         # steps the world (do not select), gets the agent's action
-        decision = learner_agent.decide(_world.state, horizon=2, selection='distribution')
-        print(decision[_world.getFeature(modelKey(learner_agent.name), state=_world.state, unique=True)][
-            'action'])
         _world.step(select=False, horizon=horizon, tiebreak='distribution',
                     threshold=threshold)
         action = _world.getAction(learner_agent.name)
         print(action)
         print(_world.getAction(_team[1].name))
-        print(_world.state)
-        bb
-        for ag_i, _agent in enumerate(_team):
-            if _agent.name != learner_agent.name:
-                true_model = _agent.get_true_model()
-                model_names = [name for name in _agent.models.keys() if name != true_model]
-
-                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
-                learner_agent.setBelief(modelKey(_agent.name), dist)
-                # model = _world.getModel(learner_agent.name, unique=True)
-                # print(_world.getFeature(modelKey(_agent.name), state=learner_agent.getBelief(model=model)))
-
-        print(_world.state)
-        print(team_trajs[traj_i][step_i].action)
+        # print(team_trajs[traj_i][step_i].action)
         trajectory.append(StateinfoActionModelTuple(prev_world.state,
                                                     action,
                                                     team_trajs[traj_i][step_i].model_dist,

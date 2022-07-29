@@ -138,78 +138,21 @@ if __name__ == '__main__':
     f = bz2.BZ2File(
         os.path.join(traj_dir, f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}_base.pkl'), 'rb')
     team_trajectories = pickle.load(f)
-    # print(team_trajectories)
 
-    # generate_trajectory_with_inference(team[0], env, team_trajectories, 0)
-    # rwd_vector = team_rwd[1-learner_ag_i]
-    # rwd_weights = team_rwd_w[1-learner_ag_i]
-    # trajectories_mc = generate_trajectories_with_inference(team[learner_ag_i], rwd_vector, rwd_weights,
-    #                                                        team_trajectories, 0,
-    #                                                        NUM_MC_TRAJECTORIES, None,
-    #                                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
-    #                                                        seed=ENV_SEED, verbose=True, use_tqdm=True)
-
-    # #
-    # feature_func = lambda s: team_rwd[learner_ag_i].get_values(s)
-    # estimate_feature_counts_with_inference(team[learner_ag_i], rwd_vector, rwd_weights, team_trajectories,
-    #                                        NUM_MC_TRAJECTORIES, feature_func, None,
-    #                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
-    #                                        seed=LEARNING_SEED, verbose=False, use_tqdm=True)
-    #
-
+    # create models of the other agents
+    # have to set mental model after init state
     learner_agent = team[learner_ag_i]
-
     for ag_i, agent in enumerate(team):
         if agent.name != learner_agent.name:
             env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
             true_model = agent.get_true_model()
             model_names = [name for name in agent.models.keys() if name != true_model]
-            dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
-            world.setMentalModel(learner_agent.name, agent.name, dist)
 
             for model in model_names:
                 agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
                 agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
                 agent.setAttribute('horizon', HORIZON, model=model)
                 agent.setAttribute('discount', DISCOUNT, model=model)
-        # else:
-        #     agent.setAttribute('beliefs', True)
-
-    # for traj in team_trajectories:
-    #     for step in traj:
-    #         # print(step.state)
-    #         print(world.getFeature(stateKey(learner_agent.name, 'xPGWorld'), state=step.state, unique=True))
-
-    decision = learner_agent.decide(team_trajectories[0][0].state, horizon=2, selection='distribution')
-    print(decision[world.getFeature(modelKey(learner_agent.name), team_trajectories[0][0].state, unique=True)]['action'])
-    bb
-
-    init_state = team_trajectories[0][0].state
-    init_state = copy.deepcopy(init_state)
-    del init_state[modelKey('observer')]
-    world.state = init_state
-
-    # world.setOrder([{agent.name for agent in team}])
-    world.dependency.getEvaluation()
-    decision = learner_agent.decide(world.state, horizon=2, selection='distribution')
-    print(decision[world.getFeature(modelKey(learner_agent.name), state=world.state, unique=True)]['action'])
-    world.step(select=False, horizon=HORIZON, tiebreak='distribution',
-                threshold=PRUNE_THRESHOLD)
-    action = world.getAction(learner_agent.name)
-    print(action)
-    print(world.getAction(team[1].name))
-    print(team_trajectories[0][0].action)
-
-    bb
-    trajectories_mc = generate_trajectories_with_inference(team[learner_ag_i],
-                                                           team_trajectories, 0,
-                                                           NUM_MC_TRAJECTORIES, None,
-                                                           True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
-                                                           seed=ENV_SEED, verbose=True, use_tqdm=True)
-
-
-    print(trajectories_mc)
-    bb
 
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
     learner_rwd_vector = team_rwd[learner_ag_i]
