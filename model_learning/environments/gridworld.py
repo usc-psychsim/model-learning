@@ -97,10 +97,10 @@ class GridWorld(object):
 
         # creates agent's location feature
         x = self.world.defineState(
-            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, f'{agent.name}\'s horizontal location')
+            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, description=f'{agent.name}\'s horizontal location')
         self.world.setFeature(x, 0)
         y = self.world.defineState(
-            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, f'{agent.name}\'s vertical location')
+            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, description=f'{agent.name}\'s vertical location')
         self.world.setFeature(y, 0)
 
         # visits: Dict[int, str] = {}
