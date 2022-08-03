@@ -3,15 +3,14 @@ import random
 import logging
 import numpy as np
 from timeit import default_timer as timer
-from typing import List, Dict, Any, Optional, Literal, Tuple
-
-from psychsim.action import ActionSet
+from typing import List, Dict, Any, Optional, Literal
 from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey, makeTree, setToConstantMatrix, actionKey
-from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, StateinfoActionModelTuple
+from psychsim.pwl import modelKey, turnKey
+from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
+    TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
 from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
@@ -294,7 +293,6 @@ def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: L
             # team_action[agent.name + '_learner'] = Distribution({action['action']: 1})
             team_action[agent.name + '_learner'] = action['action']
 
-
         # steps the world (do not select), gets the agent's action
         for agent in expert_team:
             if model is not None:
@@ -493,7 +491,7 @@ def generate_expert_learner_trajectories(expert_team: List[Agent], learner_team:
 
 
 def generate_trajectory_with_inference(learner_agent: Agent,
-                                       team_trajs: List[TeamTrajectory],
+                                       team_trajs: List[TeamInfoModelTrajectory],
                                        traj_i: int,
                                        learner_model: Optional[str] = None,
                                        select: Optional[bool] = None,
@@ -503,12 +501,12 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                                        threshold: Optional[float] = None,
                                        seed: int = 0,
                                        verbose: bool = False
-                                       ) -> Trajectory:
+                                       ) -> TeamInfoModelTrajectory:
     random.seed(seed)
     n_step = len(team_trajs[traj_i])
     init_state = team_trajs[traj_i][0].state
 
-    trajectory: Trajectory = []
+    trajectory: TeamInfoModelTrajectory = []
     # reset to initial state and uniform dist of models
     _world = copy_world(learner_agent.world)
     init_state = copy.deepcopy(init_state)
@@ -583,10 +581,10 @@ def generate_trajectory_with_inference(learner_agent: Agent,
         # print(action)
         # print(_world.getAction(_team[1].name))
         # print(team_trajs[traj_i][step_i].action)
-        trajectory.append(StateinfoActionModelTuple(prev_world.state,
-                                                    action,
-                                                    team_trajs[traj_i][step_i].model_dist,
-                                                    prev_prob))
+        trajectory.append(TeamStateinfoActionModelTuple(prev_world.state,
+                                                        action,
+                                                        team_trajs[traj_i][step_i].model_dist,
+                                                        prev_prob))
 
         step_time = timer() - start
         total += step_time
@@ -600,7 +598,7 @@ def generate_trajectory_with_inference(learner_agent: Agent,
 
 
 def generate_trajectories_with_inference(learner_agent: Agent,
-                                         team_trajs: List[TeamTrajectory],
+                                         team_trajs: List[TeamInfoModelTrajectory],
                                          traj_i: int,
                                          n_trajectories: int,
                                          learner_model: Optional[str] = None,
@@ -613,13 +611,13 @@ def generate_trajectories_with_inference(learner_agent: Agent,
                                          seed: int = 0,
                                          verbose: bool = False,
                                          use_tqdm: bool = True
-                                         ) -> List[Trajectory]:
+                                         ) -> List[TeamInfoModelTrajectory]:
     start = timer()
     args = [(learner_agent, team_trajs, traj_i, learner_model, select,
              horizon, selection, threshold, seed + t, verbose)
             for t in range(n_trajectories)]
-    trajectories: List[Trajectory] = run_parallel(generate_trajectory_with_inference, args, processes=processes,
-                                                  use_tqdm=False)
+    trajectories: List[TeamInfoModelTrajectory] = run_parallel(generate_trajectory_with_inference, args,
+                                                               processes=processes, use_tqdm=False)
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories: '

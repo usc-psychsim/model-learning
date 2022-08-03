@@ -1,20 +1,18 @@
 import logging
 import numpy as np
-from typing import List
 from psychsim.agent import Agent
-from psychsim.probability import Distribution
-from psychsim.world import World
 from psychsim.pwl import modelKey
+from model_learning import Trajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def track_reward_model_inference(trajectory, models, agent, observer, features=None, verbose=True):
+def track_reward_model_inference(trajectory: Trajectory, models, agent, observer, features=None, verbose=True):
     """
     Updates and tracks the evolution of an observer agent's posterior distribution over the possible reward models of
     an "actor" agent. The inference task
-    :param list[tuple[World, Distribution]] trajectory: the trajectory of (world, action) pairs containing the "actor"
+    :param Trajectory trajectory: the trajectory of (world, action) pairs containing the "actor"
     agent's actions. It is assumed that agents `agent` and `observer` are present in each "world" of the trajectory so
     that we can recover the latter's distribution over reward models.
     :param list[str] models: a list of model names of the `agent` agent containing the different reward functions.
@@ -61,23 +59,3 @@ def track_reward_model_inference(trajectory, models, agent, observer, features=N
 
     return probs
 
-
-# def add_agent_models(agent: Agent, reward_vector,
-#                      reward_weights: List, model_names: List):
-#     for model_name in model_names:
-#         true_model = agent.get_true_model()
-#         model_name = f'{agent.name}_{model_name}'
-#         agent.addModel(model_name, parent=true_model)
-#         agent_lrv = reward_vector
-#         rwd_f_weights = reward_weights
-#         if model_name == f'{agent.name}_Opposite':
-#             rwd_f_weights = -1. * np.array(rwd_f_weights)
-#             rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-#         if model_name == f'{agent.name}_Uniform':
-#             rwd_f_weights = [1] * len(rwd_f_weights)
-#             rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-#         if model_name == f'{agent.name}_Random':
-#             rwd_f_weights = [0] * len(rwd_f_weights)
-#         agent_lrv.set_rewards(agent, rwd_f_weights, model=model_name)
-#         print(agent.name, model_name, agent_lrv.names, rwd_f_weights)
-#     return agent

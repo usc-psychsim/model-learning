@@ -2,21 +2,16 @@ import logging
 import os
 import numpy as np
 from psychsim.world import World
-from psychsim.pwl import stateKey, WORLD
-from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningAlgorithm, ModelLearningResult
+from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningResult
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
 from model_learning.environments.property_gridworld import PropertyGridWorld
-from model_learning.evaluation.metrics import policy_mismatch_prob, policy_divergence
-from model_learning.planning import get_policy, get_action_values
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
-from model_learning import StateActionPair, TeamTrajectory
-from typing import List, Optional
-from psychsim.agent import Agent
-from model_learning.util.mp import run_parallel
+from model_learning import StateActionPair
+from typing import List
 
-__author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 __description__ = 'Performs Multiagent IRL (reward model learning) in the Property World using MaxEnt IRL.'
 
 # env params
@@ -124,8 +119,6 @@ if __name__ == '__main__':
     # env.play_team_trajectories(team_trajectories, team, OUTPUT_DIR)
 
     # create learning algorithm and optimize reward weights
-    # TODO
-    # for loop, MaxEnt for each agent 
     logging.info('=================================')
     logging.info('Starting MaxEnt IRL optimization...')
 

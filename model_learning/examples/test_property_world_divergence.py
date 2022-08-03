@@ -1,19 +1,19 @@
 import os
 import numpy as np
-import random
 import copy
-from typing import List, Dict, NamedTuple, Optional, Tuple, Literal
+from typing import List, Dict
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from psychsim.world import World
-from psychsim.agent import Agent
-from model_learning.planning import get_policy, get_action_values
 from model_learning.features import expected_feature_counts, estimate_feature_counts
 from psychsim.pwl import Distribution
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
-from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world
-from model_learning.evaluation.metrics import policy_divergence, policy_mismatch_prob
+from model_learning.trajectory import copy_world
+from model_learning.evaluation.metrics import policy_divergence
+
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'

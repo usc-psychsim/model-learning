@@ -5,15 +5,16 @@ import bz2
 import numpy as np
 from typing import List
 from psychsim.world import World
-from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningAlgorithm, ModelLearningResult
+from model_learning.algorithms.max_entropy import ModelLearningResult
+from model_learning.algorithms.multiagent_ToM_max_entropy import MultiagentToMMaxEntRewardLearning
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from model_learning.features.linear import LinearRewardVector
 
-__author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 __description__ = 'Performs Multiagent IRL (reward model learning) with ToM in the Property World using MaxEnt IRL.'
 
 # env params
@@ -65,7 +66,7 @@ VERBOSE = True
 np.set_printoptions(precision=3)
 
 
-def multi_agent_reward_learning(alg: MaxEntRewardLearning,
+def multi_agent_reward_learning(alg: MultiagentToMMaxEntRewardLearning,
                                 agent_trajs: List[List[StateActionPair]],
                                 verbose: bool) -> ModelLearningResult:
     result = alg.learn(agent_trajs, verbose=verbose)
@@ -143,18 +144,10 @@ if __name__ == '__main__':
                 agent.setAttribute('horizon', HORIZON, model=model)
                 agent.setAttribute('discount', DISCOUNT, model=model)
 
-    # feature_func = lambda s: team_rwd[learner_ag_i].get_values(s)
-    # estimate_feature_counts_with_inference(team[learner_ag_i], team_trajectories,
-    #                                        NUM_MC_TRAJECTORIES, feature_func, None,
-    #                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
-    #                                        seed=LEARNING_SEED, verbose=False, use_tqdm=True)
-    #
-    # b
-    #
 
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
     learner_rwd_vector = team_rwd[learner_ag_i]
-    alg = MaxEntRewardLearning(
+    alg = MultiagentToMMaxEntRewardLearning(
         'max-ent', learner_agent.name, learner_rwd_vector,
         processes=PROCESSES,
         normalize_weights=NORM_THETA,
@@ -169,23 +162,3 @@ if __name__ == '__main__':
         seed=LEARNING_SEED
     )
     result = alg.learn_with_inference(learner_agent, team_trajectories, verbose=True)
-
-    # LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
-    # learner_agent = team[learner_ag_i]
-    # rwd_vector = team_rwd[learner_ag_i]
-    # alg = MaxEntRewardLearning(
-    #     'max-ent', learner_agent.name, rwd_vector,
-    #     processes=PROCESSES,
-    #     normalize_weights=NORM_THETA,
-    #     learning_rate=LEARNING_RATE,
-    #     max_epochs=MAX_EPOCHS,
-    #     diff_threshold=THRESHOLD,
-    #     decrease_rate=DECREASE_RATE,
-    #     prune_threshold=PRUNE_THRESHOLD,
-    #     exact=EXACT,
-    #     num_mc_trajectories=NUM_MC_TRAJECTORIES,
-    #     horizon=HORIZON,
-    #     seed=LEARNING_SEED)
-    # rwd_vector = team_rwd[1-learner_ag_i]
-    # rwd_weights = team_rwd_w[1-learner_ag_i]
-    # result = alg.learn_with_inference(learner_agent, rwd_vector, rwd_weights, team_trajectories, verbose=True)

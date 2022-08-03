@@ -10,17 +10,21 @@ from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
 from psychsim.world import World
-from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateActionModelTuple,\
-    StateinfoActionModelTuple, TeamStateinfoActionModelTuple
+from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateinfoActionModelTuple, \
+    TeamInfoModelTrajectory
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.trajectory import copy_world
 from model_learning.util.io import create_clear_dir
 from model_learning.features.linear import LinearRewardVector
 from model_learning.util.mp import run_parallel
 
-__author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
-__description__ = ''
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
+__description__ = 'Perform reward model inference in the property gridworld with two collaborative agents.' \
+                  'There is an observer agent that has 2 models of the agents).' \
+                  'The world is updated for some steps, where observer updates its belief over the models of the ' \
+                  'moving agent via PsychSim inference.' \
+                  'Trajectories with model inference are saved into .pkl file.'
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
@@ -97,7 +101,7 @@ def generate_trajectory_model_distribution(world: World,
                                            env: PropertyGridWorld,
                                            team: List[Agent],
                                            team_trajs: List[TeamTrajectory],
-                                           traj_i: int) -> TeamTrajectory:
+                                           traj_i: int) -> TeamInfoModelTrajectory:
     n_step = len(team_trajs[traj_i])
     init_state = team_trajs[traj_i][0].world.state
 
@@ -187,11 +191,12 @@ def _generate_trajectories_model_distribution(world: World,
                                               env: PropertyGridWorld,
                                               team: List[Agent],
                                               team_trajectories: List[TeamTrajectory],
-                                              processes: Optional[int] = -1) -> List[TeamTrajectory]:
+                                              processes: Optional[int] = -1) -> List[TeamInfoModelTrajectory]:
     if len(team_trajectories) > 1:
         args = [(world, env, team, team_trajectories, t) for t in range(len(team_trajectories))]
-        team_trajectories_with_model_dist: List[TeamTrajectory] = run_parallel(generate_trajectory_model_distribution, args,
-                                                                               processes=processes)
+        team_trajectories_with_model_dist: List[TeamInfoModelTrajectory] = \
+            run_parallel(generate_trajectory_model_distribution, args,
+                         processes=processes)
         return team_trajectories_with_model_dist
     else:
         # perform inference for each trajectory
@@ -267,7 +272,8 @@ def _generate_trajectories_model_distribution(world: World,
                 team_action = {agent.name: team_action[agent.name].first() for agent in _team}
                 # print(_world.state)
                 [print(a) for a in team_action.values()]
-                team_trajectory.append(TeamStateinfoActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
+                team_trajectory.append(
+                    TeamStateinfoActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
 
                 if step_i == n_step - 1:
                     break
@@ -343,4 +349,4 @@ if __name__ == '__main__':
     f = bz2.BZ2File(OUTPUT_FILE, 'wb')
     pickle.dump(team_trajs_w_model_dist, f)
     f.close()
-    print(f'Loading Time (s): {(time.time()-start_time):.3f}')
+    print(f'Loading Time (s): {(time.time() - start_time):.3f}')

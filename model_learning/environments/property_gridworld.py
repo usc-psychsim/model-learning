@@ -1,4 +1,3 @@
-import copy
 import itertools
 import os
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ from model_learning.util.plot import distinct_colors
 from model_learning.features.linear import *
 
 __author__ = 'Pedro Sequeira and Haochen Wu'
-__email__ = 'pedrodbs@gmail.com'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'

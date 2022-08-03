@@ -1,14 +1,13 @@
 import os
 import numpy as np
 import copy
-from typing import List, Dict, NamedTuple, Optional, Tuple, Literal
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from psychsim.world import World
-from psychsim.agent import Agent
-from model_learning.planning import get_policy, get_action_values
-from psychsim.pwl import modelKey, equalRow, incrementMatrix, stateKey, WORLD, rewardKey, KeyedPlane, KeyedVector
+from psychsim.pwl import modelKey, stateKey, WORLD
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
-from model_learning import StateActionPair
+
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
@@ -26,8 +25,6 @@ ENV_SEED = 48
 NUM_EXIST = 3
 
 TEAM_AGENTS = ['AHA', 'Helper1']
-# AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
-# AGENT_ROLES = [{'Goal': 1, 'SubGoal': 0.2}, {'Goal': 0.2, 'SubGoal': 0.2, 'Navigator': 1}]
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
@@ -102,6 +99,7 @@ if __name__ == '__main__':
             prob = env.world.step()
             print(f'probability: {prob}')
             state = copy.deepcopy(env.world.state)
+            p_state = []
             for ag_i, agent in enumerate(team):
                 if ag_i in [0, 1]:
                     print(f'{agent.name} action: {world.getAction(agent.name)}')

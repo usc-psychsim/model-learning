@@ -6,13 +6,12 @@ from typing import Optional, List
 from psychsim.agent import Agent
 from model_learning import Trajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
-from model_learning.features import expected_feature_counts, estimate_feature_counts
+from model_learning.features import expected_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
-from model_learning.trajectory import copy_world
 from model_learning.util.plot import plot_evolution
 
-__author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
+__author__ = 'Pedro Sequeira and Haochen Wu'
+__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
 
 # stats names
 REWARD_WEIGHTS_STR = 'Weights'
@@ -22,7 +21,7 @@ TIME_STR = 'Time'
 LEARN_RATE_STR = 'Learning Rate'
 
 
-class MaxEntRewardLearning(ModelLearningAlgorithm):
+class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
     """
     An implementation of the maximal causal entropy (MaxEnt) algorithm for IRL in [1].
     It assumes the expert's reward function is a linear combination (weighted sum) of the state features.
@@ -96,13 +95,15 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
             logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
 
-    def learn(self,
-              trajectories: List[Trajectory],
-              data_id: Optional[str] = None,
-              verbose: bool = False) -> ModelLearningResult:
+    def learn_with_inference(self,
+                             learner_agent: Agent,
+                             trajectories: List[Trajectory],
+                             data_id: Optional[str] = None,
+                             verbose: bool = False) -> ModelLearningResult:
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
+        :param Agent learner_agent: the learning agent
         :param list[Trajectory] trajectories: a list of trajectories, each
         containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
@@ -113,14 +114,11 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         # get empirical feature counts (mean feature path) from trajectories
         feature_func = lambda s: self.reward_vector.get_values(s)
         empirical_fc = expected_feature_counts(trajectories, feature_func)
-
+        print(empirical_fc)
         # estimates information from given trajectories (considered homogenous)
-        initial_states = [t[0].world.state for t in trajectories]  # initial states for fc estimation
-        world = copy_world(trajectories[0][0].world)
-        agent = world.agents[self.agent_name]
-        old_rationality = agent.getAttribute('rationality', model=agent.get_true_model())
-        agent.setAttribute('rationality', 1.)
-        traj_len = len(trajectories[0])
+        old_rationality = learner_agent.getAttribute('rationality', model=learner_agent.get_true_model())
+        learner_agent.setAttribute('rationality', 1.)
+        # traj_len = len(trajectories[0])
 
         # 1 - initiates reward weights (uniform)
         self.theta = np.ones(self.num_features) / self.num_features
@@ -146,16 +144,18 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             if self.decrease_rate:
                 learning_rate *= np.power(1 - (10 / self.max_epochs), e)
 
-            self.reward_vector.set_rewards(agent, self.theta)
+            self.reward_vector.set_rewards(learner_agent, self.theta)
 
             # gets expected feature counts (mean feature path)
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses rational agent and we need the distribution over actions if exact
-            expected_fc = estimate_feature_counts(agent, initial_states, traj_len, feature_func,
-                                                  exact=self.exact, num_mc_trajectories=self.num_mc_trajectories,
-                                                  horizon=self.horizon, threshold=self.prune_threshold,
-                                                  processes=self.processes, seed=self.seed,
-                                                  verbose=False, use_tqdm=True)
+            # TODO add argnames; add exact traj gen
+            expected_fc = estimate_feature_counts_with_inference(learner_agent, trajectories,
+                                                                 self.num_mc_trajectories, feature_func,
+                                                                 None, True, self.horizon, 'distribution',
+                                                                 self.prune_threshold, processes=self.processes,
+                                                                 seed=self.seed, verbose=False, use_tqdm=True)
+
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
@@ -177,7 +177,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         if verbose:
             self.log_progress(e, self.theta, diff, learning_rate, step_time)
             logging.info('Finished, total time: {:.2f} secs.'.format(sum(times)))
-        agent.setAttribute('rationality', old_rationality)
+        learner_agent.setAttribute('rationality', old_rationality)
 
         # returns stats dictionary
         return ModelLearningResult(data_id, trajectories, {
