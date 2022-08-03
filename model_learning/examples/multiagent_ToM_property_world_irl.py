@@ -3,24 +3,13 @@ import os
 import pickle
 import bz2
 import numpy as np
-import copy
-import random
-import itertools as it
-from timeit import default_timer as timer
-from typing import List, Dict, Any, Optional, Literal, Tuple, Callable
+from typing import List
 from psychsim.world import World
-from psychsim.agent import Agent
-from psychsim.probability import Distribution
-from psychsim.pwl import stateKey, WORLD, modelKey, turnKey
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningAlgorithm, ModelLearningResult
 from model_learning.environments.property_gridworld import PropertyGridWorld
-from model_learning.features import expected_feature_counts
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
-from model_learning.util.mp import run_parallel
-from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateActionModelTuple, \
-    TeamStateinfoActionModelTuple, StateinfoActionModelTuple, State
-from model_learning.trajectory import copy_world, generate_trajectories_with_inference
+from model_learning import StateActionPair
 from model_learning.features.linear import LinearRewardVector
 
 __author__ = 'Pedro Sequeira'
@@ -71,7 +60,7 @@ HORIZON = 2
 PRUNE_THRESHOLD = 1e-2
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/multiagent-ToM-property-world')
-PROCESSES = 1
+PROCESSES = -1
 VERBOSE = True
 np.set_printoptions(precision=3)
 
@@ -84,7 +73,7 @@ def multi_agent_reward_learning(alg: MaxEntRewardLearning,
 
 
 if __name__ == '__main__':
-    learner_ag_i = 0
+    learner_ag_i = 1
     print(learner_ag_i)
     # create output
     create_clear_dir(OUTPUT_DIR, clear=False)
@@ -153,6 +142,15 @@ if __name__ == '__main__':
                 agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
                 agent.setAttribute('horizon', HORIZON, model=model)
                 agent.setAttribute('discount', DISCOUNT, model=model)
+
+    # feature_func = lambda s: team_rwd[learner_ag_i].get_values(s)
+    # estimate_feature_counts_with_inference(team[learner_ag_i], team_trajectories,
+    #                                        NUM_MC_TRAJECTORIES, feature_func, None,
+    #                                        True, HORIZON, 'distribution', PRUNE_THRESHOLD, PROCESSES,
+    #                                        seed=LEARNING_SEED, verbose=False, use_tqdm=True)
+    #
+    # b
+    #
 
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
     learner_rwd_vector = team_rwd[learner_ag_i]

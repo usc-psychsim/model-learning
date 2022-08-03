@@ -267,7 +267,7 @@ def _generate_trajectories_model_distribution(world: World,
                 team_action = {agent.name: team_action[agent.name].first() for agent in _team}
                 # print(_world.state)
                 [print(a) for a in team_action.values()]
-                team_trajectory.append(TeamStateActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
+                team_trajectory.append(TeamStateinfoActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
 
                 if step_i == n_step - 1:
                     break

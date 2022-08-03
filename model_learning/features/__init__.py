@@ -44,7 +44,7 @@ def expected_feature_counts(trajectories: List[Trajectory], feature_func: Callab
     return np.sum(fcs_weighted, axis=0)  # get weighted average of feature counts/sums, shape: (num_features, )
 
 def estimate_feature_counts_with_inference(learner_agent: Agent,
-                                           team_trajs: List[Trajectory],
+                                           team_trajs: List[Trajectory],  # TODO separate types
                                            n_trajectories: int,
                                            feature_func: Callable[[State], np.ndarray],
                                            learner_model: Optional[str] = None,

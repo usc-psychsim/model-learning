@@ -188,7 +188,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             TIME_STR: np.array([times]),
             LEARN_RATE_STR: np.array([rates])
         })
-
+    # TODO separate to new MaxEnt
     def learn_with_inference(self,
                              learner_agent: Agent,
                              trajectories: List[Trajectory],
@@ -243,6 +243,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             # gets expected feature counts (mean feature path)
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses rational agent and we need the distribution over actions if exact
+            # TODO add argnames; add exact traj gen
             expected_fc = estimate_feature_counts_with_inference(learner_agent, trajectories,
                                                                  self.num_mc_trajectories, feature_func,
                                                                  None, True, self.horizon, 'distribution',
