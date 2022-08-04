@@ -8,7 +8,7 @@ from psychsim.agent import Agent
 from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey
+from psychsim.pwl import modelKey, turnKey, actionKey, setToConstantMatrix, makeTree
 from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
     TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
 from model_learning.util.mp import run_parallel
@@ -535,12 +535,13 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                 true_model = _agent.get_true_model()
                 model_names = [name for name in _agent.models.keys() if name != true_model]
 
-                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
-                # included_features = set(learner_agent.getBelief(model=learner_agent.get_true_model()).keys())
-                # learner_agent.resetBelief(include=included_features)  # override actual features in belief states
-                learner_agent.setBelief(modelKey(_agent.name), dist)
+                included_features = set(learner_agent.getBelief(model=learner_agent.get_true_model()).keys())
+                learner_agent.resetBelief(include=included_features)  # override actual features in belief states
                 # model = _world.getModel(learner_agent.name, unique=True)
                 # print(_world.getFeature(modelKey(_agent.name), state=learner_agent.getBelief(model=model)))
+
+                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
+                learner_agent.setBelief(modelKey(_agent.name), dist)
 
         # step the world until it's this agent's turn
         turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
@@ -555,28 +556,27 @@ def generate_trajectory_with_inference(learner_agent: Agent,
             prob *= _world.state.select()
 
         # # TODO non-learner decide on the models, pass in distribution
-        # other_actions = {}
-        # for _agent in _team:
-        #     if _agent.name != learner_agent.name:
-        #         true_model = _agent.get_true_model()
-        #         model_names = [name for name in _agent.models.keys() if name != true_model]
-        #         action_dist = []
-        #         for model in model_names:
-        #             model_prob = team_trajs[traj_i][step_i].model_dist[model]
-        #             decision = _agent.decide(selection='softmax', model=model)
-        #             action = decision['action']
-        #             action = _world.value2float(actionKey(_agent.name), action)
-        #             # action_dist[action] = model_prob
-        #             action_dist.append((setToConstantMatrix(actionKey(_agent.name), action), model_prob))
-        #         other_actions[_agent.name] = makeTree({'distribution': action_dist})
-        # print(other_actions)
-        #
-        # _world.step(actions=other_actions, select=False, horizon=horizon, tiebreak='distribution',
-        #             threshold=threshold, updateBeliefs=False)
+        other_actions = {}
+        for _agent in _team:
+            if _agent.name != learner_agent.name:
+                true_model = _agent.get_true_model()
+                model_names = [name for name in _agent.models.keys() if name != true_model]
+                action_dist = []
+                for model in model_names:
+                    model_prob = team_trajs[traj_i][step_i].model_dist[model]
+                    decision = _agent.decide(selection='softmax', model=model)
+                    action = decision['action']
+                    action = _world.value2float(actionKey(_agent.name), action)
+                    action_dist.append((setToConstantMatrix(actionKey(_agent.name), action), model_prob))
+                other_actions[_agent.name] = makeTree({'distribution': action_dist})
+        # print(other_actions['Goal'])
+
+        _world.step(actions=other_actions, select=False, horizon=horizon, tiebreak='distribution',
+                    threshold=threshold, updateBeliefs=False)
 
         # steps the world (do not select), gets the agent's action
-        _world.step(select=False, horizon=horizon, tiebreak='distribution',
-                    threshold=threshold)
+        # _world.step(select=False, horizon=horizon, tiebreak='distribution',
+        #             threshold=threshold)
         action = _world.getAction(learner_agent.name)
         # print(action)
         # print(_world.getAction(_team[1].name))
@@ -601,6 +601,7 @@ def generate_trajectories_with_inference(learner_agent: Agent,
                                          team_trajs: List[TeamInfoModelTrajectory],
                                          traj_i: int,
                                          n_trajectories: int,
+                                         exact: bool = False,
                                          learner_model: Optional[str] = None,
                                          select: Optional[bool] = None,
                                          horizon: Optional[int] = None,
@@ -612,6 +613,15 @@ def generate_trajectories_with_inference(learner_agent: Agent,
                                          verbose: bool = False,
                                          use_tqdm: bool = True
                                          ) -> List[TeamInfoModelTrajectory]:
+    if exact:
+        # exact computation, generate single stochastic trajectory (select=False) from initial state
+        trajectory_dist = generate_trajectory_with_inference(learner_agent, team_trajs, traj_i,
+                                                             learner_model=learner_model, select=True,
+                                                             horizon=horizon, selection='distribution',
+                                                             threshold=threshold,
+                                                             seed=seed, verbose=verbose)
+        return [trajectory_dist]
+
     start = timer()
     args = [(learner_agent, team_trajs, traj_i, learner_model, select,
              horizon, selection, threshold, seed + t, verbose)

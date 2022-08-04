@@ -1,18 +1,19 @@
 import itertools as it
 import numpy as np
-from typing import List, Callable, Optional, Literal
+from typing import List, Callable, Optional, Literal, Union
 from model_learning.features.linear import LinearRewardVector
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
-from model_learning import Trajectory, State
+from model_learning import Trajectory, State, TeamInfoModelTrajectory
 from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world, \
-    generate_trajectories_with_inference
+    generate_trajectories_with_inference, generate_trajectory_with_inference
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def expected_feature_counts(trajectories: List[Trajectory], feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
+def expected_feature_counts(trajectories: Union[List[Trajectory], List[TeamInfoModelTrajectory]],
+                            feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
     """
     Computes the expected (mean over paths) feature counts, i.e., the sum of the feature values for each state along
     a trajectory, averaged across all given trajectories and weighted according to the probability of each trajectory.
@@ -43,10 +44,12 @@ def expected_feature_counts(trajectories: List[Trajectory], feature_func: Callab
     fcs_weighted = np.sum(t_fcs, axis=0) / prob_weights  # shape: (timesteps, num_features)
     return np.sum(fcs_weighted, axis=0)  # get weighted average of feature counts/sums, shape: (num_features, )
 
+
 def estimate_feature_counts_with_inference(learner_agent: Agent,
-                                           team_trajs: List[Trajectory],  # TODO separate types
+                                           team_trajs: List[TeamInfoModelTrajectory],
                                            n_trajectories: int,
                                            feature_func: Callable[[State], np.ndarray],
+                                           exact: bool = False,
                                            learner_model: Optional[str] = None,
                                            select: Optional[bool] = None,
                                            horizon: Optional[int] = None,
@@ -57,9 +60,10 @@ def estimate_feature_counts_with_inference(learner_agent: Agent,
                                            seed: int = 0,
                                            verbose: bool = False,
                                            use_tqdm: bool = True) -> np.ndarray:
+
     args = []
     for traj_i, team_traj in enumerate(team_trajs):
-        args.append((learner_agent, team_trajs, traj_i, n_trajectories, learner_model,
+        args.append((learner_agent, team_trajs, traj_i, n_trajectories, exact, learner_model,
                      select, horizon, selection, threshold, processes, seed + traj_i, verbose))
     trajectories = run_parallel(generate_trajectories_with_inference, args, processes=processes, use_tqdm=use_tqdm)
     trajectories = list(it.chain(*trajectories))

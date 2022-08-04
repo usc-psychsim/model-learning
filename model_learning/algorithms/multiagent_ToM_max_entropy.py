@@ -4,7 +4,7 @@ import numpy as np
 from timeit import default_timer as timer
 from typing import Optional, List
 from psychsim.agent import Agent
-from model_learning import Trajectory
+from model_learning import Trajectory, TeamInfoModelTrajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
 from model_learning.features import expected_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
@@ -39,7 +39,7 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
 
     def __init__(self,
                  label: str,
-                 agent_name: str,
+                 agent: Agent,
                  reward_vector: LinearRewardVector,
                  processes: Optional[int] = -1,
                  normalize_weights=True,
@@ -55,7 +55,7 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         """
         Creates a new Max Entropy algorithm.
         :param str label: the label associated with this algorithm (might be useful for testing purposes).
-        :param str agent_name: the name of the agent whose behavior we want to model (the "expert").
+        :param Agent agent: the agent whose behavior we want to model (the "expert").
         :param LinearRewardVector reward_vector: the reward vector containing the features whose weights are going to
         be optimized.
         :param int processes: number of processes to use. `None` indicates all cores available, `1` uses single process.
@@ -71,8 +71,9 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         :param int horizon: the planning horizon used to compute feature counts.
         :param int seed: the seed to initialize the random number generator.
         """
-        super().__init__(label, agent_name)
+        super().__init__(label, agent.name)
 
+        self.learner_agent = agent
         self.reward_vector = reward_vector
         self.num_features = len(reward_vector)
         self.processes = processes
@@ -95,15 +96,13 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
             print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
             logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
 
-    def learn_with_inference(self,
-                             learner_agent: Agent,
-                             trajectories: List[Trajectory],
-                             data_id: Optional[str] = None,
-                             verbose: bool = False) -> ModelLearningResult:
+    def learn(self,
+              trajectories: List[TeamInfoModelTrajectory],
+              data_id: Optional[str] = None,
+              verbose: bool = False) -> ModelLearningResult:
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
-        :param Agent learner_agent: the learning agent
         :param list[Trajectory] trajectories: a list of trajectories, each
         containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
@@ -116,8 +115,8 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         empirical_fc = expected_feature_counts(trajectories, feature_func)
         print(empirical_fc)
         # estimates information from given trajectories (considered homogenous)
-        old_rationality = learner_agent.getAttribute('rationality', model=learner_agent.get_true_model())
-        learner_agent.setAttribute('rationality', 1.)
+        old_rationality = self.learner_agent.getAttribute('rationality', model=self.learner_agent.get_true_model())
+        self.learner_agent.setAttribute('rationality', 1.)
         # traj_len = len(trajectories[0])
 
         # 1 - initiates reward weights (uniform)
@@ -144,18 +143,19 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
             if self.decrease_rate:
                 learning_rate *= np.power(1 - (10 / self.max_epochs), e)
 
-            self.reward_vector.set_rewards(learner_agent, self.theta)
+            self.reward_vector.set_rewards(self.learner_agent, self.theta)
 
             # gets expected feature counts (mean feature path)
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses rational agent and we need the distribution over actions if exact
-            # TODO add argnames; add exact traj gen
-            expected_fc = estimate_feature_counts_with_inference(learner_agent, trajectories,
-                                                                 self.num_mc_trajectories, feature_func,
-                                                                 None, True, self.horizon, 'distribution',
-                                                                 self.prune_threshold, processes=self.processes,
-                                                                 seed=self.seed, verbose=False, use_tqdm=True)
 
+            expected_fc = estimate_feature_counts_with_inference(self.learner_agent, trajectories,
+                                                                 self.num_mc_trajectories, feature_func,
+                                                                 select=True, horizon=self.horizon,
+                                                                 selection='distribution',
+                                                                 threshold=self.prune_threshold,
+                                                                 processes=self.processes,
+                                                                 seed=self.seed, verbose=False, use_tqdm=True)
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
@@ -177,7 +177,7 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         if verbose:
             self.log_progress(e, self.theta, diff, learning_rate, step_time)
             logging.info('Finished, total time: {:.2f} secs.'.format(sum(times)))
-        learner_agent.setAttribute('rationality', old_rationality)
+        self.learner_agent.setAttribute('rationality', old_rationality)
 
         # returns stats dictionary
         return ModelLearningResult(data_id, trajectories, {

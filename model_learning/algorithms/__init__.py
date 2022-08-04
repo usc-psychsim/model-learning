@@ -1,9 +1,9 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
-from model_learning import Trajectory
+from model_learning import Trajectory, TeamInfoModelTrajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -14,7 +14,8 @@ class ModelLearningResult(object):
     Represents a result of PsychSim model learning for some expert data.
     """
 
-    def __init__(self, data_id: str, trajectories: List[Trajectory], stats: Dict[str, np.ndarray]):
+    def __init__(self, data_id: str, trajectories: Union[List[Trajectory], List[TeamInfoModelTrajectory]],
+                 stats: Dict[str, np.ndarray]):
         """
         Creates a new result.
         :param str data_id: an identifier for the data for which model learning was performed.

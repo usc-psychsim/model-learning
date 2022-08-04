@@ -8,10 +8,12 @@ from psychsim.world import World
 from model_learning.algorithms.max_entropy import ModelLearningResult
 from model_learning.algorithms.multiagent_ToM_max_entropy import MultiagentToMMaxEntRewardLearning
 from model_learning.environments.property_gridworld import PropertyGridWorld
+from model_learning.trajectory import generate_trajectory_with_inference
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from model_learning.features.linear import LinearRewardVector
+from model_learning.features import estimate_feature_counts_with_inference
 
 __author__ = 'Pedro Sequeira and Haochen Wu'
 __email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
@@ -65,14 +67,6 @@ PROCESSES = -1
 VERBOSE = True
 np.set_printoptions(precision=3)
 
-
-def multi_agent_reward_learning(alg: MultiagentToMMaxEntRewardLearning,
-                                agent_trajs: List[List[StateActionPair]],
-                                verbose: bool) -> ModelLearningResult:
-    result = alg.learn(agent_trajs, verbose=verbose)
-    return result
-
-
 if __name__ == '__main__':
     learner_ag_i = 1
     print(learner_ag_i)
@@ -123,10 +117,10 @@ if __name__ == '__main__':
     logging.info('=================================')
     logging.info('Retrieving expert trajectories with model distributions...')
     traj_dir = os.path.join(os.path.dirname(__file__), 'output/examples/reward-model-multiagent')
-    FOLDER_NAME = f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
+    FOLDER_NAME = f'team_trajs_{len(MODEL_ROLES)}models_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
 
     f = bz2.BZ2File(
-        os.path.join(traj_dir, f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}_base.pkl'), 'rb')
+        os.path.join(traj_dir, f'{FOLDER_NAME}_base.pkl'), 'rb')
     team_trajectories = pickle.load(f)
 
     # create models of the other agents
@@ -144,11 +138,14 @@ if __name__ == '__main__':
                 agent.setAttribute('horizon', HORIZON, model=model)
                 agent.setAttribute('discount', DISCOUNT, model=model)
 
+    # generate_trajectory_with_inference(learner_agent, team_trajectories, 0,
+    #                                    None, True, HORIZON, 'distribution',
+    #                                    PRUNE_THRESHOLD, seed=ENV_SEED, verbose=False)
 
     LEARNING_RATE = TEAM_LEARNING_RATE[learner_ag_i]
     learner_rwd_vector = team_rwd[learner_ag_i]
     alg = MultiagentToMMaxEntRewardLearning(
-        'max-ent', learner_agent.name, learner_rwd_vector,
+        'max-ent', learner_agent, learner_rwd_vector,
         processes=PROCESSES,
         normalize_weights=NORM_THETA,
         learning_rate=LEARNING_RATE,
@@ -161,4 +158,5 @@ if __name__ == '__main__':
         horizon=HORIZON,
         seed=LEARNING_SEED
     )
-    result = alg.learn_with_inference(learner_agent, team_trajectories, verbose=True)
+    result = alg.learn(team_trajectories, verbose=True)
+    alg.save_results(result, OUTPUT_DIR, 'pdf')
