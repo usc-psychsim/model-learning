@@ -32,7 +32,7 @@ VALUE_CMAP = 'gray'  # 'viridis' # 'inferno'
 TRAJECTORY_LINE_WIDTH = 1
 LOC_FONT_SIZE = 6
 LOC_FONT_COLOR = 'darkgrey'
-NOTES_FONT_SIZE = 8
+NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
 
@@ -89,7 +89,7 @@ class PropertyGridWorld(GridWorld):
         self.clear_counter = {}
         self.dist_to_clear = {}
         for i, clear_status in self.clear_indicator.items():
-            self.dist_to_clear[i] = [1] * self.width * self.height
+            self.dist_to_clear[i] = [0] * self.width * self.height
             locs = [k for k, v in clear_status.items() if v == 0]
             for loc_i in range(self.width * self.height):
                 self.clear_counter[i] = sum([v == 1 for v in clear_status.values()])
@@ -111,7 +111,8 @@ class PropertyGridWorld(GridWorld):
         self.n_ci = 2 ** self.num_exist
         self.ci = self.world.defineState(WORLD, CLEARINDICATOR_FEATURE, int, 0, self.n_ci - 1,
                                          description=f'indicator of clear property')
-        self.world.setFeature(self.ci, 0)
+        # self.world.setFeature(self.ci, 0)
+        self.world.setFeature(self.ci, self.n_ci-1)
 
         self.m = self.world.defineState(WORLD, MARK_FEATURE, int, -1, len(self.exist_locations)-1,
                                         description=f'MARK: which location needs help')
@@ -144,9 +145,25 @@ class PropertyGridWorld(GridWorld):
                 possible_p_idx.append(ci_i)
         return possible_p_idx
 
+    def get_possible_cleared_idx(self, loc):
+        possible_p_idx = []
+        if loc not in self.exist_locations:
+            return possible_p_idx
+        for ci_i, _loc_clear in self.clear_indicator.items():
+            if _loc_clear[loc] == 1:
+                possible_p_idx.append(ci_i)
+        return possible_p_idx
+
     def get_next_clear_idx(self, unclear_idx, new_loc):
         next_clear = self.clear_indicator[unclear_idx].copy()
         next_clear[new_loc] = 1
+        for ci_i, _loc_clear in self.clear_indicator.items():
+            if list(_loc_clear.values()) == list(next_clear.values()):
+                return ci_i
+
+    def get_next_unclear_idx(self, clear_idx, new_loc):
+        next_clear = self.clear_indicator[clear_idx].copy()
+        next_clear[new_loc] = 0
         for ci_i, _loc_clear in self.clear_indicator.items():
             if list(_loc_clear.values()) == list(next_clear.values()):
                 return ci_i
@@ -296,6 +313,36 @@ class PropertyGridWorld(GridWorld):
                 search_tree[True] = setToConstantMatrix(p_loc, 4)
             search_tree[False] = noChangeMatrix(p_loc)
             self.world.setDynamics(p_loc, action, makeTree(search_tree))
+
+        # update clear indicator once a victim is found
+        tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
+        for loci, loc in enumerate(self.exist_locations):
+            all_clear_idx = self.get_possible_cleared_idx(loc)
+            subtree_dict = {'if': KeyedPlane(KeyedVector({self.ci: 1}), all_clear_idx, 0)}
+            for k, clear_idx in enumerate(all_clear_idx):
+                subtree_dict[k] = setToConstantMatrix(self.ci, self.get_next_unclear_idx(clear_idx, loc))
+            subtree_dict[None] = noChangeMatrix(self.ci)
+            tree_dict[loci] = subtree_dict
+        tree_dict[None] = noChangeMatrix(self.ci)
+        self.world.setDynamics(self.ci, action, makeTree(tree_dict))
+
+        # update distance2clear once a victim is found
+        d2c = self.get_d2c_feature(agent)
+        ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), self.n_ci - 1, 0)}
+        ci_dict[True] = \
+            setToConstantMatrix(d2c, self.dist_to_clear[self.n_ci - 1][0])
+        tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}),
+                                      list(range(self.width * self.height)), 0)}
+        for loc_i in range(self.width * self.height):
+            sub_tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), list(range(self.n_ci - 1)), 0)}
+            for k in range(self.n_ci - 1):
+                sub_tree_dict[k] = \
+                    setToConstantMatrix(d2c, self.dist_to_clear[k][loc_i])
+            sub_tree_dict[None] = noChangeMatrix(d2c)
+            tree_dict[loc_i] = sub_tree_dict
+        tree_dict[None] = noChangeMatrix(d2c)
+        ci_dict[False] = tree_dict
+        self.world.setDynamics(d2c, action, makeTree(ci_dict))
 
         # update NAVI_FEATURE
         if self.track_feature:
@@ -603,17 +650,22 @@ class PropertyGridWorld(GridWorld):
             d2c = self.get_d2c_feature(agent)
             r_d2c = NumericLinearRewardFeature(DISTANCE2CLEAR_FEATURE, d2c)
             reward_features.append(r_d2c)
-            rf_weights.append(0.2 * roles['Goal'])
+            rf_weights.append(0.1 * roles['Goal'])
 
             # if self.track_feature:
             #     r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
             #     reward_features.append(r_goal)
             #     rf_weights.append(self.roles['Goal'])
 
+            search_action = agent.find_action({'action': 'search'})
+            r_search = ActionLinearRewardFeature('search', agent, search_action)
+            reward_features.append(r_search)
+            rf_weights.append(0.2 * roles['Goal'])
+
             rescue_action = agent.find_action({'action': 'rescue'})
             r_rescue = ActionLinearRewardFeature('rescue', agent, rescue_action)
             reward_features.append(r_rescue)
-            rf_weights.append(0.3 * roles['Goal'])
+            rf_weights.append(0.1 * roles['Goal'])
 
             evacuate_action = agent.find_action({'action': 'evacuate'})
             r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
@@ -623,7 +675,7 @@ class PropertyGridWorld(GridWorld):
             nowhere_action = agent.find_action({'action': 'nowhere'})
             r_nowhere = ActionLinearRewardFeature('nowhere', agent, nowhere_action)
             reward_features.append(r_nowhere)
-            rf_weights.append(0.1 * roles['Goal'])
+            rf_weights.append(0.01 * roles['Goal'])
 
             call_action = agent.find_action({'action': 'call'})
             r_call = ActionLinearRewardFeature('call', agent, call_action)

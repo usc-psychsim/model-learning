@@ -4,7 +4,7 @@ import copy
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from psychsim.world import World
 from psychsim.pwl import modelKey, stateKey, WORLD
-from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
+from model_learning.features import LinearRewardVector
 
 __author__ = 'Pedro Sequeira and Haochen Wu'
 __email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
@@ -24,7 +24,7 @@ ENV_SIZE = 3
 ENV_SEED = 48
 NUM_EXIST = 3
 
-TEAM_AGENTS = ['AHA', 'Helper1']
+TEAM_AGENTS = ['Goal', 'Helper']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
@@ -49,23 +49,23 @@ if __name__ == '__main__':
 
     # team of two agents
     team = []
-    for i in range(len(TEAM_AGENTS)):
-        team.append(world.addAgent(AgentRoles(TEAM_AGENTS[i], AGENT_ROLES[i])))
-
-    # define agent dynamics
-    for agent in team:
+    for ag_i in range(len(TEAM_AGENTS)):
+        agent = world.addAgent(TEAM_AGENTS[ag_i])
+        # define agent dynamics
         env.add_location_property_dynamics(agent, idle=True)
+        team.append(agent)
+    # collaboration dynamics
     env.add_collaboration_dynamics([agent for agent in team])
 
     # set agent rewards, and attributes
     # print(env.world.symbolList)
     for ag_i, agent in enumerate(team):
-        rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
-        agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
-        agent_lrv.rwd_weights = np.array(agent_lrv.rwd_weights) / np.linalg.norm(agent_lrv.rwd_weights, 1)
-        agent_lrv.set_rewards(agent, agent_lrv.rwd_weights)
+        rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
+        agent_lrv = LinearRewardVector(rwd_features)
+        rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+        agent_lrv.set_rewards(agent, rwd_f_weights)
         print(f'{agent.name} Reward Features')
-        print(agent_lrv.names, agent_lrv.rwd_weights)
+        print(agent_lrv.names, rwd_f_weights)
         # agent.printReward(agent.get_true_model())
 
         agent.setAttribute('selection', ACT_SELECTION)
