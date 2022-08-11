@@ -93,8 +93,8 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
     @staticmethod
     def log_progress(e: int, theta: np.ndarray, diff: float, learning_rate: float, step_time: float):
         with np.printoptions(precision=4, suppress=True):
-            print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
-            logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
+            print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.3f}, time={step_time:.2f}s')
+            logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.3f}, time={step_time:.2f}s')
 
     def learn(self,
               trajectories: List[TeamInfoModelTrajectory],
@@ -113,7 +113,8 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         # get empirical feature counts (mean feature path) from trajectories
         feature_func = lambda s: self.reward_vector.get_values(s)
         empirical_fc = expected_feature_counts(trajectories, feature_func)
-        print(empirical_fc)
+        if verbose:
+            logging.info(f'Empirical Feature Counts {empirical_fc}')
         # estimates information from given trajectories (considered homogenous)
         old_rationality = self.learner_agent.getAttribute('rationality', model=self.learner_agent.get_true_model())
         self.learner_agent.setAttribute('rationality', 1.)
@@ -156,6 +157,8 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
                                                                  threshold=self.prune_threshold,
                                                                  processes=self.processes,
                                                                  seed=self.seed, verbose=False, use_tqdm=True)
+            if verbose:
+                logging.info(f'Estimated Feature Counts {expected_fc}')
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
