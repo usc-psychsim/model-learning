@@ -43,7 +43,7 @@ NUM_EXIST = 3
 
 TEAM_AGENTS = ['Goal', 'Navigator']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
-MODEL_ROLES = ['Self', 'Uniform']  # TODO, 'Random']
+MODEL_ROLES = ['GroundTruth', 'Opposite']  # 'Opposite'
 OBSERVER_NAME = 'observer'
 
 HORIZON = 2  # 0 for random actions
@@ -53,18 +53,19 @@ RATIONALITY = 1 / 0.1
 
 # common params
 
-NUM_TRAJECTORIES = 32  # 10
-TRAJ_LENGTH = 25  # 30
+NUM_TRAJECTORIES = 16
+TRAJ_LENGTH = 25
 PROCESSES = -1
 DEBUG = 0
 np.set_printoptions(precision=3)
 
 RANDOM_MODEL = 'zero_rwd'
-MODEL_RATIONALITY = 5  # .5
+MODEL_RATIONALITY = 1  # .5
 MODEL_SELECTION = 'distribution'  # 'random'  # 'distribution'
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/reward-model-multiagent')
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, f'team_trajs_md_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}_base.pkl')
+OUTPUT_FILE = os.path.join(
+    OUTPUT_DIR, f'team_trajs_{len(MODEL_ROLES)}models_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}.pkl')
 SHOW = True
 INCLUDE_RANDOM_MODEL = True
 
@@ -114,20 +115,8 @@ def generate_trajectory_model_distribution(world: World,
 
     # add agent models
     for ag_i, agent in enumerate(_team):
+        env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
         true_model = agent.get_true_model()
-        for model_name in MODEL_ROLES:
-            model_name = f'{agent.name}_{model_name}'
-            agent.addModel(model_name, parent=true_model)
-            rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
-            agent_lrv = LinearRewardVector(rwd_features)
-            rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-            if model_name == f'{agent.name}_Uniform':
-                rwd_f_weights = [1] * len(rwd_f_weights)
-                rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
-            if model_name == f'{agent.name}_Random':
-                rwd_f_weights = [0] * len(rwd_f_weights)
-            agent_lrv.set_rewards(agent, rwd_f_weights, model=model_name)
-            print(agent.name, model_name, agent_lrv.names, rwd_f_weights)
 
         model_names = [name for name in agent.models.keys() if name != true_model]
         dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})

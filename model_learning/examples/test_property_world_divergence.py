@@ -6,9 +6,8 @@ from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from psychsim.world import World
-from model_learning.features import expected_feature_counts, estimate_feature_counts
+from model_learning.features import expected_feature_counts, estimate_feature_counts, LinearRewardVector
 from psychsim.pwl import Distribution
-from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
 from model_learning.trajectory import copy_world
 from model_learning.evaluation.metrics import policy_divergence
 
@@ -28,7 +27,7 @@ ENV_SIZE = 3
 ENV_SEED = 47
 NUM_EXIST = 3
 
-TEAM_AGENTS = ['AHA', 'Helper1']
+TEAM_AGENTS = ['Goal', 'Helper']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
@@ -61,23 +60,25 @@ if __name__ == '__main__':
 
     # team of two agents
     team = []
-    for i in range(len(TEAM_AGENTS)):
-        team.append(world.addAgent(AgentRoles(TEAM_AGENTS[i], AGENT_ROLES[i])))
-
-    # # define agent dynamics
-    for agent in team:
+    for ag_i in range(len(TEAM_AGENTS)):
+        agent = world.addAgent(TEAM_AGENTS[ag_i])
+        # define agent dynamics
         env.add_location_property_dynamics(agent, idle=True)
+        team.append(agent)
+    # collaboration dynamics
     env.add_collaboration_dynamics([agent for agent in team])
 
     # set agent rewards, and attributes
     team_rwd = []
     for ag_i, agent in enumerate(team):
-        rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
-        agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
-        agent_lrv.rwd_weights = np.array(agent_lrv.rwd_weights) / np.linalg.norm(agent_lrv.rwd_weights, 1)
-        agent_lrv.set_rewards(agent, agent_lrv.rwd_weights)
+        rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
+        agent_lrv = LinearRewardVector(rwd_features)
+        if ag_i == 1:
+            rwd_f_weights = np.array([-0.25, -0.25, -0.5])  # opposite
+        rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+        agent_lrv.set_rewards(agent, rwd_f_weights)
         print(f'{agent.name} Reward Features')
-        print(agent_lrv.names, agent_lrv.rwd_weights)
+        print(agent_lrv.names, rwd_f_weights)
         team_rwd.append(agent_lrv)
         # agent.printReward(agent.get_true_model())
 
@@ -95,23 +96,21 @@ if __name__ == '__main__':
 
     learner_team_rwd = []
     for ag_i, agent in enumerate(learner_team):
-        rwd_features, rwd_f_weights = agent.get_role_reward_vector(env)
-        agent_lrv = AgentLinearRewardVector(agent, rwd_features, rwd_f_weights)
+        rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
+        agent_lrv = LinearRewardVector(rwd_features)
         if ag_i == 0:
-            # weights = np.array([1, 1, 1, 1, 1])  # feature random reward
-            # weights = np.array([0, 0, 0, 0, 0])  # random reward
-            weights = np.array([0.0184, 0.0992, 0.1805, 0.6931, 0.0088])  # IRL
-            # weights = np.array([0.1176, 0.1765, 0.5882, 0.0588, 0.0588])  # gt
+            # weights = np.array([1, 1, 1, 1, 1, 1])  # feature random reward
+            # weights = np.array([0, 0, 0, 0, 0, 0])  # random reward
+            weights = np.array([0.066, 0.132, 0.066, 0.662, 0.007, 0.066])  # gt
         else:
             # weights = np.array([1, 1, 1])  # feature random reward
             # weights = np.array([0, 0, 0])  # random reward
-            weights = np.array([0.0827, 0.2838, 0.6335])  # IRL
-            # weights = np.array([0.25, 0.25, 0.5])  # gt
-        agent_lrv.rwd_weights = np.array(weights) / np.linalg.norm(weights, 1)
+            weights = np.array([0.25, 0.25, 0.5])  # gt
+        rwd_f_weights = np.array(weights) / np.linalg.norm(weights, 1)
+        agent_lrv.set_rewards(agent, rwd_f_weights)
         # agent_lrv.rwd_weights = weights
-        agent_lrv.set_rewards(agent, agent_lrv.rwd_weights)
         print(f'{agent.name + learner_suffix} Reward Features')
-        print(agent_lrv.names, agent_lrv.rwd_weights)
+        print(agent_lrv.names, rwd_f_weights)
         learner_team_rwd.append(agent_lrv)
 
     if EVALUATE_BY == 'EMPIRICAL':

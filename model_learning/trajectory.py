@@ -530,6 +530,7 @@ def generate_trajectory_with_inference(learner_agent: Agent,
         # print(f'Step {step_i}:')
         start = timer()
 
+        other_actions = {}
         for ag_i, _agent in enumerate(_team):
             if _agent.name != learner_agent.name:
                 true_model = _agent.get_true_model()
@@ -537,11 +538,23 @@ def generate_trajectory_with_inference(learner_agent: Agent,
 
                 included_features = set(learner_agent.getBelief(model=learner_agent.get_true_model()).keys())
                 learner_agent.resetBelief(include=included_features)  # override actual features in belief states
-                # model = _world.getModel(learner_agent.name, unique=True)
-                # print(_world.getFeature(modelKey(_agent.name), state=learner_agent.getBelief(model=model)))
 
                 dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
+                # dist = Distribution({f'{_agent.name}_Opposite': 1, f'{_agent.name}_GroundTruth': 0})
+                if select:
+                    dist, model_prob = dist.sample()
                 learner_agent.setBelief(modelKey(_agent.name), dist)
+
+                action_dist = []
+                model_names = _world.getFeature(modelKey(_agent.name),
+                                                state=learner_agent.getBelief(model=learner_agent.get_true_model()))
+
+                for model, model_prob in model_names.items():
+                    decision = _agent.decide(selection='random', model=model)
+                    action = decision['action']
+                    action = _world.value2float(actionKey(_agent.name), action)
+                    action_dist.append((setToConstantMatrix(actionKey(_agent.name), action), model_prob))
+                other_actions[_agent.name] = makeTree({'distribution': action_dist})
 
         # step the world until it's this agent's turn
         turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
@@ -555,32 +568,10 @@ def generate_trajectory_with_inference(learner_agent: Agent,
             # select if state is stochastic and update probability of reaching state
             prob *= _world.state.select()
 
-        # # TODO non-learner decide on the models, pass in distribution
-        other_actions = {}
-        for _agent in _team:
-            if _agent.name != learner_agent.name:
-                true_model = _agent.get_true_model()
-                model_names = [name for name in _agent.models.keys() if name != true_model]
-                action_dist = []
-                for model in model_names:
-                    model_prob = team_trajs[traj_i][step_i].model_dist[model]
-                    decision = _agent.decide(selection='softmax', model=model)
-                    action = decision['action']
-                    action = _world.value2float(actionKey(_agent.name), action)
-                    action_dist.append((setToConstantMatrix(actionKey(_agent.name), action), model_prob))
-                other_actions[_agent.name] = makeTree({'distribution': action_dist})
-        # print(other_actions['Goal'])
-
         _world.step(actions=other_actions, select=False, horizon=horizon, tiebreak='distribution',
                     threshold=threshold, updateBeliefs=False)
 
-        # steps the world (do not select), gets the agent's action
-        # _world.step(select=False, horizon=horizon, tiebreak='distribution',
-        #             threshold=threshold)
         action = _world.getAction(learner_agent.name)
-        # print(action)
-        # print(_world.getAction(_team[1].name))
-        # print(team_trajs[traj_i][step_i].action)
         trajectory.append(TeamStateinfoActionModelTuple(prev_world.state,
                                                         action,
                                                         team_trajs[traj_i][step_i].model_dist,

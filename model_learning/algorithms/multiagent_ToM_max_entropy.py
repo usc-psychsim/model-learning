@@ -19,7 +19,7 @@ FEATURE_COUNT_DIFF_STR = 'Feature Count Diff.'
 THETA_STR = 'Optimal Weight Vector'
 TIME_STR = 'Time'
 LEARN_RATE_STR = 'Learning Rate'
-
+LEARNING_DECAY = 0.9
 
 class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
     """
@@ -142,7 +142,7 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
             # update learning rate
             learning_rate = self.learning_rate
             if self.decrease_rate:
-                learning_rate *= np.power(1 - (10 / self.max_epochs), e)
+                learning_rate *= np.power(LEARNING_DECAY, e)
 
             self.reward_vector.set_rewards(self.learner_agent, self.theta)
 
