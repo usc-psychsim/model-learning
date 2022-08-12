@@ -114,7 +114,7 @@ class GridWorld(object):
         #         self.world.setFeature(visits[loc_i], 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
-        action = agent.addAction({'verb': 'move', 'action': 'nowhere'})
+        action = agent.addAction({'verb': 'move', 'action': 'wait'})
         tree = makeTree(noChangeMatrix(x))
         self.world.setDynamics(x, action, tree)
         self.agent_actions[agent.name].append(action)

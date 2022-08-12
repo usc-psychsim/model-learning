@@ -209,11 +209,11 @@ class PropertyGridWorld(GridWorld):
         self.add_agent_dynamics(agent)
         x, y = self.get_location_features(agent)
 
-        # whether nowhere is allowed
+        # whether wait is allowed
         if not idle:
-            self.remove_action(agent, 'nowhere')
+            self.remove_action(agent, 'wait')
         else:
-            action = agent.find_action({'action': 'nowhere'})
+            action = agent.find_action({'action': 'wait'})
             legal_dict = {'if': equalRow(self.ci, self.n_ci - 1), True: True, False: False}
             agent.setLegal(action, makeTree(legal_dict))
 
@@ -356,8 +356,8 @@ class PropertyGridWorld(GridWorld):
                              False: noChangeMatrix(f)}
                 self.world.setDynamics(f, action, makeTree(tree_dict))
 
-        # rescue is valid when location is found
-        action = agent.addAction({'verb': 'handle', 'action': 'rescue'})
+        # triage is valid when location is found
+        action = agent.addAction({'verb': 'handle', 'action': 'triage'})
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
             p_loc = self.p_state[loc]
@@ -640,9 +640,9 @@ class PropertyGridWorld(GridWorld):
         rf_weights = []
 
         if roles is None:
-            nowhere_action = agent.find_action({'action': 'nowhere'})
-            r_nowhere = ActionLinearRewardFeature('nowhere', agent, nowhere_action)
-            reward_features.append(r_nowhere)
+            wait_action = agent.find_action({'action': 'wait'})
+            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
+            reward_features.append(r_wait)
             rf_weights.append(1)
             return reward_features, rf_weights
 
@@ -652,19 +652,19 @@ class PropertyGridWorld(GridWorld):
             reward_features.append(r_d2c)
             rf_weights.append(0.1 * roles['Goal'])
 
-            # if self.track_feature:
-            #     r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
-            #     reward_features.append(r_goal)
-            #     rf_weights.append(self.roles['Goal'])
+            if self.track_feature:
+                r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
+                reward_features.append(r_goal)
+                rf_weights.append(roles['Goal'])
 
             search_action = agent.find_action({'action': 'search'})
             r_search = ActionLinearRewardFeature('search', agent, search_action)
             reward_features.append(r_search)
             rf_weights.append(0.2 * roles['Goal'])
 
-            rescue_action = agent.find_action({'action': 'rescue'})
-            r_rescue = ActionLinearRewardFeature('rescue', agent, rescue_action)
-            reward_features.append(r_rescue)
+            triage_action = agent.find_action({'action': 'triage'})
+            r_triage = ActionLinearRewardFeature('triage', agent, triage_action)
+            reward_features.append(r_triage)
             rf_weights.append(0.1 * roles['Goal'])
 
             evacuate_action = agent.find_action({'action': 'evacuate'})
@@ -672,9 +672,9 @@ class PropertyGridWorld(GridWorld):
             reward_features.append(r_evacuate)
             rf_weights.append(roles['Goal'])
 
-            nowhere_action = agent.find_action({'action': 'nowhere'})
-            r_nowhere = ActionLinearRewardFeature('nowhere', agent, nowhere_action)
-            reward_features.append(r_nowhere)
+            wait_action = agent.find_action({'action': 'wait'})
+            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
+            reward_features.append(r_wait)
             rf_weights.append(0.01 * roles['Goal'])
 
             call_action = agent.find_action({'action': 'call'})
@@ -682,15 +682,9 @@ class PropertyGridWorld(GridWorld):
             reward_features.append(r_call)
             rf_weights.append(0.1 * roles['Goal'])
 
-            for act in {'right', 'left', 'up', 'down', 'nowhere', 'search', 'rescue', 'evacuate'}:
+            for act in {'right', 'left', 'up', 'down', 'wait', 'search', 'triage', 'evacuate'}:
                 action = agent.find_action({'action': act})
                 self.world.setDynamics(self.m, action, makeTree(setToConstantMatrix(self.m, -1)))
-
-            # for move in MOVEMENT:
-            #     move_action = self.find_action({'action': move})
-            #     r_move = ActionLinearRewardFeature(move, self, move_action)
-            #     reward_features.append(r_move)
-            #     rf_weights.append(-0.01 * self.roles['Goal'])
 
         if 'Navigator' in roles:
             d2h = self.get_d2h_feature(agent)
@@ -703,18 +697,19 @@ class PropertyGridWorld(GridWorld):
             reward_features.append(r_search)
             rf_weights.append(roles['Navigator'])
 
-            # if env.track_feature:
-            #     f = env.get_navi_features(self)
-            #     r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
-            #     reward_features.append(r_navi)
-            #     rf_weights.append(self.roles['Navigator'])
+            if self.track_feature:
+                f = self.get_navi_features(agent)
+                r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
+                reward_features.append(r_navi)
+                rf_weights.append(roles['Navigator'])
 
             evacuate_action = agent.find_action({'action': 'evacuate'})
             r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
             reward_features.append(r_evacuate)
             rf_weights.append(2 * roles['Navigator'])
 
-            self.remove_action(agent, 'nowhere')
+            self.remove_action(agent, 'triage')
+            self.remove_action(agent, 'wait')
             self.remove_action(agent, 'call')
 
         return reward_features, rf_weights

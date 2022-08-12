@@ -24,7 +24,7 @@ ENV_SIZE = 3
 ENV_SEED = 48
 NUM_EXIST = 3
 
-TEAM_AGENTS = ['Goal', 'Helper']
+TEAM_AGENTS = ['Medic', 'Explorer']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
@@ -35,7 +35,7 @@ RATIONALITY = 1 / 0.1
 # common params
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output/examples/property-world')
-NUM_TRAJECTORIES = 3  # 10
+NUM_TRAJECTORIES = 5  # 10
 TRAJ_LENGTH = 25  # 30
 PROCESSES = -1
 DEBUG = 0
