@@ -726,10 +726,26 @@ class PropertyGridWorld(GridWorld):
                 rwd_weights = -1. * np.array(rwd_weights)
                 rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
             if model_name == f'{agent.name}_Uniform':
-                rwd_weights = [1] * len(rwd_weights)
+                rwd_weights = [1.] * len(rwd_weights)
                 rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
             if model_name == f'{agent.name}_Random':
-                rwd_weights = [0] * len(rwd_weights)
+                rwd_weights = [0.] * len(rwd_weights)
+
+            if agent.name == 'Medic':
+                selected_feats = {'dc', 'triage', 'evacuate'}
+            elif agent.name == 'Explorer':
+                selected_feats = {'search'}
+            else:
+                selected_feats = {}
+            if model_name == f'{agent.name}_Task':
+                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
+                    if rwd_feat not in selected_feats:
+                        rwd_weights[rwd_i] = 0
+            if model_name == f'{agent.name}_Social':
+                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
+                    if rwd_feat in selected_feats:
+                        rwd_weights[rwd_i] = 0
+
             agent_lrv.set_rewards(agent, rwd_weights, model=model_name)
             print(agent.name, model_name, agent_lrv.names, rwd_weights)
         return agent
