@@ -21,7 +21,9 @@ setup(name='model-learning',
           'sklearn',
           'joblib',
           'tqdm',
-          'pandas'
+          'pandas',
+          'plotly',
+          'kaleido'
       ],
       zip_safe=True,
       python_requires='>=3.8',

@@ -1,13 +1,13 @@
 import plotly
 from collections import OrderedDict
 from sklearn.preprocessing import MinMaxScaler
-from utils.io import create_clear_dir
-from utils.plot import *
+from model_learning.util.io import create_clear_dir
+from model_learning.util.plot_new import *
 
 dummy_plotly()  # ALWAYS DO THIS BEFORE A BATCH OF PLOTTING !!!
 
 IMG_EXT = 'pdf'
-OUTPUT_DIR = os.path.join('output', 'timeseries_test')
+OUTPUT_DIR = os.path.join('output/examples', 'timeseries_test')
 
 create_clear_dir(OUTPUT_DIR, clear=True)
 
