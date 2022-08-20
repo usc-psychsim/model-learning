@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
-from typing import Dict, NamedTuple, Literal, Any
+from typing import Dict, NamedTuple, Literal, Any, Tuple
 from psychsim.action import ActionSet
 from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, makeFuture, equalFeatureRow, WORLD
 from model_learning.environments.gridworld import GridWorld
@@ -36,22 +36,32 @@ NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
 
+
 # location info includes loc idx and property status
 class LocationInfo(NamedTuple):
     loci: int
     p: int
 
 
-# define object property
-def get_goal_features() -> str:
-    g = stateKey(WORLD, GOAL_FEATURE)
-    return g
-
-
 class PropertyGridWorld(GridWorld):
+    """
+    Represents a gridworld environment containing property information.
+    Each location has a property state, used to keep track of multidimensional information.
+    e.g., can be used to track status of multiple tasks
+    """
 
     def __init__(self, world: World, width: int, height: int, num_exist: int,
-                 name: str = '', track_feature: bool = False, seed: int = 0, show_objects: bool = True):
+                 name: str = '', track_feature: bool = False, seed: int = 0):
+        """
+        Creates a new gridworld.
+        :param World world: the PsychSim world associated with this gridworld.
+        :param int width: the number of horizontal cells.
+        :param int height: the number of vertical cells.
+        :param int num_exist: the number of objects exited.
+        :param str name: the name of this gridworld, used as a suffix for features, actions, etc.
+        :param bool track_feature: whether to enable features that track accumulated stats
+        :param int seed: the seed used to initialize the random number generator to create and place the objects.
+        """
         super().__init__(world, width, height, name)
 
         self.num_exist = num_exist
@@ -100,7 +110,7 @@ class PropertyGridWorld(GridWorld):
 
         # precompute distance to the help location for each location
         self.dist_to_help = {}
-        for loc in [-1]+self.exist_locations:
+        for loc in [-1] + self.exist_locations:
             self.dist_to_help[loc] = [0] * self.width * self.height
             if loc > -1:
                 for loc_i in range(self.width * self.height):
@@ -112,9 +122,9 @@ class PropertyGridWorld(GridWorld):
         self.ci = self.world.defineState(WORLD, CLEARINDICATOR_FEATURE, int, 0, self.n_ci - 1,
                                          description=f'indicator of clear property')
         # self.world.setFeature(self.ci, 0)
-        self.world.setFeature(self.ci, self.n_ci-1)
+        self.world.setFeature(self.ci, self.n_ci - 1)
 
-        self.m = self.world.defineState(WORLD, MARK_FEATURE, int, -1, len(self.exist_locations)-1,
+        self.m = self.world.defineState(WORLD, MARK_FEATURE, int, -1, len(self.exist_locations) - 1,
                                         description=f'MARK: which location needs help')
         self.world.setFeature(self.m, -1)
 
@@ -134,7 +144,7 @@ class PropertyGridWorld(GridWorld):
             _dist = abs(curr_x - loc_x) + abs(curr_y - loc_y)
             if _dist < dist:
                 dist = _dist
-        return dist/(self.width + self.height - 2)
+        return dist / (self.width + self.height - 2)
 
     def get_possible_uncleared_idx(self, loc):
         possible_p_idx = []
@@ -221,8 +231,7 @@ class PropertyGridWorld(GridWorld):
         d2c = self.world.defineState(agent.name, DISTANCE2CLEAR_FEATURE + self.name,
                                      float, 0, 1,
                                      description=f'distance to the closest exist')
-        init_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
-        self.world.setFeature(d2c, self.dist_to_clear[0][init_loc])
+        self.world.setFeature(d2c, 0)
 
         ci_dict = {'if': KeyedPlane(KeyedVector({self.ci: 1}), self.n_ci - 1, 0)}
         ci_dict[True] = setToConstantMatrix(d2c, self.dist_to_clear[self.n_ci - 1][0])
@@ -260,8 +269,7 @@ class PropertyGridWorld(GridWorld):
         d2h = self.world.defineState(agent.name, DISTANCE2HELP_FEATURE + self.name,
                                      float, 0, 1,
                                      description=f'distance to help the others')
-        init_loc = self.xy_to_idx(self.world.getFeature(x, unique=True), self.world.getFeature(y, unique=True))
-        self.world.setFeature(d2h, self.dist_to_help[-1][init_loc])
+        self.world.setFeature(d2h, 0)
 
         tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}),
                                       list(range(self.width * self.height)), 0)}
@@ -459,7 +467,7 @@ class PropertyGridWorld(GridWorld):
             # update distance2clear
             d2c = self.get_d2c_feature(agents[i])
             ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.ci): 1}), self.n_ci - 1, 0)}
-            ci_dict[True] =\
+            ci_dict[True] = \
                 setToConstantMatrix(d2c, self.dist_to_clear[self.n_ci - 1][0])
             tree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}),
                                           list(range(self.width * self.height)), 0)}
@@ -474,6 +482,134 @@ class PropertyGridWorld(GridWorld):
             ci_dict[False] = tree_dict
             self.world.setDynamics(d2c, action_list[i], makeTree(ci_dict))
 
+    def get_role_reward_vector(self, agent: Agent, roles: Dict[str, float] = None):
+        """
+        Function to get reward features and weights based on the agent role in the team
+        @param agent: the target agent
+        @param roles: agent roles in the team
+        @return: list of reward features, list of reward weights
+        """
+        reward_features = []
+        rf_weights = []
+
+        if roles is None:
+            wait_action = agent.find_action({'action': 'wait'})
+            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
+            reward_features.append(r_wait)
+            rf_weights.append(1)
+            return reward_features, rf_weights
+
+        if 'Goal' in roles:  # scale -1 to 1
+            d2c = self.get_d2c_feature(agent)
+            r_d2c = NumericLinearRewardFeature(DISTANCE2CLEAR_FEATURE, d2c)
+            reward_features.append(r_d2c)
+            rf_weights.append(0.1 * roles['Goal'])
+
+            if self.track_feature:
+                r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
+                reward_features.append(r_goal)
+                rf_weights.append(roles['Goal'])
+
+            search_action = agent.find_action({'action': 'search'})
+            r_search = ActionLinearRewardFeature('search', agent, search_action)
+            reward_features.append(r_search)
+            rf_weights.append(0.1 * roles['Goal'])
+
+            triage_action = agent.find_action({'action': 'triage'})
+            r_triage = ActionLinearRewardFeature('triage', agent, triage_action)
+            reward_features.append(r_triage)
+            rf_weights.append(0.3 * roles['Goal'])
+
+            evacuate_action = agent.find_action({'action': 'evacuate'})
+            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
+            reward_features.append(r_evacuate)
+            rf_weights.append(roles['Goal'])
+
+            wait_action = agent.find_action({'action': 'wait'})
+            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
+            reward_features.append(r_wait)
+            rf_weights.append(0.05 * roles['Goal'])
+
+            call_action = agent.find_action({'action': 'call'})
+            r_call = ActionLinearRewardFeature('call', agent, call_action)
+            reward_features.append(r_call)
+            rf_weights.append(0.05 * roles['Goal'])
+
+            for act in {'right', 'left', 'up', 'down', 'wait', 'search', 'triage', 'evacuate'}:
+                action = agent.find_action({'action': act})
+                self.world.setDynamics(self.m, action, makeTree(setToConstantMatrix(self.m, -1)))
+
+        if 'Navigator' in roles:
+            d2h = self.get_d2h_feature(agent)
+            r_d2h = NumericLinearRewardFeature(DISTANCE2HELP_FEATURE, d2h)
+            reward_features.append(r_d2h)
+            rf_weights.append(roles['Navigator'])
+
+            search_action = agent.find_action({'action': 'search'})
+            r_search = ActionLinearRewardFeature('search', agent, search_action)
+            reward_features.append(r_search)
+            rf_weights.append(roles['Navigator'])
+
+            if self.track_feature:
+                f = self.get_navi_features(agent)
+                r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
+                reward_features.append(r_navi)
+                rf_weights.append(roles['Navigator'])
+
+            evacuate_action = agent.find_action({'action': 'evacuate'})
+            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
+            reward_features.append(r_evacuate)
+            rf_weights.append(2 * roles['Navigator'])
+
+            self.remove_action(agent, 'triage')
+            self.remove_action(agent, 'wait')
+            self.remove_action(agent, 'call')
+
+        return reward_features, rf_weights
+
+    def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]) -> Agent:
+        """
+        Function called to add models to agent
+        @param Agent agent: the agent that has models
+        @param roles: agent roles in the team, used to get reward features
+        @param model_names: possible models of agent
+        @return: the modified agent
+        """
+        for model_name in model_names:
+            true_model = agent.get_true_model()
+            model_name = f'{agent.name}_{model_name}'
+            agent.addModel(model_name, parent=true_model)
+            rwd_features, rwd_weights = self.get_role_reward_vector(agent, roles)
+            agent_lrv = LinearRewardVector(rwd_features)
+            rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Opposite':
+                rwd_weights = -1. * np.array(rwd_weights)
+                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Uniform':
+                rwd_weights = [1.] * len(rwd_weights)
+                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
+            if model_name == f'{agent.name}_Random':
+                rwd_weights = [0.] * len(rwd_weights)
+
+            if agent.name == 'Medic':
+                selected_feats = {'dc', 'triage', 'evacuate'}
+            elif agent.name == 'Explorer':
+                selected_feats = {'search'}
+            else:
+                selected_feats = {}
+            if model_name == f'{agent.name}_Task':
+                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
+                    if rwd_feat not in selected_feats:
+                        rwd_weights[rwd_i] = 0
+            if model_name == f'{agent.name}_Social':
+                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
+                    if rwd_feat in selected_feats:
+                        rwd_weights[rwd_i] = 0
+
+            agent_lrv.set_rewards(agent, rwd_weights, model=model_name)
+            print(agent.name, model_name, agent_lrv.names, rwd_weights)
+        return agent
+
     def generate_team_trajectories(self, team: List[Agent], trajectory_length: int,
                                    n_trajectories: int = 1, init_feats: Optional[Dict[str, Any]] = None,
                                    model: Optional[str] = None, select: bool = True,
@@ -482,6 +618,27 @@ class PropertyGridWorld(GridWorld):
                                    horizon: Optional[int] = None, threshold: Optional[float] = None,
                                    processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
                                    use_tqdm: bool = True) -> List[TeamTrajectory]:
+        """
+        Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
+        :param List[Agent] team: the team of agents for which to record the actions.
+        :param int trajectory_length: the length of the generated trajectories.
+        :param int n_trajectories: the number of trajectories to be generated.
+        :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+        trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+        values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+        feature's domain.
+        :param str model: the agent model used to generate the trajectories.
+        :param bool select: whether to select from stochastic states after each world step.
+        :param str selection: the action selection criterion, to untie equal-valued actions.
+        :param int horizon: the agent's planning horizon.
+        :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+        :param int processes: number of processes to use. Follows `joblib` convention.
+        :param int seed: the seed used to initialize the random number generator.
+        :param bool verbose: whether to show information at each timestep during trajectory generation.
+        :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+        :rtype: list[TeamTrajectory]
+        :return: a list of team trajectories, each containing a list of state-team action pairs.
+        """
         assert len(team) > 0, 'No agent in the team'
 
         # if not specified, set random values for x, y pos
@@ -507,6 +664,28 @@ class PropertyGridWorld(GridWorld):
                                              horizon: Optional[int] = None, threshold: Optional[float] = None,
                                              processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
                                              use_tqdm: bool = True) -> List[TeamTrajectory]:
+        """
+        Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
+        :param List[Agent] expert_team: the team of agents that step the world.
+        :param List[Agent] learner_team: the team of agents for which to record the actions.
+        :param int trajectory_length: the length of the generated trajectories.
+        :param int n_trajectories: the number of trajectories to be generated.
+        :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+        trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+        values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+        feature's domain.
+        :param str model: the agent model used to generate the trajectories.
+        :param bool select: whether to select from stochastic states after each world step.
+        :param str selection: the action selection criterion, to untie equal-valued actions.
+        :param int horizon: the agent's planning horizon.
+        :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+        :param int processes: number of processes to use. Follows `joblib` convention.
+        :param int seed: the seed used to initialize the random number generator.
+        :param bool verbose: whether to show information at each timestep during trajectory generation.
+        :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+        :rtype: list[TeamTrajectory]
+        :return: a list of trajectories, each containing a list of state-expert-learner-action pairs.
+        """
         assert len(expert_team) > 0, 'No agent in the team'
         assert len(learner_team) > 0, 'No agent in the team'
 
@@ -525,6 +704,7 @@ class PropertyGridWorld(GridWorld):
                                                     init_feats, model, select, horizon, selection, threshold,
                                                     processes, seed, verbose, use_tqdm)
 
+    # generate .gif of trajectories
     def play_team_trajectories(self, team_trajectories: List[TeamTrajectory],
                                team: List[Agent],
                                file_name: str,
@@ -549,7 +729,7 @@ class PropertyGridWorld(GridWorld):
                 ax = axes[ag_i]
                 ax.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
                 for x, y in itertools.product(range(self.width), range(self.height)):
-                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .12), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .15), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
                 # turn off tick labels
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -634,118 +814,3 @@ class PropertyGridWorld(GridWorld):
             anim = FuncAnimation(fig, update, len(team_traj))
             out_file = os.path.join(file_name, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_exist}.gif')
             anim.save(out_file, dpi=300, fps=1, writer='pillow')
-
-    def get_role_reward_vector(self, agent: Agent, roles: Dict[str, float] = None):
-        reward_features = []
-        rf_weights = []
-
-        if roles is None:
-            wait_action = agent.find_action({'action': 'wait'})
-            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
-            reward_features.append(r_wait)
-            rf_weights.append(1)
-            return reward_features, rf_weights
-
-        if 'Goal' in roles:  # scale -1 to 1
-            d2c = self.get_d2c_feature(agent)
-            r_d2c = NumericLinearRewardFeature(DISTANCE2CLEAR_FEATURE, d2c)
-            reward_features.append(r_d2c)
-            rf_weights.append(0.1 * roles['Goal'])
-
-            if self.track_feature:
-                r_goal = NumericLinearRewardFeature(GOAL_FEATURE, stateKey(WORLD, GOAL_FEATURE))
-                reward_features.append(r_goal)
-                rf_weights.append(roles['Goal'])
-
-            search_action = agent.find_action({'action': 'search'})
-            r_search = ActionLinearRewardFeature('search', agent, search_action)
-            reward_features.append(r_search)
-            rf_weights.append(0.2 * roles['Goal'])
-
-            triage_action = agent.find_action({'action': 'triage'})
-            r_triage = ActionLinearRewardFeature('triage', agent, triage_action)
-            reward_features.append(r_triage)
-            rf_weights.append(0.1 * roles['Goal'])
-
-            evacuate_action = agent.find_action({'action': 'evacuate'})
-            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
-            reward_features.append(r_evacuate)
-            rf_weights.append(roles['Goal'])
-
-            wait_action = agent.find_action({'action': 'wait'})
-            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
-            reward_features.append(r_wait)
-            rf_weights.append(0.01 * roles['Goal'])
-
-            call_action = agent.find_action({'action': 'call'})
-            r_call = ActionLinearRewardFeature('call', agent, call_action)
-            reward_features.append(r_call)
-            rf_weights.append(0.1 * roles['Goal'])
-
-            for act in {'right', 'left', 'up', 'down', 'wait', 'search', 'triage', 'evacuate'}:
-                action = agent.find_action({'action': act})
-                self.world.setDynamics(self.m, action, makeTree(setToConstantMatrix(self.m, -1)))
-
-        if 'Navigator' in roles:
-            d2h = self.get_d2h_feature(agent)
-            r_d2h = NumericLinearRewardFeature(DISTANCE2HELP_FEATURE, d2h)
-            reward_features.append(r_d2h)
-            rf_weights.append(roles['Navigator'])
-
-            search_action = agent.find_action({'action': 'search'})
-            r_search = ActionLinearRewardFeature('search', agent, search_action)
-            reward_features.append(r_search)
-            rf_weights.append(roles['Navigator'])
-
-            if self.track_feature:
-                f = self.get_navi_features(agent)
-                r_navi = NumericLinearRewardFeature(NAVI_FEATURE, f)
-                reward_features.append(r_navi)
-                rf_weights.append(roles['Navigator'])
-
-            evacuate_action = agent.find_action({'action': 'evacuate'})
-            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
-            reward_features.append(r_evacuate)
-            rf_weights.append(2 * roles['Navigator'])
-
-            self.remove_action(agent, 'triage')
-            self.remove_action(agent, 'wait')
-            self.remove_action(agent, 'call')
-
-        return reward_features, rf_weights
-
-    def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]):
-        for model_name in model_names:
-            true_model = agent.get_true_model()
-            model_name = f'{agent.name}_{model_name}'
-            agent.addModel(model_name, parent=true_model)
-            rwd_features, rwd_weights = self.get_role_reward_vector(agent, roles)
-            agent_lrv = LinearRewardVector(rwd_features)
-            rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Opposite':
-                rwd_weights = -1. * np.array(rwd_weights)
-                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Uniform':
-                rwd_weights = [1.] * len(rwd_weights)
-                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Random':
-                rwd_weights = [0.] * len(rwd_weights)
-
-            if agent.name == 'Medic':
-                selected_feats = {'dc', 'triage', 'evacuate'}
-            elif agent.name == 'Explorer':
-                selected_feats = {'search'}
-            else:
-                selected_feats = {}
-            if model_name == f'{agent.name}_Task':
-                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
-                    if rwd_feat not in selected_feats:
-                        rwd_weights[rwd_i] = 0
-            if model_name == f'{agent.name}_Social':
-                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
-                    if rwd_feat in selected_feats:
-                        rwd_weights[rwd_i] = 0
-
-            agent_lrv.set_rewards(agent, rwd_weights, model=model_name)
-            print(agent.name, model_name, agent_lrv.names, rwd_weights)
-        return agent
