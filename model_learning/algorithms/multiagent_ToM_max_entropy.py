@@ -4,7 +4,7 @@ import numpy as np
 from timeit import default_timer as timer
 from typing import Optional, List
 from psychsim.agent import Agent
-from model_learning import Trajectory, TeamInfoModelTrajectory
+from model_learning import TeamInfoModelTrajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
 from model_learning.features import expected_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
@@ -23,16 +23,11 @@ LEARNING_DECAY = 0.9
 
 class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
     """
-    An implementation of the maximal causal entropy (MaxEnt) algorithm for IRL in [1].
-    It assumes the expert's reward function is a linear combination (weighted sum) of the state features.
-    Optimizes the linear parametrization of the rewards (weights) as follows:
-    1. Initialize weights at random
-    2. Perform gradient descent iteratively:
-        i. Computes MaxEnt stochastic policy given current reward function (backward pass)
-        ii. Compute expected state visitation frequencies from policy and trajectories
-        iii. Compute loss as difference between empirical (from trajectories) and expected feature counts
-        iv. Update weights given loss
-    3. Learner's reward is given by the best fit between expert's (via trajectories) and learner's expected svf.
+    An extension of the maximal causal entropy (MaxEnt) algorithm for IRL in [1] to Multi-agent Teams.
+    The algorithm is decentralized by applying the conceptL Theory of Mind.
+    Other agents act in the learner agent's mind.
+    The demonstrated trajectories has the evolving model distribution of the other agents.
+    The rest of the process follow MaxEnt IRL
     [1] - Ziebart, B. D., Maas, A. L., Bagnell, J. A., & Dey, A. K. (2008). Maximum entropy inverse reinforcement
     learning. In AAAI (Vol. 8, pp. 1433-1438).
     """
@@ -103,8 +98,8 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
-        :param list[Trajectory] trajectories: a list of trajectories, each
-        containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param list[TeamInfoModelTrajectory] trajectories: a list of team trajectories, each
+        containing a list (sequence) of state-team_action-model_dist tuples demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
         :param bool verbose: whether to show information at each timestep during learning.
         :rtype: ModelLearningResult
@@ -208,7 +203,7 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
                        '$\Delta \\theta$')
 
         plot_evolution(stats[REWARD_WEIGHTS_STR], self.reward_vector.names, 'Reward Parameters Evolution', None,
-                       os.path.join(output_dir, f'evo-rwd-weights.{img_format}'), 'Epoch', 'Weight')
+                       os.path.join(output_dir, f'evo-rwd-weights.{img_format}'), 'Epoch', 'Weight', y_lim=[-0.25, 1])
 
         plot_evolution(stats[TIME_STR], ['time'], 'Step Time Evolution', None,
                        os.path.join(output_dir, f'evo-time.{img_format}'), 'Epoch', 'Time (secs.)')
