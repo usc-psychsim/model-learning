@@ -5,13 +5,12 @@ import string
 import pickle
 import bz2
 import time
-from typing import List, Dict, Tuple, Optional
+from typing import List, Optional, Union
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
 from psychsim.world import World
-from model_learning import StateActionPair, TeamTrajectory, Trajectory, TeamStateinfoActionModelTuple, \
-    TeamInfoModelTrajectory
+from model_learning import TeamTrajectory, TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
 from model_learning.environments.property_gridworld import PropertyGridWorld
 from model_learning.trajectory import copy_world
 from model_learning.util.io import create_clear_dir
@@ -41,9 +40,11 @@ ENV_SIZE = 3
 ENV_SEED = 48
 NUM_EXIST = 3
 
-TEAM_AGENTS = ['Goal', 'Navigator']
+TEAM_AGENTS = ['Medic', 'Explorer']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
-MODEL_ROLES = ['GroundTruth', 'Opposite']  # 'Opposite'
+MODEL_ROLES = ['GroundTruth', 'Opposite', 'Random']
+# MODEL_ROLES = ['Random', 'Task', 'Social']
+# MODEL_ROLES = ['GroundTruth', 'Task']
 OBSERVER_NAME = 'observer'
 
 HORIZON = 2  # 0 for random actions
@@ -55,6 +56,7 @@ RATIONALITY = 1 / 0.1
 
 NUM_TRAJECTORIES = 16
 TRAJ_LENGTH = 25
+DISCOUNT = 0.7
 PROCESSES = -1
 DEBUG = 0
 np.set_printoptions(precision=3)
@@ -83,10 +85,14 @@ def _get_belief(world: World, feature: str, ag: Agent, model: str = None) -> Dis
 def generate_trajectory_model_distribution(world: World,
                                            env: PropertyGridWorld,
                                            team: List[Agent],
-                                           team_trajs: List[TeamTrajectory],
+                                           team_trajs: Union[List[TeamTrajectory],
+                                                             List[TeamInfoModelTrajectory]],
                                            traj_i: int) -> TeamInfoModelTrajectory:
     n_step = len(team_trajs[traj_i])
-    init_state = team_trajs[traj_i][0].world.state
+    if hasattr(team_trajs[traj_i][0], 'world'):
+        init_state = team_trajs[traj_i][0].world.state
+    else:
+        init_state = team_trajs[traj_i][0].state
 
     team_trajectory = []
     # reset to initial state and uniform dist of models
@@ -99,7 +105,6 @@ def generate_trajectory_model_distribution(world: World,
     for ag_i, agent in enumerate(_team):
         env.add_agent_models(agent, AGENT_ROLES[ag_i], MODEL_ROLES)
         true_model = agent.get_true_model()
-
         model_names = [name for name in agent.models.keys() if name != true_model]
         dist = Distribution({model: 1. / (len(agent.models) - 1) for model in model_names})
         _world.setMentalModel(observer.name, agent.name, dist)
@@ -110,7 +115,7 @@ def generate_trajectory_model_distribution(world: World,
             agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
             agent.setAttribute('selection', MODEL_SELECTION, model=model)  # also set selection to distribution
             agent.setAttribute('horizon', HORIZON, model=model)
-            agent.setAttribute('discount', 0.7, model=model)
+            agent.setAttribute('discount', DISCOUNT, model=model)
             agent.setAttribute('beliefs', True, model=model)
             agent.ignore(observer.name, model=model)
 
@@ -121,6 +126,8 @@ def generate_trajectory_model_distribution(world: World,
 
     team_models = {f'{agent.name}_{model_name}': 0 for model_name in MODEL_ROLES for agent in _team}
     model_dist = Distribution(team_models)
+    print('====================')
+    print(f'Step 0:')
     for ag_i, agent in enumerate(_team):
         agent_model = modelKey(agent.name)
         x, y = env.get_location_features(agent)
@@ -131,15 +138,12 @@ def generate_trajectory_model_distribution(world: World,
         for agent_model, model_prob in agent_dist.items():
             agent_model_name = agent_model.rstrip(string.digits)
             model_dist[agent_model_name] += model_prob
-    print(f'Belief about Agent models:\n{model_dist}')
+    print(f'Initial Belief about Agent models:\n{model_dist}')
 
     for step_i in range(n_step):
-        print('====================')
-        print(f'Step {step_i}:')
         team_action = team_trajs[traj_i][step_i].action
         prob = team_trajs[traj_i][step_i].prob
         team_action = {agent.name: team_action[agent.name].first() for agent in _team}
-        [print(a) for a in team_action.values()]
         team_trajectory.append(TeamStateinfoActionModelTuple(copy_world(_world).state, team_action, model_dist, prob))
 
         if step_i == n_step - 1:
@@ -147,7 +151,13 @@ def generate_trajectory_model_distribution(world: World,
         _world.step(actions=team_action)
 
         model_dist = Distribution(team_models)
+        print('====================')
+        print(f'Step {step_i+1}:')
+        [print(a) for a in team_action.values()]
         for ag_i, agent in enumerate(_team):
+            if ag_i == 1:
+                dh = _world.getFeature(env.get_d2h_feature(agent), unique=True)
+                print(f'{agent.name} dist2help: {dh}')
             agent_model = modelKey(agent.name)
             agent_dist = _get_belief(_world, agent_model, observer)
             for agent_model, model_prob in agent_dist.items():
@@ -161,7 +171,8 @@ def generate_trajectory_model_distribution(world: World,
 def _generate_trajectories_model_distribution(world: World,
                                               env: PropertyGridWorld,
                                               team: List[Agent],
-                                              team_trajectories: List[TeamTrajectory],
+                                              team_trajectories: Union[List[TeamTrajectory],
+                                                                       List[TeamInfoModelTrajectory]],
                                               processes: Optional[int] = -1) -> List[TeamInfoModelTrajectory]:
 
     args = [(world, env, team, team_trajectories, t) for t in range(len(team_trajectories))]
@@ -206,17 +217,23 @@ if __name__ == '__main__':
         agent.setAttribute('selection', ACT_SELECTION)
         agent.setAttribute('horizon', HORIZON)
         agent.setAttribute('rationality', RATIONALITY)
-        agent.setAttribute('discount', 0.7)
+        agent.setAttribute('discount', DISCOUNT)
 
     world.setOrder([{agent.name for agent in team}])
     world.dependency.getEvaluation()
 
     print(OUTPUT_FILE)
-    team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
-                                                       horizon=HORIZON, selection=ACT_SELECTION,
-                                                       processes=PROCESSES,
-                                                       threshold=1e-2, seed=ENV_SEED)
-    print(team_trajectories)
+    # team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
+    #                                                    horizon=HORIZON, selection=ACT_SELECTION,
+    #                                                    processes=PROCESSES,
+    #                                                    threshold=1e-2, seed=ENV_SEED)
+    FOLDER_NAME = f'GT_team_trajs_gtoprd_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
+    f = bz2.BZ2File(os.path.join(os.path.join(os.path.dirname(__file__), 'output/examples/property-world'),
+                                 f'{FOLDER_NAME}.pkl'), 'rb')
+    team_trajectories = pickle.load(f)
+    f.close()
+
+    # print(team_trajectories)
     team_trajs_w_model_dist = _generate_trajectories_model_distribution(world, env, team, team_trajectories,
                                                                         processes=PROCESSES)
     start_time = time.time()

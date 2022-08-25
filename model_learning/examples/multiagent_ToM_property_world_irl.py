@@ -29,9 +29,10 @@ ENV_SEED = 48
 NUM_EXIST = 3
 
 # expert params
-TEAM_AGENTS = ['Goal', 'Navigator']
+TEAM_AGENTS = ['Medic', 'Explorer']
 AGENT_ROLES = [{'Goal': 1.}, {'Navigator': 0.5}]
-MODEL_ROLES = ['GroundTruth', 'Opposite']
+MODEL_ROLES = ['GroundTruth', 'Opposite', 'Random']
+# MODEL_ROLES = ['Random', 'Task', 'Social']
 OBSERVER_NAME = 'observer'
 
 EXPERT_RATIONALITY = 1 / 0.1  # inverse temperature
@@ -46,9 +47,9 @@ MODEL_SELECTION = 'distribution'  # 'random'  # 'distribution'
 
 # learning params
 NORM_THETA = True
-TEAM_LEARNING_RATE = [2e-2, 5e-2]  # 0.05
+TEAM_LEARNING_RATE = [5e-2, 2e-1]  # 0.05
 MAX_EPOCHS = 30
-THRESHOLD = 1e-2
+THRESHOLD = 5e-3
 DECREASE_RATE = True
 EXACT = False
 NUM_MC_TRAJECTORIES = 16  # 10
@@ -113,6 +114,7 @@ if __name__ == '__main__':
     logging.info('Retrieving expert trajectories with model distributions...')
     traj_dir = os.path.join(os.path.dirname(__file__), 'output/examples/reward-model-multiagent')
     FOLDER_NAME = f'team_trajs_{len(MODEL_ROLES)}models_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
+    # FOLDER_NAME = f'team_trajs_rdtksc_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
 
     f = bz2.BZ2File(
         os.path.join(traj_dir, f'{FOLDER_NAME}.pkl'), 'rb')
