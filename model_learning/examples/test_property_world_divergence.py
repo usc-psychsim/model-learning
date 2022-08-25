@@ -27,7 +27,7 @@ ENV_SIZE = 3
 ENV_SEED = 47
 NUM_EXIST = 3
 
-TEAM_AGENTS = ['Goal', 'Helper']
+TEAM_AGENTS = ['Medic', 'Explorer']
 AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
 
 HORIZON = 2  # 0 for random actions
@@ -43,9 +43,10 @@ TRAJ_LENGTH = 25  # 15
 PROCESSES = -1
 DEBUG = 0
 np.set_printoptions(precision=4)
-# EVALUATE_BY = 'EPISODES'
-EVALUATE_BY = 'FEATURES'
+EVALUATE_BY = 'EPISODES'
+# EVALUATE_BY = 'FEATURES'
 # EVALUATE_BY = 'EMPIRICAL'
+print(EVALUATE_BY)
 
 if __name__ == '__main__':
     test_ag_i = [0, 1]
@@ -73,8 +74,31 @@ if __name__ == '__main__':
     for ag_i, agent in enumerate(team):
         rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
         agent_lrv = LinearRewardVector(rwd_features)
-        if ag_i == 1:
-            rwd_f_weights = np.array([-0.25, -0.25, -0.5])  # opposite
+        if ag_i == 0:
+            # rwd_f_weights = np.array([0, 0, 0, 0, 0, 0])  # random reward
+            rwd_f_weights = np.array([0.062, 0.062, 0.187, 0.625, 0.031, 0.031])  # gt
+            # rwd_f_weights = - np.array([0.062, 0.062, 0.187, 0.625, 0.031, 0.031])  # opposite
+            # rwd_f_weights = np.array([0.015318192417385733, 0.1844248078482227, 0.23077641060081897,
+            #                     0.24607229883978093, 0.26820367798138783, 0.055204612312403784])  # learned with gt
+            # rwd_f_weights = np.array([0.01878362580308851, 0.16478999901405544, 0.2713735395498321,
+            #                     0.263960212489292, 0.2260549673882416, 0.055037655755490154])  # learned with gtoprand inference
+            # rwd_f_weights = np.array([0.06197305676980969, 0.07532694434692906, 0.3522639561849776,
+            #                     0.44931645182316027, 0.06058269567728371, -0.1005368951978396395])  # learned with opposite
+            # rwd_f_weights = np.array([0.0672, 0.0781, 0.3482, 0.4426, 0.059, -0.0048]) # learned with opposite 2
+            # rwd_f_weights = np.array([0.0004, 0.1614, 0.2898, 0.2835, 0.256, 0.0089]) # learned with rdtksc inference
+            # rwd_f_weights = np.array([0.10066148181050796, 0.1645613822023652, 0.2559778593118164,
+            #                     0.29270815510181414, 0.1415178327488864, 0.04457328882460985])  # learned with gt inference gtoprand
+        else:
+            # rwd_f_weights = np.array([0, 0, 0])  # random reward
+            rwd_f_weights = np.array([0.25, 0.25, 0.5])  # gt
+            # rwd_f_weights = - np.array([0.25, 0.25, 0.5])  # opposite
+            # rwd_f_weights = np.array([0.006554615703699425, 0.23050842848430586, 0.7629369558119946])  # learned with gt
+            # rwd_f_weights = np.array([0.6151432079257714, 0.21113397863539382, 0.1737228134388347])  # learned with gtoprand inference
+            # rwd_f_weights = np.array([0.6677601587685111, 0.000382152136435009, 0.331857689095054])  # learned with opposite
+            # rwd_f_weights = np.array([0.6529, -0.0226, 0.3245]) # learned with opposite 2
+            # rwd_f_weights = np.array([0.2627722797013279, 0.43297962649286076, 0.30424809380581147])  # learned with rdtksc inference
+            # rwd_f_weights = np.array([0.5358654865179844, 0.32261899383623155, 0.14151551964578404])  # learned with gt inference gtoprand
+
         rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
         agent_lrv.set_rewards(agent, rwd_f_weights)
         print(f'{agent.name} Reward Features')
@@ -99,13 +123,30 @@ if __name__ == '__main__':
         rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
         agent_lrv = LinearRewardVector(rwd_features)
         if ag_i == 0:
-            # weights = np.array([1, 1, 1, 1, 1, 1])  # feature random reward
             # weights = np.array([0, 0, 0, 0, 0, 0])  # random reward
-            weights = np.array([0.066, 0.132, 0.066, 0.662, 0.007, 0.066])  # gt
+            # weights = np.array([0.062, 0.062, 0.187, 0.625, 0.031, 0.031])  # gt
+            # weights = - np.array([0.062, 0.062, 0.187, 0.625, 0.031, 0.031])  # opposite
+            # weights = np.array([0.015318192417385733, 0.1844248078482227, 0.23077641060081897,
+            #                     0.24607229883978093, 0.26820367798138783, 0.055204612312403784])  # learned with gt
+            # weights = np.array([0.01878362580308851, 0.16478999901405544, 0.2713735395498321,
+            #                     0.263960212489292, 0.2260549673882416, 0.055037655755490154])  # learned with gtoprand inference
+            # weights = np.array([0.06197305676980969, 0.07532694434692906, 0.3522639561849776,
+            #                     0.44931645182316027, 0.06058269567728371, -0.0005368951978396395])  # learned with opposite
+            weights = np.array([0.0672, 0.0781, 0.3482, 0.4426, 0.059, -0.0048])  # learned with opposite 2
+            # weights = np.array([0.0004, 0.1614, 0.2898, 0.2835, 0.256, 0.0089]) # learned with rdtksc inference
+            # weights = np.array([0.10066148181050796, 0.1645613822023652, 0.2559778593118164,
+            #                     0.29270815510181414, 0.1415178327488864, 0.04457328882460985])  # learned with gt inference gtoprand
         else:
-            # weights = np.array([1, 1, 1])  # feature random reward
             # weights = np.array([0, 0, 0])  # random reward
-            weights = np.array([0.25, 0.25, 0.5])  # gt
+            # weights = np.array([0.25, 0.25, 0.5])  # gt
+            # weights = - np.array([0.25, 0.25, 0.5])  # opposite
+            # weights = np.array([0.006554615703699425, 0.23050842848430586, 0.7629369558119946])  # learned with gt
+            # weights = np.array([0.6151432079257714, 0.21113397863539382, 0.1737228134388347])  # learned with gtoprand inference
+            # weights = np.array([0.6677601587685111, 0.000382152136435009, 0.331857689095054])  # learned with opposite
+            weights = np.array([0.6529, -0.0226, 0.3245])  # learned with opposite 2
+            # weights = np.array([0.2627722797013279, 0.43297962649286076, 0.30424809380581147])  # learned with rdtksc inference
+            # weights = np.array([0.5358654865179844, 0.32261899383623155, 0.14151551964578404])  # learned with gt inference gtoprand
+
         rwd_f_weights = np.array(weights) / np.linalg.norm(weights, 1)
         agent_lrv.set_rewards(agent, rwd_f_weights)
         # agent_lrv.rwd_weights = weights
@@ -114,6 +155,7 @@ if __name__ == '__main__':
         learner_team_rwd.append(agent_lrv)
 
     if EVALUATE_BY == 'EMPIRICAL':
+        NUM_TRAJECTORIES = 32
         team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH,
                                                            n_trajectories=NUM_TRAJECTORIES,
                                                            horizon=HORIZON, selection=ACT_SELECTION,
@@ -176,6 +218,7 @@ if __name__ == '__main__':
                 print(f'Feature count different:', diff, f'={np.sum(np.abs(diff))}')
 
     if EVALUATE_BY == 'EPISODES':
+        NUM_TRAJECTORIES = 32
         team_trajectories = env.generate_expert_learner_trajectories(team, learner_team, TRAJ_LENGTH,
                                                                      n_trajectories=NUM_TRAJECTORIES,
                                                                      horizon=HORIZON, selection=ACT_SELECTION,
