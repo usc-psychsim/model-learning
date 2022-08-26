@@ -223,16 +223,10 @@ if __name__ == '__main__':
     world.dependency.getEvaluation()
 
     print(OUTPUT_FILE)
-    # team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
-    #                                                    horizon=HORIZON, selection=ACT_SELECTION,
-    #                                                    processes=PROCESSES,
-    #                                                    threshold=1e-2, seed=ENV_SEED)
-    FOLDER_NAME = f'GT_team_trajs_gtoprd_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
-    f = bz2.BZ2File(os.path.join(os.path.join(os.path.dirname(__file__), 'output/examples/property-world'),
-                                 f'{FOLDER_NAME}.pkl'), 'rb')
-    team_trajectories = pickle.load(f)
-    f.close()
-
+    team_trajectories = env.generate_team_trajectories(team, TRAJ_LENGTH, n_trajectories=NUM_TRAJECTORIES,
+                                                       horizon=HORIZON, selection=ACT_SELECTION,
+                                                       processes=PROCESSES,
+                                                       threshold=1e-2, seed=ENV_SEED)
     # print(team_trajectories)
     team_trajs_w_model_dist = _generate_trajectories_model_distribution(world, env, team, team_trajectories,
                                                                         processes=PROCESSES)
