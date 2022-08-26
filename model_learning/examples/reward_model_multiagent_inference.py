@@ -227,6 +227,14 @@ if __name__ == '__main__':
                                                        horizon=HORIZON, selection=ACT_SELECTION,
                                                        processes=PROCESSES,
                                                        threshold=1e-2, seed=ENV_SEED)
+
+    # example of using saved trajectories
+    # FOLDER_NAME = f'GT_team_trajs_gtoprd_{NUM_TRAJECTORIES}x{TRAJ_LENGTH}_{MODEL_RATIONALITY}'
+    # f = bz2.BZ2File(os.path.join(os.path.join(os.path.dirname(__file__), 'output/examples/property-world'),
+    #                              f'{FOLDER_NAME}.pkl'), 'rb')
+    # team_trajectories = pickle.load(f)
+    # f.close()
+
     # print(team_trajectories)
     team_trajs_w_model_dist = _generate_trajectories_model_distribution(world, env, team, team_trajectories,
                                                                         processes=PROCESSES)
