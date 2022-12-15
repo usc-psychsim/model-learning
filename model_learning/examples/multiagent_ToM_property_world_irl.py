@@ -6,13 +6,14 @@ import bz2
 import numpy as np
 from psychsim.world import World
 from model_learning.algorithms.multiagent_ToM_max_entropy import MultiagentToMMaxEntRewardLearning
-from model_learning.environments.property_gridworld import PropertyGridWorld
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 from model_learning.features.linear import LinearRewardVector
 
-__author__ = 'Pedro Sequeira and Haochen Wu'
-__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
+__author__ = 'Haochen Wu, Pedro Sequeira'
+__email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
+__maintainer__ = 'Pedro Sequeira'
 __description__ = 'Performs Multiagent IRL (reward model learning) with ToM in the Property World using MaxEnt IRL.'
 
 # env params
@@ -74,7 +75,7 @@ if __name__ == '__main__':
     # create world and property environment
     world = World()
     world.setParallel()
-    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
     print('Output:', OUTPUT_DIR)
 

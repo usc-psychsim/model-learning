@@ -1,11 +1,13 @@
 import copy
+
 import numpy as np
 from typing import List, Optional
-from model_learning.environments.gridworld import Location
-from psychsim.agent import Agent
+
 from model_learning import State
+from model_learning.environments.gridworld import Location
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.features.linear import LinearRewardVector
+from psychsim.agent import Agent
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -13,8 +15,8 @@ __email__ = 'pedrodbs@gmail.com'
 
 class ObjectsRewardVector(LinearRewardVector):
     """
-    Represents a linear reward vector, i.e., a reward function formed by a linear combination of a set of reward
-    features.
+    Represents a linear reward vector for the objects world, i.e., a reward function formed by a linear combination of
+    a set of reward features consisting of indicators for inner and outer object colors.
     """
 
     def __init__(self,

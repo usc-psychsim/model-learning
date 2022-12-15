@@ -1,19 +1,21 @@
 import itertools
-import os
 import matplotlib.pyplot as plt
+import os
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
-from typing import Dict, NamedTuple, Literal, Any, Tuple
-from psychsim.action import ActionSet
-from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, makeFuture, equalFeatureRow, WORLD
-from model_learning.environments.gridworld import GridWorld
+from typing import Dict, NamedTuple, Literal, Any
+
 from model_learning import TeamTrajectory
+from model_learning.environments.gridworld import GridWorld
+from model_learning.features.linear import *
 from model_learning.trajectory import generate_team_trajectories, generate_expert_learner_trajectories
 from model_learning.util.plot import distinct_colors
-from model_learning.features.linear import *
+from psychsim.action import ActionSet
+from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, makeFuture, equalFeatureRow, WORLD
 
-__author__ = 'Pedro Sequeira and Haochen Wu'
-__email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
+__author__ = 'Haochen Wu, Pedro Sequeira'
+__email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
+__maintainer__ = 'Pedro Sequeira'
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
@@ -21,11 +23,17 @@ VISIT_FEATURE = 'v'
 PROPERTY_FEATURE = 'p'
 DISTANCE2CLEAR_FEATURE = 'dc'
 DISTANCE2HELP_FEATURE = 'dh'
-CLEARINDICATOR_FEATURE = 'ci'
+CLEAR_INDICATOR_FEATURE = 'ci'
 MARK_FEATURE = 'm'
-PROPERTY_LIST = ['unknown', 'found', 'ready', 'clear', 'empty']
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
+
+UNKNOWN_STR = 'unknown'
+EMPTY_STR = 'empty'
+CLEAR_STR = 'clear'
+READY_STR = 'ready'
+FOUND_STR = 'found'
+PROPERTY_LIST = [UNKNOWN_STR, FOUND_STR, READY_STR, CLEAR_STR, EMPTY_STR]
 
 TITLE_FONT_SIZE = 12
 VALUE_CMAP = 'gray'  # 'viridis' # 'inferno'
@@ -43,15 +51,20 @@ class LocationInfo(NamedTuple):
     p: int
 
 
-class PropertyGridWorld(GridWorld):
+class SearchRescueGridWorld(GridWorld):
     """
-    Represents a gridworld environment containing property information.
-    Each location has a property state, used to keep track of multidimensional information.
-    e.g., can be used to track status of multiple tasks
+    Represents a gridworld environment containing victims.
+    Each location has a property state, used to keep track of victim status information.
     """
 
-    def __init__(self, world: World, width: int, height: int, num_exist: int,
-                 name: str = '', track_feature: bool = False, seed: int = 0):
+    def __init__(self,
+                 world: World,
+                 width: int,
+                 height: int,
+                 num_exist: int,
+                 name: str = '',
+                 track_feature: bool = False,
+                 seed: int = 0):
         """
         Creates a new gridworld.
         :param World world: the PsychSim world associated with this gridworld.
@@ -66,22 +79,21 @@ class PropertyGridWorld(GridWorld):
 
         self.num_exist = num_exist
         self.track_feature = track_feature
-        self.seed = seed
-        rng = np.random.RandomState(self.seed)
 
         # set property for exist locations
-        self.exist_locations = rng.choice(np.arange(width * height), num_exist, False).tolist()
+        rng = np.random.RandomState(seed)
+        self.exist_locations = rng.choice(np.arange(width * height), num_exist, replace=False).tolist()
         self.non_exist_locations = list(set(range(width * height)) - set(self.exist_locations))
 
-        self.p_state = []
+        self.property_states: List[str] = []
         for loc_i in range(self.width * self.height):
             p = self.world.defineState(WORLD, PROPERTY_FEATURE + f'{loc_i}',
                                        int, 0, len(PROPERTY_LIST) - 1, description=f'Each location\'s property')
             self.world.setFeature(p, 0)
-            self.p_state.append(p)
+            self.property_states.append(p)
         # print(self.p_state)
 
-        # tracking clear status of exist lcoations
+        # tracking clear status of exist locations
         self.clear_indicator = {}
         all_loc_clear: List[List] = []
         for loci, loc in enumerate(self.exist_locations):
@@ -101,10 +113,10 @@ class PropertyGridWorld(GridWorld):
         for i, clear_status in self.clear_indicator.items():
             self.dist_to_clear[i] = [0] * self.width * self.height
             locs = [k for k, v in clear_status.items() if v == 0]
-            for loc_i in range(self.width * self.height):
+            for i in range(self.width * self.height):
                 self.clear_counter[i] = sum([v == 1 for v in clear_status.values()])
                 if len(locs) > 0:
-                    self.dist_to_clear[i][loc_i] = 1 - self.dist_to_closest_loc(loc_i, locs)
+                    self.dist_to_clear[i][i] = 1 - self.dist_to_closest_loc(i, locs)
         # print(self.dist_to_clear)
         # print(self.clear_counter)
 
@@ -113,13 +125,13 @@ class PropertyGridWorld(GridWorld):
         for loc in [-1] + self.exist_locations:
             self.dist_to_help[loc] = [0] * self.width * self.height
             if loc > -1:
-                for loc_i in range(self.width * self.height):
-                    self.dist_to_help[loc][loc_i] = 1 - self.dist_to_closest_loc(loc_i, [loc])
+                for i in range(self.width * self.height):
+                    self.dist_to_help[loc][i] = 1 - self.dist_to_closest_loc(i, [loc])
         # print(self.dist_to_help)
 
         # define additional world features
         self.n_ci = 2 ** self.num_exist
-        self.ci = self.world.defineState(WORLD, CLEARINDICATOR_FEATURE, int, 0, self.n_ci - 1,
+        self.ci = self.world.defineState(WORLD, CLEAR_INDICATOR_FEATURE, int, 0, self.n_ci - 1,
                                          description=f'indicator of clear property')
         # self.world.setFeature(self.ci, 0)
         self.world.setFeature(self.ci, self.n_ci - 1)
@@ -305,7 +317,7 @@ class PropertyGridWorld(GridWorld):
         # model dynamics when agent is at a possible location
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), list(range(self.width * self.height)), 0)}
         for i, loc in enumerate(list(range(self.width * self.height))):
-            p_loc = self.p_state[loc]
+            p_loc = self.property_states[loc]
             sub_legal_dict = {'if': equalRow(p_loc, 0), True: True, False: False}
             legal_dict[i] = sub_legal_dict
         legal_dict[None] = False
@@ -313,7 +325,7 @@ class PropertyGridWorld(GridWorld):
         self.agent_actions[agent.name].append(action)
 
         for loc_i in range(self.width * self.height):
-            p_loc = self.p_state[loc_i]
+            p_loc = self.property_states[loc_i]
             search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
             if loc_i in self.exist_locations:
                 search_tree[True] = setToConstantMatrix(p_loc, 1)
@@ -358,7 +370,7 @@ class PropertyGridWorld(GridWorld):
                                        description=f'Navigator: # of empty locations')
             self.world.setFeature(f, 0)
             for loc_i in self.non_exist_locations:
-                p_loc = self.p_state[loc_i]
+                p_loc = self.property_states[loc_i]
                 tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(p_loc): 1}), 4, 0),
                              True: incrementMatrix(f, 1),
                              False: noChangeMatrix(f)}
@@ -368,14 +380,14 @@ class PropertyGridWorld(GridWorld):
         action = agent.addAction({'verb': 'handle', 'action': 'triage'})
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
-            p_loc = self.p_state[loc]
+            p_loc = self.property_states[loc]
             sub_legal_dict = {'if': equalRow(p_loc, 1), True: True, False: False}
             legal_dict[i] = sub_legal_dict
         legal_dict[None] = False
         agent.setLegal(action, makeTree(legal_dict))
 
         for loc_i in self.exist_locations:
-            p_loc = self.p_state[loc_i]
+            p_loc = self.property_states[loc_i]
             search_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), loc_i, 0)}
             search_tree[True] = setToConstantMatrix(p_loc, 2)
             search_tree[False] = noChangeMatrix(p_loc)
@@ -386,7 +398,7 @@ class PropertyGridWorld(GridWorld):
         action = agent.addAction({'verb': 'handle', 'action': 'call'})
         legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.exist_locations, 0)}
         for i, loc in enumerate(self.exist_locations):
-            p_loc = self.p_state[loc]
+            p_loc = self.property_states[loc]
             sub_legal_dict = {'if': equalRow(p_loc, 2), True: True, False: False}
             legal_dict[i] = sub_legal_dict
         legal_dict[None] = False
@@ -423,7 +435,7 @@ class PropertyGridWorld(GridWorld):
             legal_dict = {'if': equalFeatureRow(x1, x2) & equalFeatureRow(y1, y2)}
             sub_legal_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), self.exist_locations, 0)}
             for exist_i, exist_loc in enumerate(self.exist_locations):
-                p_loc = self.p_state[exist_loc]
+                p_loc = self.property_states[exist_loc]
                 subsub_legal_dict = {'if': equalRow(p_loc, 2), True: True, False: False}
                 sub_legal_dict[exist_i] = subsub_legal_dict
             sub_legal_dict[None] = False
@@ -432,7 +444,7 @@ class PropertyGridWorld(GridWorld):
             agents[i].setLegal(action_list[i], makeTree(legal_dict))
 
             for loc_i in self.exist_locations:
-                p_loc = self.p_state[loc_i]
+                p_loc = self.property_states[loc_i]
                 tree_dict = {'if': equalRow(actionKey(agents[j].name, True), action_list[j])}
                 subtree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), loc_i, 0),
                                 True: setToConstantMatrix(p_loc, 3),
@@ -759,7 +771,7 @@ class PropertyGridWorld(GridWorld):
                     a = a['subject'] + '-' + a['action']
                     if ag_i == 0:
                         for loc in range(self.width * self.height):
-                            p_t = tsa.world.getFeature(self.p_state[loc], unique=True)
+                            p_t = tsa.world.getFeature(self.property_states[loc], unique=True)
                             world_ps[loc][i] = PROPERTY_LIST[p_t]
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5

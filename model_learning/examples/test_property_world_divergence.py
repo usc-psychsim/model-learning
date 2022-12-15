@@ -2,7 +2,7 @@ import os
 import numpy as np
 import copy
 from typing import List, Dict
-from model_learning.environments.property_gridworld import PropertyGridWorld
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from psychsim.world import World
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     create_clear_dir(OUTPUT_DIR, clear=False)
     world = World()
     world.setParallel()
-    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
     print('Env Seed', ENV_SEED, test_ag_i)
 

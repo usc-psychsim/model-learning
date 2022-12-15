@@ -4,7 +4,7 @@ import numpy as np
 from psychsim.world import World
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, ModelLearningResult
 from model_learning.features.propertyworld import AgentRoles, AgentLinearRewardVector
-from model_learning.environments.property_gridworld import PropertyGridWorld
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     # create world and objects environment
     world = World()
-    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Process:', PROCESSES, 'Traj Length', TRAJ_LENGTH)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
     print('Output:', OUTPUT_DIR)

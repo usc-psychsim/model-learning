@@ -11,7 +11,7 @@ from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
 from psychsim.world import World
 from model_learning import TeamTrajectory, TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
-from model_learning.environments.property_gridworld import PropertyGridWorld
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.trajectory import copy_world
 from model_learning.util.io import create_clear_dir
 from model_learning.features.linear import LinearRewardVector
@@ -83,7 +83,7 @@ def _get_belief(world: World, feature: str, ag: Agent, model: str = None) -> Dis
 
 
 def generate_trajectory_model_distribution(world: World,
-                                           env: PropertyGridWorld,
+                                           env: SearchRescueGridWorld,
                                            team: List[Agent],
                                            team_trajs: Union[List[TeamTrajectory],
                                                              List[TeamInfoModelTrajectory]],
@@ -169,7 +169,7 @@ def generate_trajectory_model_distribution(world: World,
 
 
 def _generate_trajectories_model_distribution(world: World,
-                                              env: PropertyGridWorld,
+                                              env: SearchRescueGridWorld,
                                               team: List[Agent],
                                               team_trajectories: Union[List[TeamTrajectory],
                                                                        List[TeamInfoModelTrajectory]],
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     # create world
     world = World()
     world.setParallel()
-    env = PropertyGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
 
     # team of two agents
