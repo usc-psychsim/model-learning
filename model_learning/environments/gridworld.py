@@ -1,20 +1,22 @@
 import copy
+
 import itertools
 import logging
-import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Literal, Optional, Any, NamedTuple
+import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARETDOWNBASE
+from typing import Dict, List, Tuple, Literal, Optional, Any, NamedTuple
+
+from model_learning import Trajectory
+from model_learning.trajectory import generate_trajectories, log_trajectories
+from model_learning.util.plot import distinct_colors
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
-from psychsim.world import World
-from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, thresholdRow, stateKey, VectorDistributionSet, \
+from psychsim.pwl import makeTree, incrementMatrix, noChangeMatrix, stateKey, VectorDistributionSet, \
     KeyedPlane, KeyedVector, rewardKey, setToConstantMatrix, equalRow, makeFuture
-from model_learning.util.plot import distinct_colors
-from model_learning.trajectory import generate_trajectories, log_trajectories
-from model_learning import Trajectory
+from psychsim.world import World
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -27,7 +29,9 @@ class Location(NamedTuple):
 
 X_FEATURE = 'x'
 Y_FEATURE = 'y'
-VISIT_FEATURE = 'v'
+VISIT_COUNT_FEATURE = 'VisitCount'
+
+MAX_VISITS = 1000  # max location visitation counts
 
 ACTION_NO_OP = 0
 ACTION_RIGHT_IDX = 1
@@ -74,7 +78,7 @@ class GridWorld(object):
         :param World world: the PsychSim world associated with this gridworld.
         :param int width: the number of horizontal cells.
         :param int height: the number of vertical cells.
-        :param str name: the name of this gridworld, used as a suffix for features, actions, etc.
+        :param str name: the name of this gridworld, used as a prefix for features, actions, etc.
         """
         self.world = world
         self.width = width
@@ -83,12 +87,14 @@ class GridWorld(object):
 
         self.agent_actions: Dict[str, List[ActionSet]] = {}
 
-    def add_agent_dynamics(self, agent: Agent) -> List[ActionSet]:
+    def add_agent_dynamics(self, agent: Agent, visit_count_features: bool = False) -> List[ActionSet]:
         """
         Adds the PsychSim action dynamics for the given agent to move in this gridworld.
-        The 4 cardinal movement actions plus a stay-still/no-op action is added.
+        The 4 cardinal movement actions plus a stay-still/no-op action are added.
         Also registers those actions for later usage.
         :param Agent agent: the agent to which add the action movement dynamics.
+        :param bool visit_count_features: whether to add a visitation count feature for each location and create
+        corresponding dynamics.
         :rtype: list[ActionSet]
         :return: a list containing the agent's newly created actions.
         """
@@ -96,114 +102,122 @@ class GridWorld(object):
         self.agent_actions[agent.name] = []
 
         # creates agent's location feature
-        x = self.world.defineState(
-            agent.name, X_FEATURE + self.name, int, 0, self.width - 1, description=f'{agent.name}\'s horizontal location')
+        x, y = self.get_location_features(agent, key=False)
+        x = self.world.defineState(agent.name, x, int, 0, self.width - 1,
+                                   description=f'{agent.name}\'s horizontal location')
         self.world.setFeature(x, 0)
-        y = self.world.defineState(
-            agent.name, Y_FEATURE + self.name, int, 0, self.height - 1, description=f'{agent.name}\'s vertical location')
+        y = self.world.defineState(agent.name, y, int, 0, self.height - 1,
+                                   description=f'{agent.name}\'s vertical location')
         self.world.setFeature(y, 0)
 
-        # visits: Dict[int, str] = {}
-        # for x_i, y_i in itertools.product(range(self.width), range(self.height)):
-        #     loc_i = self.xy_to_idx(x_i, y_i)
-        #     visits[loc_i] = self.world.defineState(agent.name, VISIT_FEATURE + f'{loc_i}' + self.name,
-        #                                            int, 0, 2, f'{agent.name}\'s # of visits for each location')
-        #     if loc_i == 0:
-        #         self.world.setFeature(visits[loc_i], 1)
-        #     else:
-        #         self.world.setFeature(visits[loc_i], 0)
+        visits: Dict[int, str] = {}
+        if visit_count_features:
+            for x_i, y_i in itertools.product(range(self.width), range(self.height)):
+                idx = self.xy_to_idx(x_i, y_i)
+                visits[idx] = self.world.defineState(
+                    agent.name, self.get_visit_count_feature(agent, idx, key=False),
+                    int, 0, MAX_VISITS, description=f'{agent.name}\'s # of visits to location {idx}')
+                if idx == 0:
+                    self.world.setFeature(visits[idx], 1)
+                else:
+                    self.world.setFeature(visits[idx], 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
-        action = agent.addAction({'verb': 'move', 'action': 'wait'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'wait'})
         tree = makeTree(noChangeMatrix(x))
         self.world.setDynamics(x, action, tree)
         self.agent_actions[agent.name].append(action)
 
         # move right
-        action = agent.addAction({'verb': 'move' + self.name, 'action': 'right'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'right'})
         legal_dict = {'if': equalRow(x, self.width - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, 1))
         self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        # for loc_i, visit in enumerate(visits):
-        #     visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
-        #                   True: incrementMatrix(visits[loc_i], 1),
-        #                   False: noChangeMatrix(visits[loc_i])}
-        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        if visit_count_features:
+            for loc_i, visit in enumerate(visits):
+                visit_count_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
+                                    True: incrementMatrix(visits[loc_i], 1),
+                                    False: noChangeMatrix(visits[loc_i])}
+                self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move left
-        action = agent.addAction({'verb': 'move' + self.name, 'action': 'left'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'left'})
         legal_dict = {'if': equalRow(x, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, -1))
         self.world.setDynamics(x, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        # for loc_i, visit in enumerate(visits):
-        #     visit_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
-        #                   True: incrementMatrix(visits[loc_i], 1),
-        #                   False: noChangeMatrix(visits[loc_i])}
-        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        if visit_count_features:
+            for loc_i, visit in enumerate(visits):
+                visit_count_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, y: self.width}), loc_i, 0),
+                                    True: incrementMatrix(visits[loc_i], 1),
+                                    False: noChangeMatrix(visits[loc_i])}
+                self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move up
-        action = agent.addAction({'verb': 'move' + self.name, 'action': 'up'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'up'})
         legal_dict = {'if': equalRow(y, self.height - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, 1))
         self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        # for loc_i, visit in enumerate(visits):
-        #     visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
-        #                   True: incrementMatrix(visits[loc_i], 1),
-        #                   False: noChangeMatrix(visits[loc_i])}
-        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        if visit_count_features:
+            for loc_i, visit in enumerate(visits):
+                visit_count_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
+                                    True: incrementMatrix(visits[loc_i], 1),
+                                    False: noChangeMatrix(visits[loc_i])}
+                self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move down
-        action = agent.addAction({'verb': 'move' + self.name, 'action': 'down'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'down'})
         legal_dict = {'if': equalRow(y, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, -1))
         self.world.setDynamics(y, action, move_tree)
         self.agent_actions[agent.name].append(action)
 
-        # for loc_i, visit in enumerate(visits):
-        #     visit_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
-        #                   True: incrementMatrix(visits[loc_i], 1),
-        #                   False: noChangeMatrix(visits[loc_i])}
-        #     self.world.setDynamics(visits[loc_i], action, makeTree(visit_dict))
+        if visit_count_features:
+            for loc_i, visit in enumerate(visits):
+                visit_count_dict = {'if': KeyedPlane(KeyedVector({x: 1, makeFuture(y): self.width}), loc_i, 0),
+                                    True: incrementMatrix(visits[loc_i], 1),
+                                    False: noChangeMatrix(visits[loc_i])}
+                self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         return self.agent_actions[agent.name]
 
-    def get_location_features(self, agent: Agent) -> Tuple[str, str]:
+    def get_location_features(self, agent: Agent, key: bool = True) -> Tuple[str, str]:
         """
         Gets the agent's (X,Y) features in the gridworld.
         :param Agent agent: the agent for which to get the location features.
+        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
         :rtype: (str,str)
         :return: a tuple containing the (X, Y) agent features.
         """
-        x = stateKey(agent.name, X_FEATURE + self.name)
-        y = stateKey(agent.name, Y_FEATURE + self.name)
-        return x, y
+        x = f'{self.name}_{X_FEATURE}'
+        y = f'{self.name}_{Y_FEATURE}'
+        return (stateKey(agent.name, x), stateKey(agent.name, y)) if key else (x, y)
 
-    def get_visit_feature(self, agent: Agent) -> Dict[int, str]:
+    def get_visit_count_feature(self, agent: Agent, loc_idx: int, key: bool = True) -> str:
         """
-        Gets the agent's visit feature in the gridworld.
+        Gets the agent's visitation count feature for the given location.
         :param Agent agent: the agent for which to get the visit feature.
-        :rtype: (int, str)
-        :return: a dict containing the agent visit feature for each location.
+        :param int loc_idx: the location index.
+        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
+        :rtype: str
+        :return: the agent's location visitation count feature.
         """
-        visits: Dict[int, str] = {}
-        for loc_i in range(self.width * self.height):
-            visits[loc_i] = stateKey(agent.name, VISIT_FEATURE + f'{loc_i}' + self.name)
-        return visits
+        f = f'{self.name}_{VISIT_COUNT_FEATURE}_{loc_idx}'
+        return stateKey(agent, f) if key else f
 
     def get_location_plane(self,
                            agent: Agent,
                            locs: List[Location],
-                           comp: Literal[KeyedPlane.COMPARISON_MAP] = KeyedPlane.COMPARISON_MAP[0]) -> KeyedPlane:
+                           comp: Literal['==', '>', '<'] = KeyedPlane.COMPARISON_MAP[0]) -> KeyedPlane:
         """
         Gets a PsychSim plane for the given agent that can be used to compare it's current location against the given
         set of locations. Comparisons are made at the index level, i.e., in the left-right, bottom-up order.
@@ -323,7 +337,7 @@ class GridWorld(object):
         assert agent.world == self.world, 'Agent\'s world different from the environment\'s world!'
 
         old_state = copy.deepcopy(self.world.state)
-        states = [None] * self.width * self.height
+        states: List[Optional[VectorDistributionSet]] = [None] * self.width * self.height
 
         # iterate through all agent positions and copy world state
         x, y = self.get_location_features(agent)
