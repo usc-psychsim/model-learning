@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
-from typing import Dict, Literal, Any
+from typing import Dict, Literal, Any, NamedTuple
 
 from model_learning import TeamTrajectory
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
@@ -17,8 +17,8 @@ from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, ma
 __author__ = 'Haochen Wu, Pedro Sequeira'
 __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
 __maintainer__ = 'Pedro Sequeira'
-EVACUATE_ACTION = 'evacuate'
 
+EVACUATE_ACTION = 'evacuate'
 CALL_ACTION = 'call'
 TRIAGE_ACTION = 'triage'
 SEARCH_ACTION = 'search'
@@ -46,6 +46,19 @@ LOC_FONT_COLOR = 'darkgrey'
 NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
+
+
+class AgentOptions(NamedTuple):
+    """
+    Options for agent actions and features, to create different search-and-rescue behaviors.
+    """
+    noop_action: bool
+    search_action: bool
+    triage_action: bool
+    call_action: bool
+    num_empty_feature: bool
+    dist_to_vic_feature: bool
+    dist_to_help_feature: bool
 
 
 class SearchRescueGridWorld(GridWorld):
@@ -77,10 +90,14 @@ class SearchRescueGridWorld(GridWorld):
         self.num_victims: int = num_victims
         self.vics_cleared_feature: bool = vics_cleared_feature
 
+        self.agent_options: Dict[str, AgentOptions] = {}  # to store the different agent options
+
+        num_locs = self.width * self.height
+        all_locs = list(range(num_locs))
+
         # create victim status feature for each location
         self.vic_status_features: List[str] = []
-        num_locs = self.width * self.height
-        for loc_idx in range(num_locs):
+        for loc_idx in all_locs:
             f = self.world.defineState(WORLD, self.get_loc_vic_status_feature(loc_idx, key=False),
                                        list, VICTIM_STATUS, description=f'Location {loc_idx}\'s victim status')
             self.world.setFeature(f, UNKNOWN_STR)  # initially no one knows where victims are
@@ -90,7 +107,7 @@ class SearchRescueGridWorld(GridWorld):
         rng = np.random.RandomState(seed)
         all_locs = np.arange(width * height)
         self.victim_locs = rng.choice(all_locs, num_victims, replace=False).tolist()
-        self.non_victim_locs = list(set(all_locs) - set(self.victim_locs))
+        self.empty_locs = list(set(all_locs) - set(self.victim_locs))
 
         # creates combination index of clear status of victims in each victim location:
         # False: not clear, i.e., a victim was found in the location
@@ -107,16 +124,16 @@ class SearchRescueGridWorld(GridWorld):
             self.clear_counter.append(np.sum(list(clear_status.values())).item())  # num. cleared locs
             dists_to_vic = np.ones(num_locs)
             vic_locs = [k for k, v in clear_status.items() if not v]  # where there are known, un-evacuated vics
-            for loc_idx in range(num_locs):
+            for loc_idx in all_locs:
                 if len(vic_locs) > 0:
-                    dists_to_vic[loc_idx] = self.dist_to_closest_loc(loc_idx, vic_locs)
+                    dists_to_vic[loc_idx] = self._dist_to_closest_loc(loc_idx, vic_locs)
             self.dists_to_vic.append(dists_to_vic)
 
         # precompute (normalized) distance from all vic locations to other locations (used in the dist_to_help feature)
-        self.dists_to_loc: np.ndarray = np.ones((self.victim_locs, num_locs))
-        for vic_loc_idx in self.victim_locs:  # compute only for vic locations
-            for loc_idx in range(num_locs):
-                self.dists_to_loc[vic_loc_idx, loc_idx] = self.dist_to_closest_loc(loc_idx, [vic_loc_idx])
+        self.dists_to_loc: np.ndarray = np.ones((num_victims, num_locs))
+        for i, vic_loc_idx in enumerate(self.victim_locs):  # compute only for vic locations
+            for loc_idx in all_locs:
+                self.dists_to_loc[i, loc_idx] = self._dist_to_closest_loc(loc_idx, [vic_loc_idx])
 
         # define additional world features:
         # - victims cleared status combination index
@@ -201,7 +218,7 @@ class SearchRescueGridWorld(GridWorld):
         f = f'{self.name}_{DIST_TO_HELP_FEATURE}'
         return stateKey(agent.name, f) if key else f
 
-    def get_no_vics_feature(self, agent: Agent, key: bool = True):
+    def get_empty_feature(self, agent: Agent, key: bool = True):
         """
         Gets the number of no victim locations found feature for the given agent.
         :param Agent agent: the agent for which to get the feature.
@@ -212,102 +229,98 @@ class SearchRescueGridWorld(GridWorld):
         f = f'{self.name}_{NO_VICS_FEATURE}'
         return stateKey(agent.name, f) if key else f
 
-    def add_search_and_rescue_dynamics(self, agent: Agent,
-                                       noop_action: bool = True,
-                                       search_action: bool = True,
-                                       triage_action: bool = True,
-                                       call_action: bool = True,
-                                       num_no_vics_feature: bool = True) -> List[ActionSet]:
+    def add_search_and_rescue_dynamics(self, agent: Agent, options: AgentOptions) -> List[ActionSet]:
         """
         Adds the PsychSim action dynamics for the given agent to search for and triage victims in the environment.
         Also adds the gridworld navigation actions.
         :param Agent agent: the agent to add the action search and rescue dynamics to.
-        :param bool noop_action: whether to include a no-op (do nothing) action.
-        :param bool search_action: whether to include a search action.
-        :param bool triage_action: whether to include a triage action.
-        :param bool call_action: whether to include a call action.
-        :param bool num_no_vics_feature: whether to include a no-victim locations found count feature.
+        :param AgentOptions options: the search-and-rescue action and feature options for this agent.
         :rtype: list[ActionSet]
         :return: a list containing the agent's newly created actions.
         """
 
-        assert agent.name not in self.agent_actions, f'Agent \'{agent.name}\' is not associated with this environment'
+        assert agent.name not in self.agent_options, f'SAR dynamics have already been set to agent \'{agent.name}\''
+        self.agent_options[agent.name] = options
 
         # movement dynamics
-        self.add_agent_dynamics(agent, noop_action=noop_action, visit_count_features=False)
+        self.add_agent_dynamics(agent, noop_action=options.noop_action, visit_count_features=False)
         x, y = self.get_location_features(agent)
 
         n_ci = len(self.dists_to_vic)  # number of victim (status) combinations
         non_clear_vic_comb_idxs = list(range(n_ci - 1))
         n_locs = self.width * self.height  # number of locations in the environment
         all_locs = list(range(n_locs))
-        all_vic_locs = list(range(self.num_victims))
+        all_vic_loc_idxs = list(range(self.num_victims))
 
         # noop/wait is allowed is allowed only when all victims are triaged
-        if noop_action:
+        if options.noop_action:
             action = agent.find_action({'action': NOOP_ACTION})
             legal_dict = {'if': equalRow(self.clear_comb, len(self.dists_to_vic) - 1), True: True, False: False}
             agent.setLegal(action, makeTree(legal_dict))
 
         # ==================================================
-        # dynamics of distance to the closest non-cleared location feature
-        d2v = self.world.defineState(agent.name, self.get_dist_to_vic_feature(agent, key=False),
-                                     float, 0, 1, description=f'Distance to the closest victim (non-clear) location')
-        self.world.setFeature(d2v, 1)  # initially unknown victims, so maximal distance
+        # dynamics of distance to the closest victim (non-cleared) location feature
+        if options.dist_to_vic_feature:
+            d2v = self.world.defineState(agent.name, self.get_dist_to_vic_feature(agent, key=False),
+                                         float, 0, 1,
+                                         description=f'Distance to the closest victim (non-clear) location')
+            self.world.setFeature(d2v, 1)  # initially unknown victims, so maximal distance
 
-        # if all victims cleared, distance is maximal (1)
-        ci_dict = {'if': KeyedPlane(KeyedVector({self.clear_comb: 1}), n_ci - 1, 0),
-                   True: setToConstantMatrix(d2v, 1)}
+            # if all victims cleared, distance is maximal (1)
+            ci_dict = {'if': KeyedPlane(KeyedVector({self.clear_comb: 1}), n_ci - 1, 0),
+                       True: setToConstantMatrix(d2v, 1)}
 
-        # otherwise set according to current location and vic clear combination indices
-        tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, makeFuture(y): self.width}), all_locs, 0),
-                     None: noChangeMatrix(d2v)}
-        for loc_idx in all_locs:
-            sub_tree_dict = {'if': KeyedPlane(KeyedVector({self.clear_comb: 1}), non_clear_vic_comb_idxs, 0)}
+            # otherwise set according to vic clear combination and current location indices
+            tree_dict = {'if': KeyedPlane(KeyedVector({self.clear_comb: 1}), non_clear_vic_comb_idxs, 0),
+                         None: noChangeMatrix(d2v)}
             for vic_comb_idx in non_clear_vic_comb_idxs:
-                sub_tree_dict[vic_comb_idx] = setToConstantMatrix(d2v, self.dists_to_vic[vic_comb_idx][loc_idx])
-            sub_tree_dict[None] = noChangeMatrix(d2v)  # unknown loc, so don't change
-            tree_dict[loc_idx] = sub_tree_dict
+                sub_tree_dict = {
+                    'if': KeyedPlane(KeyedVector({makeFuture(x): 1, makeFuture(y): self.width}), all_locs, 0),
+                    None: noChangeMatrix(d2v)}
+                for loc_idx in all_locs:
+                    sub_tree_dict[loc_idx] = setToConstantMatrix(d2v, self.dists_to_vic[vic_comb_idx][loc_idx])
+                tree_dict[vic_comb_idx] = sub_tree_dict
 
-        ci_dict[False] = tree_dict
+            ci_dict[False] = tree_dict
 
-        # set the dynamics to all movement actions
-        for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
-            action = agent.find_action({'action': move})
-            self.world.setDynamics(d2v, action, makeTree(ci_dict))
+            # set the dynamics to all movement actions
+            for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
+                action = agent.find_action({'action': move})
+                self.world.setDynamics(d2v, action, makeTree(ci_dict))
 
         # ==================================================
         # dynamics of distance to the help location feature
-        d2h = self.world.defineState(agent.name, self.get_dist_to_help_feature(agent, key=False),
-                                     float, 0, 1, description=f'distance to help the others')
-        self.world.setFeature(d2h, 1)  # initially unknown victims, so maximal distance
+        if options.dist_to_help_feature:
+            d2h = self.world.defineState(agent.name, self.get_dist_to_help_feature(agent, key=False),
+                                         float, 0, 1, description=f'distance to help the others')
+            self.world.setFeature(d2h, 1)  # initially unknown victims, so maximal distance
 
-        # test cur help/victim location against current agent location
-        tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.help_loc): 1}), all_vic_locs, 0),
-                     None: setToConstantMatrix(d2h, 1)}  # no help request location, so maximal distance
+            # test cur help/victim location against current agent location
+            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.help_loc): 1}), all_vic_loc_idxs, 0),
+                         None: setToConstantMatrix(d2h, 1)}  # no help request location, so maximal distance
 
-        for vic_loc_idx in all_vic_locs:
-            vic_loc_idx = self.victim_locs[vic_loc_idx]  # get actual location index
-            sub_tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(x): 1, makeFuture(y): self.width}), all_locs, 0),
-                             None: noChangeMatrix(d2h)}  # unknown loc, so don't change
-            for loc_idx in all_locs:
-                sub_tree_dict[loc_idx] = setToConstantMatrix(d2h, self.dists_to_loc[vic_loc_idx][loc_idx])
-            tree_dict[vic_loc_idx] = sub_tree_dict
+            for vic_loc_idx in all_vic_loc_idxs:
+                sub_tree_dict = {
+                    'if': KeyedPlane(KeyedVector({makeFuture(x): 1, makeFuture(y): self.width}), all_locs, 0),
+                    None: noChangeMatrix(d2h)}  # unknown loc, so don't change
+                for loc_idx in all_locs:
+                    sub_tree_dict[loc_idx] = setToConstantMatrix(d2h, self.dists_to_loc[vic_loc_idx][loc_idx])
+                tree_dict[vic_loc_idx] = sub_tree_dict
 
-        # set the dynamics to all movement actions
-        for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
-            action = agent.find_action({'action': move})
-            self.world.setDynamics(d2h, action, makeTree(tree_dict))
+            # set the dynamics to all movement actions
+            for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
+                action = agent.find_action({'action': move})
+                self.world.setDynamics(d2h, action, makeTree(tree_dict))
 
         # ==================================================
         # dynamics of victim search action
-        if search_action:
+        if options.search_action:
             action = agent.addAction({'verb': 'handle', 'action': SEARCH_ACTION})
             self.agent_actions[agent.name].append(action)
 
             # search is valid only when victim status at current location is unknown
             legal_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), all_locs, 0),
-                          None: False}  # unknown location, so illegal
+                          None: False}  # invalid location, so illegal
             for loc_idx in all_locs:
                 vic_status = self.vic_status_features[loc_idx]
                 legal_dict[loc_idx] = {'if': equalRow(vic_status, UNKNOWN_STR), True: True, False: False}
@@ -342,32 +355,34 @@ class SearchRescueGridWorld(GridWorld):
             # ==================================================
             # dynamics of distance to victim, updated once a victim is found
             # checks for current vic clear combination against current agent location
-            d2v = self.get_dist_to_vic_feature(agent, key=True)
+            if options.dist_to_vic_feature:
+                d2v = self.get_dist_to_vic_feature(agent, key=True)
 
-            ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci - 1, 0),
-                       True: setToConstantMatrix(d2v, 1)}  # if no victims/all clear, distance is maximal
+                ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci - 1, 0),
+                           True: setToConstantMatrix(d2v, 1)}  # if no victims/all clear, distance is maximal
 
-            tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), non_clear_vic_comb_idxs, 0),
-                         None: noChangeMatrix(d2v)}
-            for vic_comb_idx in non_clear_vic_comb_idxs:
-                sub_tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), all_locs, 0),
-                                 None: noChangeMatrix(d2v)}
-                for loc_idx in all_locs:
-                    sub_tree_dict[loc_idx] = setToConstantMatrix(d2v, self.dists_to_vic[vic_comb_idx][loc_idx])
+                tree_dict = {
+                    'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), non_clear_vic_comb_idxs, 0),
+                    None: noChangeMatrix(d2v)}
+                for vic_comb_idx in non_clear_vic_comb_idxs:
+                    sub_tree_dict = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), all_locs, 0),
+                                     None: noChangeMatrix(d2v)}
+                    for loc_idx in all_locs:
+                        sub_tree_dict[loc_idx] = setToConstantMatrix(d2v, self.dists_to_vic[vic_comb_idx][loc_idx])
                     tree_dict[vic_comb_idx] = sub_tree_dict
 
-            ci_dict[False] = tree_dict
-            self.world.setDynamics(d2v, action, makeTree(ci_dict))
+                ci_dict[False] = tree_dict
+                self.world.setDynamics(d2v, action, makeTree(ci_dict))
 
             # ==================================================
             # dynamics of number of locations found without victims, updated once a victim is not found after search
-            if num_no_vics_feature:
-                f = self.world.defineState(agent.name, self.get_no_vics_feature(agent, key=False),
-                                           int, 0, len(self.non_victim_locs),
+            if options.num_empty_feature:
+                f = self.world.defineState(agent.name, self.get_empty_feature(agent, key=False),
+                                           int, 0, len(self.empty_locs),
                                            description=f'Number of empty locations, i.e., with no victims found')
                 self.world.setFeature(f, 0)
 
-                for loc_idx in self.non_victim_locs:
+                for loc_idx in self.empty_locs:
                     vic_status = self.vic_status_features[loc_idx]
                     tree_dict = {'if': KeyedPlane(KeyedVector({makeFuture(vic_status): 1}), EMPTY_STR, 0),
                                  True: incrementMatrix(f, 1),
@@ -376,7 +391,7 @@ class SearchRescueGridWorld(GridWorld):
 
         # ==================================================
         # dynamics of victim triage action
-        if triage_action:
+        if options.triage_action:
             action = agent.addAction({'verb': 'handle', 'action': TRIAGE_ACTION})
             self.agent_actions[agent.name].append(action)
 
@@ -398,7 +413,7 @@ class SearchRescueGridWorld(GridWorld):
 
         # ==================================================
         # dynamics of victim call action
-        if call_action:
+        if options.call_action:
             action = agent.addAction({'verb': 'handle', 'action': CALL_ACTION})
             self.agent_actions[agent.name].append(action)
 
@@ -410,11 +425,11 @@ class SearchRescueGridWorld(GridWorld):
                 legal_dict[i] = {'if': equalRow(vic_status, READY_STR), True: True, False: False}
             agent.setLegal(action, makeTree(legal_dict))
 
-            # change help location to agent's current location once agent calls for help
+            # change help location to agent's current vic location index once agent calls for help
             call_tree = {'if': KeyedPlane(KeyedVector({x: 1, y: self.width}), self.victim_locs, 0),
                          None: setToConstantMatrix(self.help_loc, -1)}  # if not a victim location, set invalid idx
-            for i, loc_idx in enumerate(self.victim_locs):
-                call_tree[i] = setToConstantMatrix(self.help_loc, i)
+            for vic_loc_idx in all_vic_loc_idxs:
+                call_tree[vic_loc_idx] = setToConstantMatrix(self.help_loc, vic_loc_idx)
             self.world.setDynamics(self.help_loc, action, makeTree(call_tree))
 
         return self.agent_actions[agent.name]
@@ -429,7 +444,8 @@ class SearchRescueGridWorld(GridWorld):
         assert len(agents) == 2, f'Collaboration dynamics limited to 2 agents, {len(agents)} given'
 
         for i, agent in enumerate(agents):
-            assert agent.name in self.agent_actions, f'Agent \'{agent.name}\' is not associated with this environment'
+            assert agent.name in self.agent_actions and agent.name in self.agent_options, \
+                f'Agent \'{agent.name}\' is not associated with this environment'
 
         n_ci = len(self.dists_to_vic)  # number of victim (status) combinations
         non_clear_vic_comb_idxs = list(range(n_ci - 1))
@@ -465,16 +481,16 @@ class SearchRescueGridWorld(GridWorld):
             legal_dict[True] = sub_legal_dict
             agents[i].setLegal(agent_actions[i], makeTree(legal_dict))
 
-            # evacuate changes the victim status from ready to clear, when *both* agents perform evacuate
-            for loc_idx in self.victim_locs:
-                vic_status = self.vic_status_features[loc_idx]
-                tree_dict = {'if': (equalRow(actionKey(agents[j].name, True), agent_actions[j]) &
-                                    KeyedPlane(KeyedVector({x1: 1, y1: self.width}), loc_idx, 0)),
-                             True: setToConstantMatrix(vic_status, CLEAR_STR),
-                             False: noChangeMatrix(vic_status)}
-                self.world.setDynamics(vic_status, agent_actions[i], makeTree(tree_dict))
-
             if i == 0:  # only one agent is needed to update global/common features
+
+                # evacuate changes the victim status from ready to clear, when *both* agents perform evacuate
+                for loc_idx in self.victim_locs:
+                    vic_status = self.vic_status_features[loc_idx]
+                    tree_dict = {'if': (equalRow(actionKey(agents[j].name, True), agent_actions[j]) &
+                                        KeyedPlane(KeyedVector({x1: 1, y1: self.width}), loc_idx, 0)),
+                                 True: setToConstantMatrix(vic_status, CLEAR_STR),
+                                 False: noChangeMatrix(vic_status)}
+                    self.world.setDynamics(vic_status, agent_actions[i], makeTree(tree_dict))
 
                 # ==================================================
                 # dynamics of victim clear combination index, updated once a victim is evacuated/cleared by both agents
@@ -492,7 +508,7 @@ class SearchRescueGridWorld(GridWorld):
                         subtree_dict[v] = setToConstantMatrix(
                             self.clear_comb,
                             self._get_next_vic_found_comb_idx(vic_comb_idx, loc_idx, next_clear_status=True))
-                    tree_dict[loc_idx] = subtree_dict
+                    tree_dict[k] = subtree_dict
                 ci_dict[True] = tree_dict
                 self.world.setDynamics(self.clear_comb, agent_actions[i], makeTree(ci_dict))
 
@@ -509,32 +525,34 @@ class SearchRescueGridWorld(GridWorld):
 
             # ==================================================
             # dynamics of distance to closest victim, updated once a victim is evacuated/cleared by both agents
-            d2c = self.get_dist_to_vic_feature(agents[i], key=True)
-            ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci, 0),
-                       True: setToConstantMatrix(d2c, 1)}  # no victims, so maximal distance
-            # checks vic clear combination against current agent location (distance pre-computed)
-            tree_dict = {
-                'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), non_clear_vic_comb_idxs, 0),
-                None: noChangeMatrix(d2c)}
-            for vic_comb_idx in non_clear_vic_comb_idxs:
-                sub_tree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), all_locs, 0),
-                                 None: noChangeMatrix(d2c)}
-                for loc_idx in all_locs:
-                    sub_tree_dict[vic_comb_idx] = setToConstantMatrix(d2c, self.dists_to_vic[vic_comb_idx][loc_idx])
-                tree_dict[vic_comb_idx] = sub_tree_dict
-            ci_dict[False] = tree_dict
-            self.world.setDynamics(d2c, agent_actions[i], makeTree(ci_dict))
+            if self.agent_options[agent.name].dist_to_vic_feature:
+                d2v = self.get_dist_to_vic_feature(agents[i], key=True)
+                ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci, 0),
+                           True: setToConstantMatrix(d2v, 1)}  # no victims, so maximal distance
+                # checks vic clear combination against current agent location (distance pre-computed)
+                tree_dict = {
+                    'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), non_clear_vic_comb_idxs, 0),
+                    None: noChangeMatrix(d2v)}
+                for vic_comb_idx in non_clear_vic_comb_idxs:
+                    sub_tree_dict = {'if': KeyedPlane(KeyedVector({x1: 1, y1: self.width}), all_locs, 0),
+                                     None: noChangeMatrix(d2v)}
+                    for loc_idx in all_locs:
+                        sub_tree_dict[loc_idx] = setToConstantMatrix(d2v, self.dists_to_vic[vic_comb_idx][loc_idx])
+                    tree_dict[vic_comb_idx] = sub_tree_dict
+                ci_dict[False] = tree_dict
+                self.world.setDynamics(d2v, agent_actions[i], makeTree(ci_dict))
 
     def _get_vic_status_features(self) -> List[str]:
         return [self.get_loc_vic_status_feature(loc_idx, key=True) for loc_idx in range(self.width * self.height)]
 
-    def dist_to_closest_loc(self, curr_loc, locs):
-        locs = set(locs)
-        if curr_loc in locs:
+    def _dist_to_closest_loc(self, loc_idx: int, target_loc_idxs: List[int]):
+        # computes closest Manhattan distance between a location and a set of locations
+        target_loc_idxs = set(target_loc_idxs)
+        if loc_idx in target_loc_idxs:
             return 0
         dist = self.width + self.height - 2
-        curr_x, curr_y = self.idx_to_xy(curr_loc)
-        for loc in locs:
+        curr_x, curr_y = self.idx_to_xy(loc_idx)
+        for loc in target_loc_idxs:
             loc_x, loc_y = self.idx_to_xy(loc)
             _dist = abs(curr_x - loc_x) + abs(curr_y - loc_y)
             if _dist < dist:
@@ -571,20 +589,6 @@ class SearchRescueGridWorld(GridWorld):
                 for kk, vv in v.items():
                     print(kk)
                     print(vv)
-
-    def get_navi_features(self, agent: Agent):
-        f = stateKey(agent.name, NO_VICS_FEATURE + self.name)
-        return f
-
-    def get_d2h_feature(self, agent: Agent):
-        d2h = stateKey(agent.name, DIST_TO_HELP_FEATURE + self.name)
-        return d2h
-
-    def remove_action(self, agent: Agent, action: str):
-        illegal_action = agent.find_action({'action': action})
-        agent.setLegal(illegal_action, makeTree(False))
-        if illegal_action in self.agent_actions[agent.name]:
-            self.agent_actions[agent.name].remove(illegal_action)
 
     def get_role_reward_vector(self, agent: Agent, roles: Dict[str, float] = None):
         """
@@ -644,7 +648,7 @@ class SearchRescueGridWorld(GridWorld):
                 self.world.setDynamics(self.help_loc, action, makeTree(setToConstantMatrix(self.help_loc, -1)))
 
         if 'Navigator' in roles:
-            d2h = self.get_d2h_feature(agent)
+            d2h = self.get_dist_to_help_feature(agent, key=True)
             r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h)
             reward_features.append(r_d2h)
             rf_weights.append(roles['Navigator'])
@@ -655,7 +659,7 @@ class SearchRescueGridWorld(GridWorld):
             rf_weights.append(roles['Navigator'])
 
             if self.vics_cleared_feature:
-                f = self.get_navi_features(agent)
+                f = self.get_empty_feature(agent, key=True)
                 r_navi = NumericLinearRewardFeature(NO_VICS_FEATURE, f)
                 reward_features.append(r_navi)
                 rf_weights.append(roles['Navigator'])
@@ -664,10 +668,6 @@ class SearchRescueGridWorld(GridWorld):
             r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
             reward_features.append(r_evacuate)
             rf_weights.append(2 * roles['Navigator'])
-
-            self.remove_action(agent, 'triage')
-            self.remove_action(agent, 'wait')
-            self.remove_action(agent, 'call')
 
         return reward_features, rf_weights
 
@@ -847,7 +847,7 @@ class SearchRescueGridWorld(GridWorld):
             team_xs, team_ys, team_as, world_ps = {}, {}, {}, {}
             for loci, loc in enumerate(self.victim_locs):
                 world_ps[loc] = [None] * l_traj
-            for loci, loc in enumerate(self.non_victim_locs):
+            for loci, loc in enumerate(self.empty_locs):
                 world_ps[loc] = [None] * l_traj
             for ag_i, agent in enumerate(team):
                 team_xs[agent.name] = [0] * l_traj
@@ -906,7 +906,7 @@ class SearchRescueGridWorld(GridWorld):
                         status_ann = axes[ag_i].annotate(f'*V{loci + 1}\n{p}', xy=(x + .47, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
-                for loci, loc in enumerate(self.non_victim_locs):
+                for loci, loc in enumerate(self.empty_locs):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
                     for ag_i, agent in enumerate(team):

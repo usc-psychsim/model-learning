@@ -156,7 +156,7 @@ def generate_trajectory_model_distribution(world: World,
         [print(a) for a in team_action.values()]
         for ag_i, agent in enumerate(_team):
             if ag_i == 1:
-                dh = _world.getFeature(env.get_d2h_feature(agent), unique=True)
+                dh = _world.getFeature(env.get_dist_to_help_feature(agent, key=True), unique=True)
                 print(f'{agent.name} dist2help: {dh}')
             agent_model = modelKey(agent.name)
             agent_dist = _get_belief(_world, agent_model, observer)
