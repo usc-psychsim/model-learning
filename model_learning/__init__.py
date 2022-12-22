@@ -1,4 +1,6 @@
 from typing import Union, List, Dict
+
+from psychsim.action import ActionSet
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
 from psychsim.world import World
@@ -40,7 +42,8 @@ class TeamStateinfoActionModelTuple(object):
         self.model_dist: Distribution = model_dist
         self.prob: float = prob
 
-PsychSimType = Union[float, int, str]
+
+PsychSimType = Union[float, int, str, ActionSet]
 State = VectorDistributionSet
 Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
 TeamTrajectory = List[TeamStateActionPair]

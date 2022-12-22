@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentOptions
-from model_learning.features import LinearRewardVector
+from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.io import create_clear_dir
 from model_learning.util.logging import change_log_handler
 from psychsim.pwl import modelKey
@@ -25,11 +25,16 @@ NUM_EXIST = 3
 # Explorer has search action and distance to help feature
 VIC_STATS_FEATURES = False
 TEAM_AGENTS = ['Medic', 'Explorer']
-AGENT_ROLES = [{'Goal': 1}, {'Navigator': 0.5}]
-AGENT_OPTIONS = [AgentOptions(noop_action=True, search_action=True, triage_action=True, call_action=True,
-                              num_empty_feature=False, dist_to_vic_feature=True, dist_to_help_feature=False),
-                 AgentOptions(noop_action=False, search_action=True, triage_action=False, call_action=False,
-                              num_empty_feature=False, dist_to_vic_feature=False, dist_to_help_feature=True)]  # Exp
+AGENT_RWD_WEIGHTS = [
+    [0.1, 0.1, 0.3, 1, 0.05, 0.05],  # Medic
+    [0.5, 0.5, 1]  # Explorer
+]
+AGENT_OPTIONS = [
+    AgentOptions(noop_action=True, search_action=True, triage_action=True, call_action=True,
+                 num_empty_feature=False, dist_to_vic_feature=True, dist_to_help_feature=False),  # Medic
+    AgentOptions(noop_action=False, search_action=True, triage_action=False, call_action=False,
+                 num_empty_feature=False, dist_to_vic_feature=False, dist_to_help_feature=True)  # Explorer
+]
 
 DISCOUNT = 0.7
 HORIZON = 2  # 0 for random actions
@@ -69,12 +74,13 @@ if __name__ == '__main__':
     # set agent rewards, and attributes
     # logging.info(env.world.symbolList)
     for ag_i, agent in enumerate(team):
-        rwd_features, rwd_f_weights = env.get_role_reward_vector(agent, AGENT_ROLES[ag_i])
-        agent_lrv = LinearRewardVector(rwd_features)
-        rwd_f_weights = np.array(rwd_f_weights) / np.linalg.norm(rwd_f_weights, 1)
+        agent_lrv = SearchRescueRewardVector(env, agent)
+        rwd_f_weights = np.array(AGENT_RWD_WEIGHTS[ag_i])
+        rwd_f_weights = rwd_f_weights / np.linalg.norm(rwd_f_weights, 1)
         agent_lrv.set_rewards(agent, rwd_f_weights)
         logging.info(f'{agent.name} Reward Features')
-        logging.info(agent_lrv.names, rwd_f_weights)
+        logging.info(agent_lrv.names)
+        logging.info(rwd_f_weights)
         # agent.printReward(agent.get_true_model())
 
         agent.setAttribute('selection', ACT_SELECTION)
