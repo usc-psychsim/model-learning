@@ -1,6 +1,7 @@
 import operator
 import numpy as np
 from abc import ABC, abstractmethod
+from psychsim.action import ActionSet
 from typing import Optional, List
 from psychsim.agent import Agent
 from psychsim.pwl import rewardKey, setToConstantMatrix, makeTree, setToFeatureMatrix, KeyedTree, KeyedPlane, \
@@ -50,83 +51,6 @@ class LinearRewardFeature(ABC):
         pass
 
 
-class ValueComparisonLinearRewardFeature(LinearRewardFeature):
-    """
-    Represents a boolean reward feature that performs a comparison between a feature and a value, and returns `1` if
-    the comparison is satisfied, otherwise returns `0`.
-    """
-
-    def __init__(self, name: str, world: World, key: str, value: PsychSimType, comparison: str):
-        """
-        Creates a new reward feature.
-        :param World world: the PsychSim world capable of retrieving the feature's value given a state.
-        :param str name: the label for this reward feature.
-        :param str key: the named key associated with this feature.
-        :param str or int or float value: the value to be compared against the feature to determine its truth (boolean) value.
-        :param str comparison: the comparison to be performed, one of `{'==', '>', '<'}`.
-        """
-        super().__init__(name)
-        self.world = world
-        self.key = key
-        self.value = value
-        assert comparison in KeyedPlane.COMPARISON_MAP, \
-            f'Invalid comparison provided: {comparison}; valid: {KeyedPlane.COMPARISON_MAP}'
-        self.comparison = KeyedPlane.COMPARISON_MAP.index(comparison)
-        self.comp_func = COMPARISON_OPS[comparison]
-
-    def get_value(self, state: State) -> float:
-        # collects feature value distribution and returns weighted sum
-        dist = np.array([[float(self.comp_func(self.world.float2value(self.key, v), self.value)), p]
-                         for v, p in state.marginal(self.key).items()])
-        return dist[:, 0].dot(dist[:, 1]) * self.normalize_factor
-
-    def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
-        rwd_key = rewardKey(agent.name)
-        tree = {'if': KeyedPlane(KeyedVector({self.key: 1}), self.value, self.comparison),
-                True: setToConstantMatrix(rwd_key, 1.),
-                False: setToConstantMatrix(rwd_key, 0.)}
-        agent.setReward(makeTree(tree), weight * self.normalize_factor, model)
-
-
-class ActionLinearRewardFeature(ValueComparisonLinearRewardFeature):
-    """
-    Represents a reward feature that returns `1` if the agent's action is equal to a given action, and `0` otherwise.
-    """
-
-    def __init__(self, name: str, agent: Agent, action: str):
-        """
-        Creates a new reward feature.
-        :param str name: the label for this reward feature.
-        :param Agent agent: the agent whose action is going to be tracked by this feature.
-        :param str action: the action tracked by this feature.
-        """
-        super().__init__(name, agent.world, actionKey(agent.name), action, '==')
-
-
-class NumericLinearRewardFeature(LinearRewardFeature):
-    """
-    Represents a numeric reward feature, that returns a reward proportional to the feature's value.
-    """
-
-    def __init__(self, name: str, key: str):
-        """
-        Creates a new reward feature.
-        :param str name: the label for this reward feature.
-        :param str key: the named key associated with this feature.
-        """
-        super().__init__(name)
-        self.key = key
-
-    def get_value(self, state: State) -> float:
-        # simply return expectation of marginal
-        return state.marginal(self.key).expectation() * self.normalize_factor
-
-    def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
-        # simply multiply the feature's value by the given weight
-        rwd_key = rewardKey(agent.name)
-        agent.setReward(KeyedTree(setToFeatureMatrix(rwd_key, self.key)), weight * self.normalize_factor, model)
-
-
 class LinearRewardVector(object):
     """
     Represents a linear reward vector, i.e., a reward function formed by a linear combination of a set of reward
@@ -171,3 +95,84 @@ class LinearRewardVector(object):
         agent.setAttribute('R', {}, model)  # make sure to clear agent's reward function
         for i, weight in enumerate(weights):
             self.rwd_features[i].set_reward(agent, weight, model)
+
+
+class ValueComparisonLinearRewardFeature(LinearRewardFeature):
+    """
+    Represents a boolean reward feature that performs a comparison between a feature and a value, and returns `1` if
+    the comparison is satisfied, otherwise returns `0`.
+    """
+
+    def __init__(self, name: str, world: World, key: str, value: PsychSimType, comparison: str):
+        """
+        Creates a new reward feature.
+        :param World world: the PsychSim world capable of retrieving the feature's value given a state.
+        :param str name: the label for this reward feature.
+        :param str key: the named key associated with this feature.
+        :param str or int or float value: the value to be compared against the feature to determine its truth (boolean) value.
+        :param str comparison: the comparison to be performed, one of `{'==', '>', '<'}`.
+        """
+        super().__init__(name)
+        self.world = world
+        self.key = key
+        self.value = value
+        assert comparison in KeyedPlane.COMPARISON_MAP, \
+            f'Invalid comparison provided: {comparison}; valid: {KeyedPlane.COMPARISON_MAP}'
+        self.comparison = KeyedPlane.COMPARISON_MAP.index(comparison)
+        self.comp_func = COMPARISON_OPS[comparison]
+
+    def get_value(self, state: State) -> float:
+        # collects feature value distribution and returns weighted sum
+        dist = np.array([[float(self.comp_func(self.world.float2value(self.key, v), self.value)), p]
+                         for v, p in state.marginal(self.key).items()])
+        return dist[:, 0].dot(dist[:, 1]) * self.normalize_factor
+
+    def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
+        rwd_key = rewardKey(agent.name)
+        tree = {'if': KeyedPlane(KeyedVector({self.key: 1}), self.value, self.comparison),
+                True: setToConstantMatrix(rwd_key, 1.),
+                False: setToConstantMatrix(rwd_key, 0.)}
+        agent.setReward(makeTree(tree), weight * self.normalize_factor, model)
+
+
+class ActionLinearRewardFeature(ValueComparisonLinearRewardFeature):
+    """
+    Represents a reward feature that returns `1` if the agent's action is equal to a given action, and `0` otherwise.
+    """
+
+    def __init__(self, name: str, agent: Agent, action: ActionSet):
+        """
+        Creates a new reward feature.
+        :param str name: the label for this reward feature.
+        :param Agent agent: the agent whose action is going to be tracked by this feature.
+        :param ActionSet action: the action tracked by this feature.
+        """
+        super().__init__(name, agent.world, actionKey(agent.name), action, '==')
+
+
+class NumericLinearRewardFeature(LinearRewardFeature):
+    """
+    Represents a numeric reward feature, that returns a reward proportional to the feature's value.
+    """
+
+    def __init__(self, name: str, key: str, normalize_factor: float = 1, const_sum: Optional[float] = None):
+        """
+        Creates a new reward feature.
+        :param str name: the label for this reward feature.
+        :param str key: the named key associated with this feature.
+        :param float const_sum: an optional constant value to be added to the feature's value.
+        """
+        super().__init__(name, normalize_factor)
+        self.key = key
+        self.const_sum = const_sum
+
+    def get_value(self, state: State) -> float:
+        # simply return expectation of marginal
+        return state.marginal(self.key).expectation() * self.normalize_factor + self.const_sum
+
+    def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
+        # simply multiply the feature's value by the given weight
+        rwd_key = rewardKey(agent.name)
+        agent.setReward(
+            KeyedTree(setToFeatureMatrix(rwd_key, self.key, pct=self.normalize_factor, shift=self.const_sum)),
+            weight, model)
