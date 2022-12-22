@@ -148,6 +148,9 @@ class SearchRescueGridWorld(GridWorld):
                                                description=f'Index of location in which help was requested')
         self.world.setFeature(self.help_loc, -1)  # help has not been requested in any location
 
+        # default dynamics is to set it to unknown/invalid and only set it once an agent calls for help
+        self.world.setDynamics(self.help_loc, True, makeTree(setToConstantMatrix(self.help_loc, -1)))
+
         if self.vics_cleared_feature:
             # - number of victims that have been cleared
             self.num_clear_vics = self.world.defineState(WORLD, self.get_vics_cleared_feature(key=False),
@@ -349,7 +352,7 @@ class SearchRescueGridWorld(GridWorld):
                     subtree_dict[j] = setToConstantMatrix(
                         self.clear_comb,
                         self._get_next_vic_found_comb_idx(vic_comb_idx, loc_idx, next_clear_status=False))
-                tree_dict[loc_idx] = subtree_dict
+                tree_dict[i] = subtree_dict
             self.world.setDynamics(self.clear_comb, action, makeTree(tree_dict))
 
             # ==================================================
@@ -589,87 +592,6 @@ class SearchRescueGridWorld(GridWorld):
                 for kk, vv in v.items():
                     print(kk)
                     print(vv)
-
-    def get_role_reward_vector(self, agent: Agent, roles: Dict[str, float] = None):
-        """
-        Function to get reward features and weights based on the agent role in the team
-        @param agent: the target agent
-        @param roles: agent roles in the team
-        @return: list of reward features, list of reward weights
-        """
-        reward_features = []
-        rf_weights = []
-
-        if roles is None:
-            wait_action = agent.find_action({'action': 'wait'})
-            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
-            reward_features.append(r_wait)
-            rf_weights.append(1)
-            return reward_features, rf_weights
-
-        if 'Goal' in roles:  # scale -1 to 1
-            d2c = self.get_d2c_feature(agent)
-            r_d2c = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE, d2c)
-            reward_features.append(r_d2c)
-            rf_weights.append(0.1 * roles['Goal'])
-
-            if self.vics_cleared_feature:
-                r_goal = NumericLinearRewardFeature(VICS_CLEARED_FEATURE, stateKey(WORLD, VICS_CLEARED_FEATURE))
-                reward_features.append(r_goal)
-                rf_weights.append(roles['Goal'])
-
-            search_action = agent.find_action({'action': 'search'})
-            r_search = ActionLinearRewardFeature('search', agent, search_action)
-            reward_features.append(r_search)
-            rf_weights.append(0.1 * roles['Goal'])
-
-            triage_action = agent.find_action({'action': 'triage'})
-            r_triage = ActionLinearRewardFeature('triage', agent, triage_action)
-            reward_features.append(r_triage)
-            rf_weights.append(0.3 * roles['Goal'])
-
-            evacuate_action = agent.find_action({'action': 'evacuate'})
-            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
-            reward_features.append(r_evacuate)
-            rf_weights.append(roles['Goal'])
-
-            wait_action = agent.find_action({'action': 'wait'})
-            r_wait = ActionLinearRewardFeature('wait', agent, wait_action)
-            reward_features.append(r_wait)
-            rf_weights.append(0.05 * roles['Goal'])
-
-            call_action = agent.find_action({'action': 'call'})
-            r_call = ActionLinearRewardFeature('call', agent, call_action)
-            reward_features.append(r_call)
-            rf_weights.append(0.05 * roles['Goal'])
-
-            for act in {'right', 'left', 'up', 'down', 'wait', 'search', 'triage', 'evacuate'}:
-                action = agent.find_action({'action': act})
-                self.world.setDynamics(self.help_loc, action, makeTree(setToConstantMatrix(self.help_loc, -1)))
-
-        if 'Navigator' in roles:
-            d2h = self.get_dist_to_help_feature(agent, key=True)
-            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h)
-            reward_features.append(r_d2h)
-            rf_weights.append(roles['Navigator'])
-
-            search_action = agent.find_action({'action': 'search'})
-            r_search = ActionLinearRewardFeature('search', agent, search_action)
-            reward_features.append(r_search)
-            rf_weights.append(roles['Navigator'])
-
-            if self.vics_cleared_feature:
-                f = self.get_empty_feature(agent, key=True)
-                r_navi = NumericLinearRewardFeature(NO_VICS_FEATURE, f)
-                reward_features.append(r_navi)
-                rf_weights.append(roles['Navigator'])
-
-            evacuate_action = agent.find_action({'action': 'evacuate'})
-            r_evacuate = ActionLinearRewardFeature('evacuate', agent, evacuate_action)
-            reward_features.append(r_evacuate)
-            rf_weights.append(2 * roles['Navigator'])
-
-        return reward_features, rf_weights
 
     def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]) -> Agent:
         """
