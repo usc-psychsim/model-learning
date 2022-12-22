@@ -731,7 +731,8 @@ class SearchRescueGridWorld(GridWorld):
                                                     processes, seed, verbose, use_tqdm)
 
     # generate .gif of trajectories
-    def play_team_trajectories(self, team_trajectories: List[TeamTrajectory],
+    def play_team_trajectories(self,
+                               team_trajectories: List[TeamTrajectory],
                                team: List[Agent],
                                file_name: str,
                                title: str = 'Team Trajectories'):
@@ -741,9 +742,9 @@ class SearchRescueGridWorld(GridWorld):
             x, y = self.get_location_features(agent)
             assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
             assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
-        p_features = self._get_vic_status_features()
-        for p in p_features:
-            assert p in self.world.variables, f'World does not have property feature'
+        vs_features = self._get_vic_status_features()
+        for vic_status in vs_features:
+            assert vic_status in self.world.variables, f'World does not have victim status feature {vic_status}'
 
         for traj_i, team_traj in enumerate(team_trajectories):
             fig, axes = plt.subplots(len(team))
@@ -785,8 +786,8 @@ class SearchRescueGridWorld(GridWorld):
                     a = a['subject'] + '-' + a['action']
                     if ag_i == 0:
                         for loc in range(self.width * self.height):
-                            p_t = tsa.world.getFeature(self.vic_status_features[loc], unique=True)
-                            world_ps[loc][i] = VICTIM_STATUS[p_t]
+                            vic_status = tsa.world.getFeature(self.vic_status_features[loc], unique=True)
+                            world_ps[loc][i] = vic_status
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5
                     team_as[agent.name][i] = a

@@ -38,43 +38,43 @@ class SearchRescueRewardVector(LinearRewardVector):
         if options.dist_to_vic_feature:
             # inverse distance to victim reward, i.e., 1 - dist_to_vic
             d2v = env.get_dist_to_vic_feature(agent, key=True)
-            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE, d2v, normalize_factor=-1, const_sum=1)
+            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE.title(), d2v, normalize_factor=-1, const_sum=1)
             reward_features.append(r_d2v)
 
         if options.dist_to_help_feature:
             # inverse distance to help request location, i.e., 1 - dist_to_help
             d2h = env.get_dist_to_help_feature(agent, key=True)
-            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h, normalize_factor=-1, const_sum=1)
+            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE.title(), d2h, normalize_factor=-1, const_sum=1)
             reward_features.append(r_d2h)
 
         if env.vics_cleared_feature:
             # num victims cleared reward feature
-            r_goal = NumericLinearRewardFeature(VICS_CLEARED_FEATURE, env.get_vics_cleared_feature(key=True))
+            r_goal = NumericLinearRewardFeature(VICS_CLEARED_FEATURE.title(), env.get_vics_cleared_feature(key=True))
             reward_features.append(r_goal)
 
         # action execution reward features
         if options.search_action:
             search_action = agent.find_action({'action': SEARCH_ACTION})
-            r_search = ActionLinearRewardFeature(SEARCH_ACTION, agent, search_action)
+            r_search = ActionLinearRewardFeature(SEARCH_ACTION.title(), agent, search_action)
             reward_features.append(r_search)
 
         if options.triage_action:
             triage_action = agent.find_action({'action': TRIAGE_ACTION})
-            r_triage = ActionLinearRewardFeature(TRIAGE_ACTION, agent, triage_action)
+            r_triage = ActionLinearRewardFeature(TRIAGE_ACTION.title(), agent, triage_action)
             reward_features.append(r_triage)
 
         evacuate_action = agent.find_action({'action': EVACUATE_ACTION})
-        r_evacuate = ActionLinearRewardFeature(EVACUATE_ACTION, agent, evacuate_action)
+        r_evacuate = ActionLinearRewardFeature(EVACUATE_ACTION.title(), agent, evacuate_action)
         reward_features.append(r_evacuate)
 
         if options.noop_action:
             wait_action = agent.find_action({'action': NOOP_ACTION})
-            r_wait = ActionLinearRewardFeature(NOOP_ACTION, agent, wait_action)
+            r_wait = ActionLinearRewardFeature(NOOP_ACTION.title(), agent, wait_action)
             reward_features.append(r_wait)
 
         if options.call_action:
             call_action = agent.find_action({'action': CALL_ACTION})
-            r_call = ActionLinearRewardFeature(CALL_ACTION, agent, call_action)
+            r_call = ActionLinearRewardFeature(CALL_ACTION.title(), agent, call_action)
             reward_features.append(r_call)
 
         super().__init__(reward_features)
