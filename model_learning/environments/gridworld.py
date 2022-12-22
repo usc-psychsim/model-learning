@@ -31,6 +31,12 @@ X_FEATURE = 'x'
 Y_FEATURE = 'y'
 VISIT_COUNT_FEATURE = 'VisitCount'
 
+NOOP_ACTION = 'noop'
+RIGHT_ACTION = 'right'
+LEFT_ACTION = 'left'
+UP_ACTION = 'up'
+DOWN_ACTION = 'down'
+
 MAX_VISITS = 1000  # max location visitation counts
 
 ACTION_NO_OP = 0
@@ -87,12 +93,39 @@ class GridWorld(object):
 
         self.agent_actions: Dict[str, List[ActionSet]] = {}
 
-    def add_agent_dynamics(self, agent: Agent, visit_count_features: bool = False) -> List[ActionSet]:
+    def get_location_features(self, agent: Agent, key: bool = True) -> Tuple[str, str]:
+        """
+        Gets the agent's (X,Y) features in the gridworld.
+        :param Agent agent: the agent for which to get the location features.
+        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
+        :rtype: (str,str)
+        :return: a tuple containing the (X, Y) agent features.
+        """
+        x = f'{self.name}_{X_FEATURE}'
+        y = f'{self.name}_{Y_FEATURE}'
+        return (stateKey(agent.name, x), stateKey(agent.name, y)) if key else (x, y)
+
+    def get_visit_count_feature(self, agent: Agent, loc_idx: int, key: bool = True) -> str:
+        """
+        Gets the agent's visitation count feature for the given location.
+        :param Agent agent: the agent for which to get the visit feature.
+        :param int loc_idx: the location index.
+        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
+        :rtype: str
+        :return: the agent's location visitation count feature.
+        """
+        f = f'{self.name}_{VISIT_COUNT_FEATURE}_{loc_idx}'
+        return stateKey(agent, f) if key else f
+
+    def add_agent_dynamics(self, agent: Agent,
+                           visit_count_features: bool = False,
+                           noop_action: bool = True) -> List[ActionSet]:
         """
         Adds the PsychSim action dynamics for the given agent to move in this gridworld.
         The 4 cardinal movement actions plus a stay-still/no-op action are added.
         Also registers those actions for later usage.
-        :param Agent agent: the agent to which add the action movement dynamics.
+        :param Agent agent: the agent to add the action movement dynamics to.
+        :param bool noop_action: whether to include a no-op (do nothing) action.
         :param bool visit_count_features: whether to add a visitation count feature for each location and create
         corresponding dynamics.
         :rtype: list[ActionSet]
@@ -123,13 +156,14 @@ class GridWorld(object):
                     self.world.setFeature(visits[idx], 0)
 
         # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'wait'})
-        tree = makeTree(noChangeMatrix(x))
-        self.world.setDynamics(x, action, tree)
-        self.agent_actions[agent.name].append(action)
+        if noop_action:
+            action = agent.addAction({'verb': f'{self.name}_move', 'action': NOOP_ACTION})
+            tree = makeTree(noChangeMatrix(x))
+            self.world.setDynamics(x, action, tree)
+            self.agent_actions[agent.name].append(action)
 
         # move right
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'right'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': RIGHT_ACTION})
         legal_dict = {'if': equalRow(x, self.width - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, 1))
@@ -144,7 +178,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move left
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'left'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': LEFT_ACTION})
         legal_dict = {'if': equalRow(x, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, -1))
@@ -159,7 +193,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move up
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'up'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': UP_ACTION})
         legal_dict = {'if': equalRow(y, self.height - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, 1))
@@ -174,7 +208,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move down
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': 'down'})
+        action = agent.addAction({'verb': f'{self.name}_move', 'action': DOWN_ACTION})
         legal_dict = {'if': equalRow(y, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, -1))
@@ -189,30 +223,6 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         return self.agent_actions[agent.name]
-
-    def get_location_features(self, agent: Agent, key: bool = True) -> Tuple[str, str]:
-        """
-        Gets the agent's (X,Y) features in the gridworld.
-        :param Agent agent: the agent for which to get the location features.
-        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
-        :rtype: (str,str)
-        :return: a tuple containing the (X, Y) agent features.
-        """
-        x = f'{self.name}_{X_FEATURE}'
-        y = f'{self.name}_{Y_FEATURE}'
-        return (stateKey(agent.name, x), stateKey(agent.name, y)) if key else (x, y)
-
-    def get_visit_count_feature(self, agent: Agent, loc_idx: int, key: bool = True) -> str:
-        """
-        Gets the agent's visitation count feature for the given location.
-        :param Agent agent: the agent for which to get the visit feature.
-        :param int loc_idx: the location index.
-        :param bool key: whether to return a PsychSim state feature key (`True`) or just the feature name (`False`).
-        :rtype: str
-        :return: the agent's location visitation count feature.
-        """
-        f = f'{self.name}_{VISIT_COUNT_FEATURE}_{loc_idx}'
-        return stateKey(agent, f) if key else f
 
     def get_location_plane(self,
                            agent: Agent,
