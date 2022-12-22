@@ -75,7 +75,7 @@ if __name__ == '__main__':
     world = World()
     env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
     print('Process:', PROCESSES, 'Traj Length', TRAJ_LENGTH)
-    print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
+    print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_victims}')
     print('Output:', OUTPUT_DIR)
 
     # team of two agents
@@ -85,7 +85,7 @@ if __name__ == '__main__':
 
     # # define agent dynamics
     for agent in team:
-        env.add_location_property_dynamics(agent, idle=True)
+        env.add_search_and_rescue_dynamics(agent, noop_action=True)
     env.add_collaboration_dynamics([agent for agent in team])
 
     team_rwd = []

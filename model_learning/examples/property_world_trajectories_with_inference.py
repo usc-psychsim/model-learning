@@ -200,14 +200,14 @@ if __name__ == '__main__':
     world = World()
     world.setParallel()
     env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, seed=ENV_SEED)
-    print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
+    print('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_victims}')
 
     # team of two agents
     team = []
     for ag_i in range(len(TEAM_AGENTS)):
         agent = world.addAgent(TEAM_AGENTS[ag_i])
         # define agent dynamics
-        env.add_location_property_dynamics(agent, idle=True)
+        env.add_search_and_rescue_dynamics(agent, noop_action=True)
         team.append(agent)
     # collaboration dynamics
     env.add_collaboration_dynamics([agent for agent in team])

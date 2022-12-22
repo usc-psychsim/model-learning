@@ -54,15 +54,15 @@ if __name__ == '__main__':
 
     world = World()
     world.setParallel()
-    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, track_feature=False, seed=ENV_SEED)
-    logging.info('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_exist}')
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME, vics_cleared_feature=False, seed=ENV_SEED)
+    logging.info('Initializing World', f'h:{HORIZON}', f'x:{env.width}', f'y:{env.height}', f'v:{env.num_victims}')
 
     # team of two agents
     team = []
     for ag_i in range(len(TEAM_AGENTS)):
         agent = world.addAgent(TEAM_AGENTS[ag_i])
         # define agent dynamics
-        env.add_location_property_dynamics(agent, idle=True)
+        env.add_search_and_rescue_dynamics(agent, noop_action=True)
         team.append(agent)
     # collaboration dynamics
     env.add_collaboration_dynamics([agent for agent in team])
@@ -117,7 +117,7 @@ if __name__ == '__main__':
                                  f'd2c={env.world.getFeature(d2c, unique=True)}, '
                                  f'd2h={world.getFeature(d2h, unique=True)}, '
                                  f'r={agent.reward(env.world.state)}')
-                    if env.track_feature:
+                    if env.vics_cleared_feature:
                         # visits = env.get_visit_feature(agent)
                         logging.info(f'f={env.world.getFeature(env.get_navi_features(agent), unique=True)}'
                                      # f'v={world.getFeature(visits[loc_i], unique=True)}
@@ -129,10 +129,10 @@ if __name__ == '__main__':
                         p_state.append(PROPERTY_LIST[p])
                     ci_state = env.world.getFeature(stateKey(WORLD, CLEARINDICATOR_FEATURE), unique=True)
                     m_state = env.world.getFeature(stateKey(WORLD, MARK_FEATURE), unique=True)
-                    logging.info('Locations:', env.exist_locations, 'Properties:',
+                    logging.info('Locations:', env.victim_locs, 'Properties:',
                                  f'p={p_state}\n', 'Indicator:', f'ci={ci_state}', 'Mark:',
                                  f'm={m_state}')
-                    if env.track_feature:
+                    if env.vics_cleared_feature:
                         logging.info('Clear:', f'g={env.world.getFeature(stateKey(WORLD, GOAL_FEATURE), unique=True)}')
 
                     decision = agent.decide(state, horizon=HORIZON, selection='distribution')
@@ -146,7 +146,7 @@ if __name__ == '__main__':
                     logging.info(decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)][
                                      'action'])
 
-            if sum([p == 'clear' for p in p_state]) == env.num_exist:
+            if sum([p == 'clear' for p in p_state]) == env.num_victims:
                 logging.info(p_state)
                 logging.info('Reward:', team[1].reward(env.world.state))
                 # break
