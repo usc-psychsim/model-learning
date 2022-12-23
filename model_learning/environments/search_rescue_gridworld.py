@@ -5,7 +5,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
 from typing import Dict, Literal, Any, NamedTuple
 
-from model_learning import TeamTrajectory
+from model_learning import TeamTrajectory, SelectionType
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
     DOWN_ACTION
 from model_learning.features.linear import *
@@ -636,13 +636,18 @@ class SearchRescueGridWorld(GridWorld):
             print(agent.name, model_name, agent_lrv.names, rwd_weights)
         return agent
 
-    def generate_team_trajectories(self, team: List[Agent], trajectory_length: int,
-                                   n_trajectories: int = 1, init_feats: Optional[Dict[str, Any]] = None,
-                                   model: Optional[str] = None, select: bool = True,
-                                   selection: Optional[
-                                       Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-                                   horizon: Optional[int] = None, threshold: Optional[float] = None,
-                                   processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
+    def generate_team_trajectories(self, team: List[Agent],
+                                   trajectory_length: int,
+                                   n_trajectories: int = 1,
+                                   init_feats: Optional[Dict[str, Any]] = None,
+                                   model: Optional[str] = None,
+                                   select: bool = True,
+                                   selection: Optional[SelectionType] = None,
+                                   horizon: Optional[int] = None,
+                                   threshold: Optional[float] = None,
+                                   processes: Optional[int] = -1,
+                                   seed: int = 0,
+                                   verbose: bool = False,
                                    use_tqdm: bool = True) -> List[TeamTrajectory]:
         """
         Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.

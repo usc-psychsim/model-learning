@@ -10,15 +10,6 @@ from psychsim.agent import Agent
 __author__ = 'Pedro Sequeira, Haochen Wu'
 __email__ = 'pedrodbs@gmail.com, hcaawu@gmail.com'
 
-DIST_TO_VIC_RWD_WEIGHT = 0.1
-SEARCH_RWD_WEIGHT = 0.1
-TRIAGE_RWD_WEIGHT = 0.3
-EVAC_RWD_WEIGHT = 1
-NOOP_RWD_WEIGHT = 0.05
-CALL_RWD_WEIGHT = 0.05
-DIST_TO_HELP_RWD_WEIGHT = 1
-VICS_CLEAR_RWD_WEIGHT = 1
-
 
 class SearchRescueRewardVector(LinearRewardVector):
     """
@@ -38,18 +29,18 @@ class SearchRescueRewardVector(LinearRewardVector):
         if options.dist_to_vic_feature:
             # inverse distance to victim reward, i.e., 1 - dist_to_vic
             d2v = env.get_dist_to_vic_feature(agent, key=True)
-            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE.title(), d2v, normalize_factor=-1, const_sum=1)
+            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE, d2v, normalize_factor=-1, const_sum=1)
             reward_features.append(r_d2v)
 
         if options.dist_to_help_feature:
             # inverse distance to help request location, i.e., 1 - dist_to_help
             d2h = env.get_dist_to_help_feature(agent, key=True)
-            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE.title(), d2h, normalize_factor=-1, const_sum=1)
+            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h, normalize_factor=-1, const_sum=1)
             reward_features.append(r_d2h)
 
         if env.vics_cleared_feature:
             # num victims cleared reward feature
-            r_goal = NumericLinearRewardFeature(VICS_CLEARED_FEATURE.title(), env.get_vics_cleared_feature(key=True))
+            r_goal = NumericLinearRewardFeature(VICS_CLEARED_FEATURE, env.get_vics_cleared_feature(key=True))
             reward_features.append(r_goal)
 
         # action execution reward features

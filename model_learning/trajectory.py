@@ -1,17 +1,19 @@
 import copy
-import random
+from timeit import default_timer as timer
+
 import logging
 import numpy as np
-from timeit import default_timer as timer
-from typing import List, Dict, Any, Optional, Literal
+import random
+from typing import List, Dict, Any, Optional
+
+from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
+    TeamStateinfoActionModelTuple, TeamInfoModelTrajectory, SelectionType
+from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
-from psychsim.world import World
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, turnKey, actionKey, setToConstantMatrix, makeTree
-from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
-    TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
-from model_learning.util.mp import run_parallel
+from psychsim.world import World
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -49,7 +51,7 @@ def generate_trajectory(agent: Agent,
                         model: Optional[str] = None,
                         select: Optional[bool] = None,
                         horizon: Optional[int] = None,
-                        selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                        selection: Optional[SelectionType] = None,
                         threshold: Optional[float] = None,
                         seed: int = 0,
                         verbose: bool = False) -> Trajectory:
@@ -128,7 +130,7 @@ def generate_team_trajectory(team: List[Agent],
                              model: Optional[str] = None,
                              select: Optional[bool] = None,
                              horizon: Optional[int] = None,
-                             selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                             selection: Optional[SelectionType] = None,
                              threshold: Optional[float] = None,
                              seed: int = 0,
                              verbose: bool = False) -> TeamTrajectory:
@@ -216,8 +218,7 @@ def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: L
                                        model: Optional[str] = None,
                                        select: Optional[bool] = None,
                                        horizon: Optional[int] = None,
-                                       selection: Optional[
-                                           Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                       selection: Optional[SelectionType] = None,
                                        threshold: Optional[float] = None,
                                        seed: int = 0,
                                        verbose: bool = False) -> TeamTrajectory:
@@ -330,7 +331,7 @@ def generate_trajectories(agent: Agent,
                           model: Optional[str] = None,
                           select: Optional[bool] = None,
                           horizon: Optional[int] = None,
-                          selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                          selection: Optional[SelectionType] = None,
                           threshold: Optional[float] = None,
                           processes: int = -1,
                           seed: int = 0,
@@ -383,14 +384,14 @@ def generate_team_trajectories(team: List[Agent],
                                model: Optional[str] = None,
                                select: Optional[bool] = None,
                                horizon: Optional[int] = None,
-                               selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                               selection: Optional[SelectionType] = None,
                                threshold: Optional[float] = None,
                                processes: int = -1,
                                seed: int = 0,
                                verbose: bool = False,
                                use_tqdm: bool = True) -> List[TeamTrajectory]:
     """
-    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
+    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agents in the world.
     :param List[Agent] team: the team of agents for which to record the actions.
     :param int n_trajectories: the number of trajectories to be generated.
     :param int trajectory_length: the length of the generated trajectories.
@@ -431,15 +432,15 @@ def generate_team_trajectories(team: List[Agent],
     return trajectories
 
 
-def generate_expert_learner_trajectories(expert_team: List[Agent], learner_team: List[Agent],
+def generate_expert_learner_trajectories(expert_team: List[Agent],
+                                         learner_team: List[Agent],
                                          n_trajectories: int,
                                          trajectory_length: int,
                                          init_feats: Optional[Dict[str, Any]] = None,
                                          model: Optional[str] = None,
                                          select: Optional[bool] = None,
                                          horizon: Optional[int] = None,
-                                         selection: Optional[
-                                             Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                         selection: Optional[SelectionType] = None,
                                          threshold: Optional[float] = None,
                                          processes: int = -1,
                                          seed: int = 0,
@@ -479,9 +480,8 @@ def generate_expert_learner_trajectories(expert_team: List[Agent], learner_team:
     args = [(expert_team, learner_team, trajectory_length, init_feats, model,
              select, horizon, selection, threshold, seed + t, verbose)
             for t in range(n_trajectories)]
-    # trajectories: Dict[str, List[TeamTrajectory]] = {}
-    trajectories: List[TeamTrajectory] = run_parallel(generate_expert_learner_trajectory, args, processes=processes,
-                                                      use_tqdm=use_tqdm)
+    trajectories: List[TeamTrajectory] = run_parallel(
+        generate_expert_learner_trajectory, args, processes=processes, use_tqdm=use_tqdm)
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
@@ -496,12 +496,10 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                                        learner_model: Optional[str] = None,
                                        select: Optional[bool] = None,
                                        horizon: Optional[int] = None,
-                                       selection: Optional[
-                                           Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                       selection: Optional[SelectionType] = None,
                                        threshold: Optional[float] = None,
                                        seed: int = 0,
-                                       verbose: bool = False
-                                       ) -> TeamInfoModelTrajectory:
+                                       verbose: bool = False) -> TeamInfoModelTrajectory:
     """
     Generates a number of fixed-length agent trajectories with model inference of the other agents.
     :param Agent learner_agent: the agent for which to record the actions
@@ -616,8 +614,7 @@ def generate_trajectories_with_inference(learner_agent: Agent,
                                          learner_model: Optional[str] = None,
                                          select: Optional[bool] = None,
                                          horizon: Optional[int] = None,
-                                         selection: Optional[
-                                             Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                         selection: Optional[SelectionType] = None,
                                          threshold: Optional[float] = None,
                                          processes: int = -1,
                                          seed: int = 0,
@@ -656,8 +653,8 @@ def generate_trajectories_with_inference(learner_agent: Agent,
     args = [(learner_agent, team_trajs, traj_i, learner_model, select,
              horizon, selection, threshold, seed + t, verbose)
             for t in range(n_trajectories)]
-    trajectories: List[TeamInfoModelTrajectory] = run_parallel(generate_trajectory_with_inference, args,
-                                                               processes=processes, use_tqdm=False)
+    trajectories: List[TeamInfoModelTrajectory] = run_parallel(
+        generate_trajectory_with_inference, args, processes=processes, use_tqdm=False)
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories: '

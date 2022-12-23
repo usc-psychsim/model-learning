@@ -1,4 +1,4 @@
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Literal
 
 from psychsim.action import ActionSet
 from psychsim.probability import Distribution
@@ -44,6 +44,8 @@ class TeamStateinfoActionModelTuple(object):
 
 
 PsychSimType = Union[float, int, str, ActionSet]
+SelectionType = Literal['distribution', 'random', 'uniform', 'consistent']
+
 State = VectorDistributionSet
 Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
 TeamTrajectory = List[TeamStateActionPair]

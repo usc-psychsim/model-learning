@@ -16,10 +16,9 @@ __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
 __maintainer__ = 'Pedro Sequeira'
 
 WORLD_NAME = 'SAR'
-
 ENV_SIZE = 3
-ENV_SEED = 48
-NUM_EXIST = 3
+SEED = 48
+NUM_VICTIMS = 3
 
 # Medic has all actions available and distance to victim feature
 # Explorer has search action and distance to help feature
@@ -47,18 +46,19 @@ OUTPUT_DIR = 'output/examples/sar_trajectories'
 NUM_TRAJECTORIES = 5  # 10
 TRAJ_LENGTH = 25  # 30
 PROCESSES = -1
+CLEAR = False  # True  # False
 DEBUG = False
 np.set_printoptions(precision=3)
 
 if __name__ == '__main__':
     # create output
-    create_clear_dir(OUTPUT_DIR, clear=False)
+    create_clear_dir(OUTPUT_DIR, clear=CLEAR)
     change_log_handler(os.path.join(OUTPUT_DIR, 'collect.log'), level=logging.INFO)
 
     world = World()
-    world.setParallel()
-    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_EXIST, WORLD_NAME,
-                                vics_cleared_feature=VIC_STATS_FEATURES, seed=ENV_SEED)
+    # world.setParallel()
+    env = SearchRescueGridWorld(world, ENV_SIZE, ENV_SIZE, NUM_VICTIMS, WORLD_NAME,
+                                vics_cleared_feature=VIC_STATS_FEATURES, seed=SEED)
     logging.info(f'Initialized World, h:{HORIZON}, x:{env.width}, y:{env.height}, v:{env.num_victims}')
 
     # team of two agents
@@ -87,6 +87,8 @@ if __name__ == '__main__':
         agent.setAttribute('horizon', HORIZON)
         agent.setAttribute('rationality', RATIONALITY)
         agent.setAttribute('discount', DISCOUNT)
+
+    world.dependency.getEvaluation()  # to speed up graph computation in parallel worlds
 
     # logging.info('Action Dynamics')
     # env.vis_agent_dynamics_in_xy()
@@ -168,5 +170,5 @@ if __name__ == '__main__':
             selection=ACT_SELECTION,
             processes=PROCESSES,
             threshold=1e-2,
-            seed=ENV_SEED)
+            seed=SEED)
         env.play_team_trajectories(team_trajectories, team, OUTPUT_DIR)
