@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from typing import Dict, Literal, Any, NamedTuple
 
 from model_learning import TeamTrajectory, SelectionType
@@ -43,9 +44,15 @@ VALUE_CMAP = 'gray'  # 'viridis' # 'inferno'
 TRAJECTORY_LINE_WIDTH = 1
 LOC_FONT_SIZE = 6
 LOC_FONT_COLOR = 'darkgrey'
+TIME_FONT_SIZE = 6
+TIME_FONT_COLOR = 'black'
 NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
+
+TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/medic.png')
+NON_TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/explorer.png')
+VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/victim.png')
 
 
 class AgentOptions(NamedTuple):
@@ -751,6 +758,11 @@ class SearchRescueGridWorld(GridWorld):
         for vic_status in vs_features:
             assert vic_status in self.world.variables, f'World does not have victim status feature {vic_status}'
 
+        # load icons for the agents
+        triage_icon = plt.imread(TRIAGE_ICON)
+        non_triage_icon = plt.imread(NON_TRIAGE_ICON)
+        victim_icon = plt.imread(VICTIM_ICON)
+
         for traj_i, team_traj in enumerate(team_trajectories):
             fig, axes = plt.subplots(len(team))
             fig.set_tight_layout(True)
@@ -761,7 +773,7 @@ class SearchRescueGridWorld(GridWorld):
                 ax = axes[ag_i]
                 ax.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
                 for x, y in it.product(range(self.width), range(self.height)):
-                    ax.annotate('({},{})'.format(x, y), xy=(x + .05, y + .15), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    ax.annotate(f'({x},{y})', xy=(x + .05, y + .05), fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
                 # turn off tick labels
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -816,24 +828,35 @@ class SearchRescueGridWorld(GridWorld):
                     x_t, y_t, a = team_xs[agent.name][ti], team_ys[agent.name][ti], team_as[agent.name][ti]
                     act = axes[ag_i].annotate(f'{a}', xy=(x_t - .4, y_t + .1),
                                               fontsize=NOTES_FONT_SIZE, c=NOTES_FONT_COLOR)
+
+                    icon = triage_icon if self.agent_options[agent.name].triage_action else non_triage_icon
+                    img_box = OffsetImage(icon, zoom=0.15)
+                    ab = AnnotationBbox(img_box, xy=(x_t, y_t + .3), frameon=False)
+                    img = axes[ag_i].add_artist(ab)
+
                     xs = team_xs[agent.name][ti - 1:ti + 1]
                     ys = team_ys[agent.name][ti - 1:ti + 1]
                     traj_line = axes[ag_i].plot(xs, ys, c=t_colors[ag_i], linewidth=TRAJECTORY_LINE_WIDTH)
                     curr_pos = axes[ag_i].annotate('O', xy=(x_t - .05, y_t - .05), c=t_colors[ag_i],
                                                    fontsize=NOTES_FONT_SIZE)
-                    ts_ann = axes[ag_i].annotate(f'Time Step: {ti}', xy=(.05, .03),
-                                                 fontsize=LOC_FONT_SIZE, c=LOC_FONT_COLOR)
+                    ts_ann = axes[ag_i].annotate(f't={ti:0>2}', xy=(.65, .05),
+                                                 fontsize=TIME_FONT_SIZE, c=TIME_FONT_COLOR)
                     team_ann_list[ag_i].append(ts_ann)
                     team_ann_list[ag_i].append(act)
+                    team_ann_list[ag_i].append(img)
                     team_ann_list[ag_i].append(curr_pos)
                     team_ann_list[ag_i].append(traj_line)
                 for loci, loc in enumerate(self.victim_locs):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
                     for ag_i, agent in enumerate(team):
+                        img_box = OffsetImage(victim_icon, zoom=0.15)
+                        ab = AnnotationBbox(img_box, xy=(x + .3, y + .41), frameon=False)
+                        img = axes[ag_i].add_artist(ab)
                         status_ann = axes[ag_i].annotate(f'*V{loci + 1}\n{p}', xy=(x + .47, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
+                        world_ann_list.append(img)
                 for loci, loc in enumerate(self.empty_locs):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
