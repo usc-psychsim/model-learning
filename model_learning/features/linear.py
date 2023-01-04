@@ -2,7 +2,7 @@ import operator
 import numpy as np
 from abc import ABC, abstractmethod
 from psychsim.action import ActionSet
-from typing import Optional, List
+from typing import Optional, List, Dict, Tuple
 from psychsim.agent import Agent
 from psychsim.pwl import rewardKey, setToConstantMatrix, makeTree, setToFeatureMatrix, KeyedTree, KeyedPlane, \
     KeyedVector, actionKey
@@ -176,3 +176,20 @@ class NumericLinearRewardFeature(LinearRewardFeature):
         agent.setReward(
             KeyedTree(setToFeatureMatrix(rwd_key, self.key, pct=self.normalize_factor, shift=self.const_sum)),
             weight, model)
+
+
+def add_linear_reward_models(agent: Agent, models: Dict[str, Tuple[LinearRewardVector, np.ndarray]]):
+    """
+    Adds agent models that differ from the true model of an agent in the reward function.
+    :param Agent agent: the agent for which to add the reward models.
+    :param dict models: a dictionary containing agent model names, linear reward functions pairs.
+    """
+    for name, rewards in models.items():
+        # create agent model
+        true_model = agent.get_true_model()
+        name = f'{agent.name}_{name}'
+        agent.addModel(name, parent=true_model)
+
+        # set the reward for the created model
+        lrv, rwd_weights = rewards
+        lrv.set_rewards(agent, rwd_weights, model=name)
