@@ -5,7 +5,7 @@ import os
 from typing import List, get_args
 
 from model_learning import SelectionType
-from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentOptions, TeamConfig
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, TeamConfig
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import str2bool
 from model_learning.util.io import create_clear_dir
@@ -18,33 +18,6 @@ __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
 __maintainer__ = 'Pedro Sequeira'
 __description__ = 'Collects a set of fixed-length trajectories in the search-and-rescue domain. ' \
                   'Saves the trajectories to a gif animation and pickle file.'
-
-# Medic has all actions available and distance to victim feature
-# Explorer has search action and distance to help feature
-OPTIMAL_TEAM_CONFIG = TeamConfig({
-    'Medic': AgentOptions(
-        dist_to_vic_feature=0.1,
-        dist_to_help_feature=None,
-        vics_cleared_feature=None,
-        num_empty_feature=None,
-        search_action=0.1,
-        triage_action=0.3,
-        evacuate_action=1,
-        noop_action=0.05,
-        call_action=0.05
-    ),
-    'Explorer': AgentOptions(
-        dist_to_vic_feature=None,
-        dist_to_help_feature=0.5,
-        vics_cleared_feature=None,
-        num_empty_feature=None,
-        search_action=0.5,
-        triage_action=None,
-        evacuate_action=1,
-        noop_action=None,
-        call_action=None
-    )
-})
 
 # default env params
 WORLD_NAME = 'SAR'
@@ -86,10 +59,10 @@ def main():
     # team of two agents
     team_config = TeamConfig.load(args.team_config)
     team: List[Agent] = []
-    for ag_name, ag_options in team_config.items():
+    for ag_name, ag_conf in team_config.items():
         # create and define agent dynamics
         agent = world.addAgent(ag_name)
-        env.add_search_and_rescue_dynamics(agent, ag_options)
+        env.add_search_and_rescue_dynamics(agent, ag_conf.options)
         team.append(agent)
 
     # collaboration dynamics
@@ -98,7 +71,7 @@ def main():
     # set agent rewards and attributes
     for agent in team:
         agent_lrv = SearchRescueRewardVector(env, agent)
-        rwd_f_weights = team_config[agent.name].to_array()
+        rwd_f_weights = team_config[agent.name].options.to_array()
         rwd_f_weights = rwd_f_weights / np.linalg.norm(rwd_f_weights, 1)
         agent_lrv.set_rewards(agent, rwd_f_weights)
 

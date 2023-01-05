@@ -1,8 +1,6 @@
-import json
-
 import itertools as it
+import json
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 import tqdm
 from matplotlib.animation import FuncAnimation
@@ -65,21 +63,15 @@ class AgentOptions(NamedTuple):
     Each option is associated with a number denoting the weight of the option, which can be used to create linear reward
     reward vectors. `None` means that an option is disabled, meaning the corresponding weight will not be considered.
     """
-    dist_to_vic_feature: Optional[float]
-    dist_to_help_feature: Optional[float]
-    vics_cleared_feature: Optional[float]
-    num_empty_feature: Optional[float]
-    search_action: Optional[float]
-    triage_action: Optional[float]
-    evacuate_action: Optional[float]
-    noop_action: Optional[float]
-    call_action: Optional[float]
-
-    def to_dict(self) -> Dict[str, Optional[float]]:
-        """
-        Gets a dictionary representation of this named tuple.
-        """
-        return {f: getattr(self, f) for f in self._fields}
+    dist_to_vic_feature: Optional[float] = None
+    dist_to_help_feature: Optional[float] = None
+    vics_cleared_feature: Optional[float] = None
+    num_empty_feature: Optional[float] = None
+    search_action: Optional[float] = None
+    triage_action: Optional[float] = None
+    evacuate_action: Optional[float] = None
+    noop_action: Optional[float] = None
+    call_action: Optional[float] = None
 
     def to_array(self) -> np.ndarray:
         """
@@ -89,9 +81,35 @@ class AgentOptions(NamedTuple):
         return np.array([v for v in self if v])
 
 
-class TeamConfig(dict):
+class AgentConfig(NamedTuple):
     """
-    Configuration for an agent team in the search-and-rescue domain.
+    Configuration for an agent in the search-and-rescue domain.
+    """
+    options: AgentOptions
+    models: Optional[List[AgentOptions]] = None
+    mental_models: Optional[Dict[str, Dict[str, float]]] = None
+
+    def to_json(self) -> Dict[str, Any]:
+        options = self.options._asdict()
+        models = None
+        if self.models is not None:
+            models = [opt._asdict() for opt in self.models]
+        return AgentConfig(options, models, self.mental_models)._asdict()
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]):
+        conf = AgentConfig(**d)
+        options = AgentOptions(**conf.options)
+        models = None
+        if conf.models is not None:
+            models = [AgentOptions(**opt) for opt in conf.models]
+        return AgentConfig(options, models, conf.mental_models)
+
+
+class TeamConfig(Dict[str, AgentConfig]):
+    """
+    Configuration for a team of agents in the search-and-rescue domain, including the agent's true rewards and models,
+    and mental models of the other agents in the team.
     """
 
     def save(self, file_path: str):
@@ -100,7 +118,7 @@ class TeamConfig(dict):
         :param str file_path: the path to the file in which to save the task model.
         """
         with open(file_path, 'w') as fp:
-            json.dump({n: ao.to_dict() for n, ao in self.items()}, fp, indent=4)
+            json.dump({n: ao.to_json() for n, ao in self.items()}, fp, indent=4)
 
     @classmethod
     def load(cls, file_path: str):
@@ -110,10 +128,7 @@ class TeamConfig(dict):
         :return: the loaded task model.
         """
         with open(file_path, 'r') as fp:
-            return TeamConfig({n: AgentOptions(**ao) for n, ao in json.load(fp).items()})
-
-    def __str__(self):
-        return json.dumps({n: ao.to_dict() for n, ao in self.items()}, indent=4)
+            return TeamConfig({n: AgentConfig.from_json(ao) for n, ao in json.load(fp).items()})
 
 
 class SearchRescueGridWorld(GridWorld):
