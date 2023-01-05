@@ -20,14 +20,14 @@ class LinearRewardFeature(ABC):
     Represents a reward feature that can be used in linearly-parameterized reward functions.
     """
 
-    def __init__(self, name: str, normalize_factor: float = 1):
+    def __init__(self, name: str, scale: float = 1):
         """
         Creates a new reward feature.
         :param str name: the label for this reward feature.
-        :param float normalize_factor: the normalization factor for this feature.
+        :param float scale: the multiplication/normalization factor for this feature.
         """
         self.name = name
-        self.normalize_factor = normalize_factor
+        self.scale = scale
 
     @abstractmethod
     def get_value(self, state: State) -> float:
@@ -125,14 +125,14 @@ class ValueComparisonLinearRewardFeature(LinearRewardFeature):
         # collects feature value distribution and returns weighted sum
         dist = np.array([[float(self.comp_func(self.world.float2value(self.key, v), self.value)), p]
                          for v, p in state.marginal(self.key).items()])
-        return dist[:, 0].dot(dist[:, 1]) * self.normalize_factor
+        return dist[:, 0].dot(dist[:, 1]) * self.scale
 
     def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
         rwd_key = rewardKey(agent.name)
         tree = {'if': KeyedPlane(KeyedVector({self.key: 1}), self.value, self.comparison),
                 True: setToConstantMatrix(rwd_key, 1.),
                 False: setToConstantMatrix(rwd_key, 0.)}
-        agent.setReward(makeTree(tree), weight * self.normalize_factor, model)
+        agent.setReward(makeTree(tree), weight * self.scale, model)
 
 
 class ActionLinearRewardFeature(ValueComparisonLinearRewardFeature):
@@ -155,26 +155,26 @@ class NumericLinearRewardFeature(LinearRewardFeature):
     Represents a numeric reward feature, that returns a reward proportional to the feature's value.
     """
 
-    def __init__(self, name: str, key: str, normalize_factor: float = 1, shift: Optional[float] = None):
+    def __init__(self, name: str, key: str, scale: float = 1, shift: Optional[float] = None):
         """
         Creates a new reward feature.
         :param str name: the label for this reward feature.
         :param str key: the named key associated with this feature.
         :param float shift: an optional constant value to be added to the feature's value.
         """
-        super().__init__(name, normalize_factor)
+        super().__init__(name, scale)
         self.key = key
-        self.const_sum = shift
+        self.shift = shift
 
     def get_value(self, state: State) -> float:
         # simply return expectation of marginal
-        return state.marginal(self.key).expectation() * self.normalize_factor + self.const_sum
+        return state.marginal(self.key).expectation() * self.scale + self.shift
 
     def set_reward(self, agent: Agent, weight: float, model: Optional[str] = None):
         # simply multiply the feature's value by the given weight
         rwd_key = rewardKey(agent.name)
         agent.setReward(
-            KeyedTree(setToFeatureMatrix(rwd_key, self.key, pct=self.normalize_factor, shift=self.const_sum)),
+            KeyedTree(setToFeatureMatrix(rwd_key, self.key, pct=self.scale, shift=self.shift)),
             weight, model)
 
 

@@ -31,13 +31,13 @@ class SearchRescueRewardVector(LinearRewardVector):
         if options.dist_to_vic_feature:
             # inverse distance to victim reward, i.e., 1 - dist_to_vic
             d2v = env.get_dist_to_vic_feature(agent, key=True)
-            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE, d2v, normalize_factor=-1, shift=1)
+            r_d2v = NumericLinearRewardFeature(DIST_TO_VIC_FEATURE, d2v, scale=-1, shift=1)
             reward_features.append(r_d2v)
 
         if options.dist_to_help_feature:
             # inverse distance to help request location, i.e., 1 - dist_to_help
             d2h = env.get_dist_to_help_feature(agent, key=True)
-            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h, normalize_factor=-1, shift=1)
+            r_d2h = NumericLinearRewardFeature(DIST_TO_HELP_FEATURE, d2h, scale=-1, shift=1)
             reward_features.append(r_d2h)
 
         if options.vics_cleared_feature and env.vics_cleared_feature:
