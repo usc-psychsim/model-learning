@@ -6,7 +6,7 @@ import tqdm
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from typing import Any, NamedTuple
+from typing import Any, Dict
 
 from model_learning import TeamTrajectory, SelectionType
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
@@ -78,7 +78,7 @@ class AgentOptions(NamedTuple):
         Gets an array containing the weights associated with each option/feature. Options with `None` values are
         discarded.
         """
-        return np.array([v for v in self if v])
+        return np.array([v for v in self if v is not None])
 
 
 class AgentConfig(NamedTuple):
@@ -86,14 +86,14 @@ class AgentConfig(NamedTuple):
     Configuration for an agent in the search-and-rescue domain.
     """
     options: AgentOptions
-    models: Optional[List[AgentOptions]] = None
+    models: Optional[Dict[str, AgentOptions]] = None
     mental_models: Optional[Dict[str, Dict[str, float]]] = None
 
     def to_json(self) -> Dict[str, Any]:
         options = self.options._asdict()
         models = None
         if self.models is not None:
-            models = [opt._asdict() for opt in self.models]
+            models = {n: opt._asdict() for n, opt in self.models.items()}
         return AgentConfig(options, models, self.mental_models)._asdict()
 
     @classmethod
@@ -102,7 +102,7 @@ class AgentConfig(NamedTuple):
         options = AgentOptions(**conf.options)
         models = None
         if conf.models is not None:
-            models = [AgentOptions(**opt) for opt in conf.models]
+            models = {n: AgentOptions(**opt) for n, opt in conf.models.items()}
         return AgentConfig(options, models, conf.mental_models)
 
 
