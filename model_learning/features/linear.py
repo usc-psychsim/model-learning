@@ -1,13 +1,14 @@
-import operator
 import numpy as np
+import operator
 from abc import ABC, abstractmethod
+from typing import Optional, List, NamedTuple
+
+from model_learning import PsychSimType, State
 from psychsim.action import ActionSet
-from typing import Optional, List, Dict, Tuple
 from psychsim.agent import Agent
 from psychsim.pwl import rewardKey, setToConstantMatrix, makeTree, setToFeatureMatrix, KeyedTree, KeyedPlane, \
     KeyedVector, actionKey
 from psychsim.world import World
-from model_learning import PsychSimType, State
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -62,7 +63,7 @@ class LinearRewardVector(object):
         Creates a new reward vector with the given features.
         :param list[LinearRewardFeature] rwd_features: the list of reward features.
         """
-        self.rwd_features = rwd_features
+        self.rwd_features: List[LinearRewardFeature] = rwd_features
         self.names: List[str] = [feat.name for feat in self.rwd_features]
 
     def __len__(self):
@@ -95,6 +96,18 @@ class LinearRewardVector(object):
         agent.setAttribute('R', {}, model)  # make sure to clear agent's reward function
         for i, weight in enumerate(weights):
             self.rwd_features[i].set_reward(agent, weight, model)
+
+
+class LinearRewardFunction(NamedTuple):
+    """
+    Represents a reward function, composed by a reward feature vector plus weight vector.
+    """
+    feature_vector: LinearRewardVector
+    weights: np.ndarray
+
+    def __str__(self):
+        return ','.join([f'{self.feature_vector.names[i]}={self.weights[i]:.2f}'
+                         for i in range(len(self.weights))])
 
 
 class ValueComparisonLinearRewardFeature(LinearRewardFeature):
@@ -178,18 +191,23 @@ class NumericLinearRewardFeature(LinearRewardFeature):
             weight, model)
 
 
-def add_linear_reward_models(agent: Agent, models: Dict[str, Tuple[LinearRewardVector, np.ndarray]]):
+def add_linear_reward_model(agent: Agent,
+                            rwd_function: LinearRewardFunction,
+                            name: str = None,
+                            parent: str = None):
     """
-    Adds agent models that differ from the true model of an agent in the reward function.
+    Adds an agent model that differs from the true model of an agent in the reward function.
     :param Agent agent: the agent for which to add the reward models.
-    :param dict models: a dictionary containing agent model names, linear reward functions pairs.
+    :param LinearRewardFunction rwd_function: the reward function to set to the new model.
+    :param str name: the name of the new model.
+    :param str parent: the name of the parent model based on which the new models will be created.
     """
-    for name, rewards in models.items():
-        # create agent model
-        true_model = agent.get_true_model()
-        name = f'{agent.name}_{name}'
-        agent.addModel(name, parent=true_model)
+    if name is None:
+        name = str(rwd_function)
 
-        # set the reward for the created model
-        lrv, rwd_weights = rewards
-        lrv.set_rewards(agent, rwd_weights, model=name)
+    if parent is None:
+        parent = agent.get_true_model()
+
+    # create agent model, set the reward for the created model
+    agent.addModel(name, parent=parent)
+    rwd_function.feature_vector.set_rewards(agent, rwd_function.weights, model=name)
