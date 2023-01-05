@@ -1,23 +1,23 @@
 {
-    "Medic": {
-        "options": {
-            "dist_to_vic_feature": 0.1,
-            "search_action": 0.1,
-            "triage_action": 0.3,
-            "evacuate_action": 1,
-            "noop_action": 0.05,
-            "call_action": 0.05
-        },
-        "models": null,
-        "mental_models": null
+  "Medic": {
+    "options": {
+      "dist_to_vic_feature": 0.1,
+      "search_action": 0.1,
+      "triage_action": 0.3,
+      "evacuate_action": 1,
+      "noop_action": 0.05,
+      "call_action": 0.05
     },
-    "Explorer": {
-        "options": {
-            "dist_to_help_feature": 0.5,
-            "search_action": 0.5,
-            "evacuate_action": 1
-        },
-        "models": null,
-        "mental_models": null
-    }
+    "models": null,
+    "mental_models": null
+  },
+  "Explorer": {
+    "options": {
+      "dist_to_help_feature": 0.5,
+      "search_action": 0.5,
+      "evacuate_action": 1
+    },
+    "models": null,
+    "mental_models": null
+  }
 }

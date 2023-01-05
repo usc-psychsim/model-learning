@@ -2,15 +2,17 @@ import argparse
 import logging
 import numpy as np
 import os
-from typing import List, get_args
+from typing import List, get_args, Dict
 
 from model_learning import SelectionType
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, TeamConfig
+from model_learning.features.linear import add_linear_reward_model, LinearRewardFunction
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import str2bool
 from model_learning.util.io import create_clear_dir
 from model_learning.util.logging import change_log_handler
 from psychsim.agent import Agent
+from psychsim.probability import Distribution
 from psychsim.world import World
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
@@ -84,11 +86,24 @@ def main():
         agent.setAttribute('rationality', args.rationality)
         agent.setAttribute('discount', args.discount)
 
-    env.world.setOrder([{agent.name for agent in team}])
+        # create new agent reward models
+        ag_conf = team_config[agent.name]
+        if ag_conf.models is not None:
+            for name, options in ag_conf.models.items():
+                rwd_function = LinearRewardFunction(agent_lrv, options.to_array())
+                add_linear_reward_model(agent, rwd_function, name=f'{agent.name}_{name}', parent=None)
 
+    # add agents' mental models
+    for ag_name, ag_conf in team_config.items():
+        if ag_conf.mental_models is not None:
+            for other_ag, models_probs in ag_conf.mental_models.items():
+                dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
+                world.setMentalModel(ag_name, other_ag, dist, model=None)
+
+    env.world.setOrder([{agent.name for agent in team}])
     world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
-    # generate trajectories using agent's policy #ACT_SELECTION
+    # generate trajectories using agents' policies and models
     logging.info(f'Generating {args.trajectories} trajectories of length {args.length}...')
     team_trajectories = env.generate_team_trajectories(
         team,
