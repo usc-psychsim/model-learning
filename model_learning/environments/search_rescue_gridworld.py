@@ -1,10 +1,14 @@
+import json
+
 import itertools as it
 import matplotlib.pyplot as plt
+import numpy as np
 import os
+import tqdm
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from typing import Dict, Literal, Any, NamedTuple
+from typing import Any, NamedTuple
 
 from model_learning import TeamTrajectory, SelectionType
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
@@ -30,7 +34,7 @@ DIST_TO_HELP_FEATURE = 'DistToHelp'
 VIC_CLEAR_COMB_FEATURE = 'VicClearCombIdx'
 HELP_LOC_FEATURE = 'HelpLocIdx'
 VICS_CLEARED_FEATURE = 'NumVicsCleared'
-NO_VICS_FEATURE = 'NumNoVics'
+NUM_EMPTY_FEATURE = 'NumEmpty'
 
 UNKNOWN_STR = 'unknown'
 FOUND_STR = 'found'
@@ -57,15 +61,59 @@ VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/victim.
 
 class AgentOptions(NamedTuple):
     """
-    Options for agent actions and features, to create different search-and-rescue behaviors.
+    Options for an agent's actions and features, to create different search-and-rescue behaviors.
+    Each option is associated with a number denoting the weight of the option, which can be used to create linear reward
+    reward vectors. `None` means that an option is disabled, meaning the corresponding weight will not be considered.
     """
-    noop_action: bool
-    search_action: bool
-    triage_action: bool
-    call_action: bool
-    num_empty_feature: bool
-    dist_to_vic_feature: bool
-    dist_to_help_feature: bool
+    dist_to_vic_feature: Optional[float]
+    dist_to_help_feature: Optional[float]
+    vics_cleared_feature: Optional[float]
+    num_empty_feature: Optional[float]
+    search_action: Optional[float]
+    triage_action: Optional[float]
+    evacuate_action: Optional[float]
+    noop_action: Optional[float]
+    call_action: Optional[float]
+
+    def to_dict(self) -> Dict[str, Optional[float]]:
+        """
+        Gets a dictionary representation of this named tuple.
+        """
+        return {f: getattr(self, f) for f in self._fields}
+
+    def to_array(self) -> np.ndarray:
+        """
+        Gets an array containing the weights associated with each option/feature. Options with `None` values are
+        discarded.
+        """
+        return np.array([v for v in self if v])
+
+
+class TeamConfig(dict):
+    """
+    Configuration for an agent team in the search-and-rescue domain.
+    """
+
+    def save(self, file_path: str):
+        """
+        Saves the team configuration to a Json format file.
+        :param str file_path: the path to the file in which to save the task model.
+        """
+        with open(file_path, 'w') as fp:
+            json.dump({n: ao.to_dict() for n, ao in self.items()}, fp, indent=4)
+
+    @classmethod
+    def load(cls, file_path: str):
+        """
+        Loads a team configuration from a file in the Json format.
+        :param str file_path: the path to the file from which to load the team config.
+        :return: the loaded task model.
+        """
+        with open(file_path, 'r') as fp:
+            return TeamConfig({n: AgentOptions(**ao) for n, ao in json.load(fp).items()})
+
+    def __str__(self):
+        return json.dumps({n: ao.to_dict() for n, ao in self.items()}, indent=4)
 
 
 class SearchRescueGridWorld(GridWorld):
@@ -98,6 +146,7 @@ class SearchRescueGridWorld(GridWorld):
         self.vics_cleared_feature: bool = vics_cleared_feature
 
         self.agent_options: Dict[str, AgentOptions] = {}  # to store the different agent options
+        self.team: List[Agent] = []
 
         num_locs = self.width * self.height
         all_locs = list(range(num_locs))
@@ -155,7 +204,7 @@ class SearchRescueGridWorld(GridWorld):
                                                description=f'Index of location in which help was requested')
         self.world.setFeature(self.help_loc, -1)  # help has not been requested in any location
 
-        # default dynamics is to set it to unknown/invalid and only set it once an agent calls for help
+        # default dynamics is to set help loc to unknown/invalid and only set it once an agent calls for help
         self.world.setDynamics(self.help_loc, True, makeTree(setToConstantMatrix(self.help_loc, -1)))
 
         if self.vics_cleared_feature:
@@ -236,7 +285,7 @@ class SearchRescueGridWorld(GridWorld):
         :rtype: str
         :return: the number of no victim locations found feature.
         """
-        f = f'{self.name}_{NO_VICS_FEATURE}'
+        f = f'{self.name}_{NUM_EMPTY_FEATURE}'
         return stateKey(agent.name, f) if key else f
 
     def add_search_and_rescue_dynamics(self, agent: Agent, options: AgentOptions) -> List[ActionSet]:
@@ -249,11 +298,13 @@ class SearchRescueGridWorld(GridWorld):
         :return: a list containing the agent's newly created actions.
         """
 
-        assert agent.name not in self.agent_options, f'SAR dynamics have already been set to agent \'{agent.name}\''
+        assert agent not in self.team and agent.name not in self.agent_options, \
+            f'SAR dynamics have already been set to agent \'{agent.name}\''
         self.agent_options[agent.name] = options
+        self.team.append(agent)
 
         # movement dynamics
-        self.add_agent_dynamics(agent, noop_action=options.noop_action, visit_count_features=False)
+        self.add_agent_dynamics(agent, noop_action=options.noop_action is not None, visit_count_features=False)
         x, y = self.get_location_features(agent)
 
         n_ci = len(self.dists_to_vic)  # number of victim (status) combinations
@@ -591,15 +642,6 @@ class SearchRescueGridWorld(GridWorld):
         raise ValueError(f'Could not find the next combination index for location: {loc_idx} '
                          f'given combination index: {vic_comb_idx} and next clear status: {next_clear_status}')
 
-    def vis_agent_dynamics_in_xy(self):
-        for k, v in self.world.dynamics.items():
-            if type(k) is ActionSet:
-                print('----')
-                print(k)
-                for kk, vv in v.items():
-                    print(kk)
-                    print(vv)
-
     def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]) -> Agent:
         """
         Function called to add models to agent
@@ -697,8 +739,7 @@ class SearchRescueGridWorld(GridWorld):
                                              trajectory_length: int, n_trajectories: int = 1,
                                              init_feats: Optional[Dict[str, Any]] = None,
                                              model: Optional[str] = None, select: bool = True,
-                                             selection: Optional[
-                                                 Literal['distribution', 'random', 'uniform', 'consistent']] = None,
+                                             selection: Optional[SelectionType] = None,
                                              horizon: Optional[int] = None, threshold: Optional[float] = None,
                                              processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
                                              use_tqdm: bool = True) -> List[TeamTrajectory]:
@@ -742,15 +783,19 @@ class SearchRescueGridWorld(GridWorld):
                                                     init_feats, model, select, horizon, selection, threshold,
                                                     processes, seed, verbose, use_tqdm)
 
-    # generate .gif of trajectories
     def play_team_trajectories(self,
                                team_trajectories: List[TeamTrajectory],
-                               team: List[Agent],
-                               file_name: str,
+                               output_dir: str,
                                title: str = 'Team Trajectories'):
-        assert len(team_trajectories) > 0 and len(team) > 0
+        """
+        Generates gif animations displaying the agents' behavior in each of the given trajectories.
+        :param list[TeamTrajectory] team_trajectories: the team trajectories for which to save an animation.
+        :param str output_dir: the directory in which to save the trajectories' animations/gif files.
+        :param str title: the title of the plots in the animations.
+        """
+        assert len(team_trajectories) > 0
 
-        for agent in team:
+        for agent in self.team:
             x, y = self.get_location_features(agent)
             assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
             assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
@@ -763,13 +808,13 @@ class SearchRescueGridWorld(GridWorld):
         non_triage_icon = plt.imread(NON_TRIAGE_ICON)
         victim_icon = plt.imread(VICTIM_ICON)
 
-        for traj_i, team_traj in enumerate(team_trajectories):
-            fig, axes = plt.subplots(len(team))
+        for traj_i, team_traj in tqdm.tqdm(enumerate(team_trajectories), total=len(team_trajectories)):
+            fig, axes = plt.subplots(len(self.team))
             fig.set_tight_layout(True)
             # plot base environment
             # plots grid with cell numbers
             grid = np.zeros((self.height, self.width))
-            for ag_i in range(len(team)):
+            for ag_i in range(len(self.team)):
                 ax = axes[ag_i]
                 ax.pcolor(grid, cmap=ListedColormap(['white']), edgecolors='darkgrey')
                 for x, y in it.product(range(self.width), range(self.height)):
@@ -783,18 +828,18 @@ class SearchRescueGridWorld(GridWorld):
 
             # plots trajectories
             l_traj = len(team_traj)
-            t_colors = distinct_colors(len(team))
+            t_colors = distinct_colors(len(self.team))
             team_xs, team_ys, team_as, world_ps = {}, {}, {}, {}
             for loci, loc in enumerate(self.victim_locs):
                 world_ps[loc] = [None] * l_traj
             for loci, loc in enumerate(self.empty_locs):
                 world_ps[loc] = [None] * l_traj
-            for ag_i, agent in enumerate(team):
+            for ag_i, agent in enumerate(self.team):
                 team_xs[agent.name] = [0] * l_traj
                 team_ys[agent.name] = [0] * l_traj
                 team_as[agent.name] = [None] * l_traj
             for i, tsa in enumerate(team_traj):
-                for ag_i, agent in enumerate(team):
+                for ag_i, agent in enumerate(self.team):
                     x, y = self.get_location_features(agent)
                     action = actionKey(agent.name)
                     x_t = tsa.world.getFeature(x, unique=True)
@@ -808,23 +853,22 @@ class SearchRescueGridWorld(GridWorld):
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5
                     team_as[agent.name][i] = a
-                # for ag_i, agent in enumerate(team)
 
-            team_ann_list = [[]] * len(team)
+            team_ann_list = [[]] * len(self.team)
             world_ann_list = []
 
             def update(ti):
                 for ann in world_ann_list:
                     ann.remove()
                 world_ann_list[:] = []
-                for ag_i, agent in enumerate(team):
+                for ag_i, agent in enumerate(self.team):
                     for ann in team_ann_list[ag_i]:
                         if isinstance(ann, list):
                             ann.pop(0).remove()
                         else:
                             ann.remove()
                     team_ann_list[ag_i][:] = []
-                for ag_i, agent in enumerate(team):
+                for ag_i, agent in enumerate(self.team):
                     x_t, y_t, a = team_xs[agent.name][ti], team_ys[agent.name][ti], team_as[agent.name][ti]
                     act = axes[ag_i].annotate(f'{a}', xy=(x_t - .4, y_t + .1),
                                               fontsize=NOTES_FONT_SIZE, c=NOTES_FONT_COLOR)
@@ -849,7 +893,7 @@ class SearchRescueGridWorld(GridWorld):
                 for loci, loc in enumerate(self.victim_locs):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
-                    for ag_i, agent in enumerate(team):
+                    for ag_i, agent in enumerate(self.team):
                         img_box = OffsetImage(victim_icon, zoom=0.15)
                         ab = AnnotationBbox(img_box, xy=(x + .3, y + .41), frameon=False)
                         img = axes[ag_i].add_artist(ab)
@@ -860,12 +904,12 @@ class SearchRescueGridWorld(GridWorld):
                 for loci, loc in enumerate(self.empty_locs):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
-                    for ag_i, agent in enumerate(team):
+                    for ag_i, agent in enumerate(self.team):
                         status_ann = axes[ag_i].annotate(f'\n{p}', xy=(x + .47, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
                 return axes
 
             anim = FuncAnimation(fig, update, len(team_traj))
-            out_file = os.path.join(file_name, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_victims}.gif')
+            out_file = os.path.join(output_dir, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_victims}.gif')
             anim.save(out_file, dpi=300, fps=1, writer='pillow')
