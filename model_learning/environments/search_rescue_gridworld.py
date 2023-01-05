@@ -823,6 +823,7 @@ class SearchRescueGridWorld(GridWorld):
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_aspect('equal', adjustable='box')
+                ax.set_ylabel(self.team[ag_i].name)
                 if ag_i == 0:
                     ax.set_title(title, fontsize=TITLE_FONT_SIZE)
 
@@ -845,7 +846,7 @@ class SearchRescueGridWorld(GridWorld):
                     x_t = tsa.world.getFeature(x, unique=True)
                     y_t = tsa.world.getFeature(y, unique=True)
                     a = tsa.world.getFeature(action, unique=True)
-                    a = a['subject'] + '-' + a['action']
+                    a = a['action']
                     if ag_i == 0:
                         for loc in range(self.width * self.height):
                             vic_status = tsa.world.getFeature(self.vic_status_features[loc], unique=True)
@@ -897,7 +898,7 @@ class SearchRescueGridWorld(GridWorld):
                         img_box = OffsetImage(victim_icon, zoom=0.15)
                         ab = AnnotationBbox(img_box, xy=(x + .3, y + .41), frameon=False)
                         img = axes[ag_i].add_artist(ab)
-                        status_ann = axes[ag_i].annotate(f'*V{loci + 1}\n{p}', xy=(x + .47, y + .3),
+                        status_ann = axes[ag_i].annotate(p, xy=(x + .4, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
                         world_ann_list.append(img)
@@ -905,7 +906,7 @@ class SearchRescueGridWorld(GridWorld):
                     x, y = self.idx_to_xy(loc)
                     p = world_ps[loc][ti]
                     for ag_i, agent in enumerate(self.team):
-                        status_ann = axes[ag_i].annotate(f'\n{p}', xy=(x + .47, y + .3),
+                        status_ann = axes[ag_i].annotate(p, xy=(x + .4, y + .3),
                                                          fontsize=NOTES_FONT_SIZE, c='k')
                         world_ann_list.append(status_ann)
                 return axes
