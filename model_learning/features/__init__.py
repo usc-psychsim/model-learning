@@ -1,12 +1,13 @@
 import itertools as it
 import numpy as np
 from typing import List, Callable, Optional, Literal, Union
+
+from model_learning import Trajectory, State, TeamInfoModelTrajectory
 from model_learning.features.linear import LinearRewardVector
+from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world, \
+    generate_trajectories_with_inference
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
-from model_learning import Trajectory, State, TeamInfoModelTrajectory
-from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world, \
-    generate_trajectories_with_inference, generate_trajectory_with_inference
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -60,7 +61,6 @@ def estimate_feature_counts_with_inference(learner_agent: Agent,
                                            seed: int = 0,
                                            verbose: bool = False,
                                            use_tqdm: bool = True) -> np.ndarray:
-
     args = []
     for traj_i, team_traj in enumerate(team_trajs):
         args.append((learner_agent, team_trajs, traj_i, n_trajectories, exact, learner_model,

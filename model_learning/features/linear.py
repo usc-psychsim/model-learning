@@ -155,16 +155,16 @@ class NumericLinearRewardFeature(LinearRewardFeature):
     Represents a numeric reward feature, that returns a reward proportional to the feature's value.
     """
 
-    def __init__(self, name: str, key: str, normalize_factor: float = 1, const_sum: Optional[float] = None):
+    def __init__(self, name: str, key: str, normalize_factor: float = 1, shift: Optional[float] = None):
         """
         Creates a new reward feature.
         :param str name: the label for this reward feature.
         :param str key: the named key associated with this feature.
-        :param float const_sum: an optional constant value to be added to the feature's value.
+        :param float shift: an optional constant value to be added to the feature's value.
         """
         super().__init__(name, normalize_factor)
         self.key = key
-        self.const_sum = const_sum
+        self.const_sum = shift
 
     def get_value(self, state: State) -> float:
         # simply return expectation of marginal
