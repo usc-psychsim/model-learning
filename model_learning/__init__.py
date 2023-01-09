@@ -44,7 +44,7 @@ class TeamStateinfoActionModelTuple(object):
 
 
 PsychSimType = Union[float, int, str, ActionSet]
-SelectionType = Literal['distribution', 'random', 'uniform', 'consistent']
+SelectionType = Literal['distribution', 'random', 'uniform', 'consistent', 'softmax']
 
 State = VectorDistributionSet
 Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
