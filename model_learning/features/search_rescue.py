@@ -1,4 +1,5 @@
-from typing import List
+import numpy as np
+from typing import List, Optional
 
 from model_learning.environments.gridworld import NOOP_ACTION
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, DIST_TO_VIC_FEATURE, \
@@ -77,3 +78,7 @@ class SearchRescueRewardVector(LinearRewardVector):
             reward_features.append(r_call)
 
         super().__init__(reward_features)
+
+    def set_rewards(self, agent: Agent, weights: np.ndarray, model: Optional[str] = None):
+        weights = weights / np.linalg.norm(weights, 1)  # normalize vector length
+        super().set_rewards(agent, weights, model)
