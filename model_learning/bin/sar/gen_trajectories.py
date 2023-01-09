@@ -9,7 +9,7 @@ from model_learning.environments.search_rescue_gridworld import SearchRescueGrid
 from model_learning.features.linear import add_linear_reward_model, LinearRewardFunction
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import str2bool, save_args
-from model_learning.util.io import create_clear_dir
+from model_learning.util.io import create_clear_dir, save_object, get_file_name_without_extension
 from model_learning.util.logging import change_log_handler
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
@@ -82,7 +82,6 @@ def main():
     for agent in team:
         agent_lrv = SearchRescueRewardVector(env, agent)
         rwd_f_weights = team_config[agent.name].options.to_array()
-        rwd_f_weights = rwd_f_weights / np.linalg.norm(rwd_f_weights, 1)
         agent_lrv.set_rewards(agent, rwd_f_weights)
 
         logging.info(f'{agent.name} Reward Features')
@@ -154,8 +153,17 @@ def main():
         seed=args.seed)
 
     # save trajectories to an animation (gif) file
-    logging.info(f'Saving animations for each trajectory to {output_dir}...')
-    env.play_team_trajectories(team_trajectories, output_dir)
+    anim_path = os.path.join(output_dir, 'animations')
+    create_clear_dir(anim_path, clear=False)
+    logging.info(f'Saving animations for each trajectory to {anim_path}...')
+    env.play_team_trajectories(team_trajectories, anim_path)
+
+    # save all trajectories to pickle file
+    file_path = os.path.join(output_dir, 'trajectories.pkl.gz')
+    logging.info(f'Saving trajectories to {file_path}...')
+    save_object(team_trajectories, file_path, compress_gzip=True)
+
+    logging.info('Done!')
 
 
 if __name__ == '__main__':
