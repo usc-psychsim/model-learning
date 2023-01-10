@@ -7,7 +7,7 @@ import random
 from typing import List, Dict, Any, Optional
 
 from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
-    TeamStateinfoActionModelTuple, TeamInfoModelTrajectory, SelectionType
+    TeamStateActionModelDistTuple, TeamModelDistTrajectory, SelectionType
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_random_value
@@ -163,11 +163,8 @@ def generate_team_trajectory(team: List[Agent],
             world.setFeature(feature, init_value)
     random.seed(seed)
 
-    # for each step, takes action and registers state-action pairs
-    team_trajectory = []
-    # team_trajectory: Dict[str, Trajectory] = {}
-    # for agent in team:
-    #     team_trajectory[agent.name] = []
+    # for each step, agents take an action and we register the state-team action pairs
+    team_trajectory: TeamTrajectory = []
 
     total = 0
     prob = 1.
@@ -193,8 +190,6 @@ def generate_team_trajectory(team: List[Agent],
 
         # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
-        # joint_action TODO
-        # append(sapair())
         team_action: Dict[str, Distribution] = {}
         for agent in team:
             action = world.getAction(agent.name)
@@ -491,7 +486,7 @@ def generate_expert_learner_trajectories(expert_team: List[Agent],
 
 
 def generate_trajectory_with_inference(learner_agent: Agent,
-                                       team_trajs: List[TeamInfoModelTrajectory],
+                                       team_trajs: List[TeamModelDistTrajectory],
                                        traj_i: int,
                                        learner_model: Optional[str] = None,
                                        select: Optional[bool] = None,
@@ -499,11 +494,11 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                                        selection: Optional[SelectionType] = None,
                                        threshold: Optional[float] = None,
                                        seed: int = 0,
-                                       verbose: bool = False) -> TeamInfoModelTrajectory:
+                                       verbose: bool = False) -> TeamModelDistTrajectory:
     """
     Generates a number of fixed-length agent trajectories with model inference of the other agents.
     :param Agent learner_agent: the agent for which to record the actions
-    :param List[TeamInfoModelTrajectory] team_trajs: the recorded trajectories of inference
+    :param List[TeamModelDistTrajectory] team_trajs: the recorded trajectories of inference
     :param int traj_i: the index of the recorded trajectory
     :param str learner_model: the agent model used to generate the trajectories.
     :param bool select: whether to select from stochastic states after each world step.
@@ -512,14 +507,14 @@ def generate_trajectory_with_inference(learner_agent: Agent,
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int seed: the seed used to initialize the random number generator.
     :param bool verbose: whether to show information at each timestep during trajectory generation.
-    :rtype: TeamInfoModelTrajectory]
+    :rtype: TeamModelDistTrajectory]
     :return: the trajectory containing a list of state-action-model_distribution tuples.
     """
     random.seed(seed)
     n_step = len(team_trajs[traj_i])
     init_state = team_trajs[traj_i][0].state
 
-    trajectory: TeamInfoModelTrajectory = []
+    trajectory: TeamModelDistTrajectory = []
     # reset to initial state and uniform dist of models
     _world = copy_world(learner_agent.world)
     init_state = copy.deepcopy(init_state)
@@ -590,7 +585,7 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                     threshold=threshold, updateBeliefs=False)
 
         action = _world.getAction(learner_agent.name)
-        trajectory.append(TeamStateinfoActionModelTuple(prev_world.state,
+        trajectory.append(TeamStateActionModelDistTuple(prev_world.state,
                                                         action,
                                                         team_trajs[traj_i][step_i].model_dist,
                                                         prev_prob))
@@ -607,7 +602,7 @@ def generate_trajectory_with_inference(learner_agent: Agent,
 
 
 def generate_trajectories_with_inference(learner_agent: Agent,
-                                         team_trajs: List[TeamInfoModelTrajectory],
+                                         team_trajs: List[TeamModelDistTrajectory],
                                          traj_i: int,
                                          n_trajectories: int,
                                          exact: bool = False,
@@ -620,11 +615,11 @@ def generate_trajectories_with_inference(learner_agent: Agent,
                                          seed: int = 0,
                                          verbose: bool = False,
                                          use_tqdm: bool = True
-                                         ) -> List[TeamInfoModelTrajectory]:
+                                         ) -> List[TeamModelDistTrajectory]:
     """
     Generates a number of fixed-length agent trajectories with model inference of the other agents.
     :param Agent learner_agent: the agent for which to record the actions
-    :param List[TeamInfoModelTrajectory] team_trajs: the recorded trajectories of inference
+    :param List[TeamModelDistTrajectory] team_trajs: the recorded trajectories of inference
     :param int traj_i: the index of the recorded trajectory
     :param int n_trajectories: the number of trajectories to be generated.
     :param bool exact: whether to perform exact step of the world
@@ -637,7 +632,7 @@ def generate_trajectories_with_inference(learner_agent: Agent,
     :param int seed: the seed used to initialize the random number generator.
     :param bool verbose: whether to show information at each timestep during trajectory generation.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
-    :rtype: list[TeamInfoModelTrajectory]
+    :rtype: list[TeamModelDistTrajectory]
     :return: a list of trajectories, each containing a list of state-action-model_distribution tuples.
     """
     if exact:
@@ -653,7 +648,7 @@ def generate_trajectories_with_inference(learner_agent: Agent,
     args = [(learner_agent, team_trajs, traj_i, learner_model, select,
              horizon, selection, threshold, seed + t, verbose)
             for t in range(n_trajectories)]
-    trajectories: List[TeamInfoModelTrajectory] = run_parallel(
+    trajectories: List[TeamModelDistTrajectory] = run_parallel(
         generate_trajectory_with_inference, args, processes=processes, use_tqdm=False)
 
     if verbose:

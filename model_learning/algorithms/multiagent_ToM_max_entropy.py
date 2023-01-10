@@ -4,7 +4,7 @@ import numpy as np
 from timeit import default_timer as timer
 from typing import Optional, List
 from psychsim.agent import Agent
-from model_learning import TeamInfoModelTrajectory
+from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
 from model_learning.features import expected_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
@@ -92,13 +92,13 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
             logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.3f}, time={step_time:.2f}s')
 
     def learn(self,
-              trajectories: List[TeamInfoModelTrajectory],
+              trajectories: List[TeamModelDistTrajectory],
               data_id: Optional[str] = None,
               verbose: bool = False) -> ModelLearningResult:
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
-        :param list[TeamInfoModelTrajectory] trajectories: a list of team trajectories, each
+        :param list[TeamModelDistTrajectory] trajectories: a list of team trajectories, each
         containing a list (sequence) of state-team_action-model_dist tuples demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
         :param bool verbose: whether to show information at each timestep during learning.

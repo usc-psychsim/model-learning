@@ -1,4 +1,4 @@
-from typing import Union, List, Dict, Literal
+from typing import Union, List, Dict, Literal, NamedTuple
 
 from psychsim.action import ActionSet
 from psychsim.probability import Distribution
@@ -10,37 +10,32 @@ __email__ = 'pedrodbs@gmail.com'
 
 
 # types
-class StateActionPair(object):
+class StateActionPair(NamedTuple):
     """
-    Represents a state-action pair which can have associated a probability.
+    Represents a state-action pair for a single agent, with associated a probability.
     """
-
-    def __init__(self, world: World, action: Distribution, prob: float = 1.):
-        """
-        Creates a new state-action pair.
-        :param World world: the world containing the state.
-        :param Distribution action: the (stochastic) action selection associated with the state of the world.
-        :param float prob: the probability with which the state of the world was selected (for stochastic states).
-        """
-        self.world: World = world
-        self.action: Distribution = action
-        self.prob: float = prob
+    world: World
+    action: Distribution
+    prob: float = 1.
 
 
-class TeamStateActionPair(object):
-    def __init__(self, world: World, action: Dict[str, Distribution], prob: float = 1.):
-        self.world: World = world
-        self.action: Dict[str, Distribution] = action
-        self.prob: float = prob
+class TeamStateActionPair(NamedTuple):
+    """
+    Represents a state-action pair for a team of agents, with an associated likelihood.
+    """
+    world: World
+    action: Dict[str, Distribution]
+    prob: float = 1.
 
 
-class TeamStateinfoActionModelTuple(object):
-    def __init__(self, state: VectorDistributionSet, action: Dict[str, Distribution],
-                 model_dist: Distribution, prob: float = 1.):
-        self.state: VectorDistributionSet = state
-        self.action: Dict[str, Distribution] = action
-        self.model_dist: Distribution = model_dist
-        self.prob: float = prob
+class TeamStateActionModelDistTuple(NamedTuple):
+    """
+    Represents a state-action-model distribution tuple for a team of agents, with an associated likelihood.
+    """
+    state: VectorDistributionSet
+    action: Dict[str, Distribution]
+    model_dist: Distribution
+    prob: float = 1.
 
 
 PsychSimType = Union[float, int, str, ActionSet]
@@ -49,4 +44,4 @@ SelectionType = Literal['distribution', 'random', 'uniform', 'consistent', 'soft
 State = VectorDistributionSet
 Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
 TeamTrajectory = List[TeamStateActionPair]
-TeamInfoModelTrajectory = List[TeamStateinfoActionModelTuple]
+TeamModelDistTrajectory = List[TeamStateActionModelDistTuple]

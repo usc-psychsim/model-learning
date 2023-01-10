@@ -2,7 +2,7 @@ import itertools as it
 import numpy as np
 from typing import List, Callable, Optional, Literal, Union
 
-from model_learning import Trajectory, State, TeamInfoModelTrajectory
+from model_learning import Trajectory, State, TeamModelDistTrajectory
 from model_learning.features.linear import LinearRewardVector
 from model_learning.trajectory import generate_trajectory, generate_trajectories, copy_world, \
     generate_trajectories_with_inference
@@ -13,7 +13,7 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def expected_feature_counts(trajectories: Union[List[Trajectory], List[TeamInfoModelTrajectory]],
+def expected_feature_counts(trajectories: Union[List[Trajectory], List[TeamModelDistTrajectory]],
                             feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
     """
     Computes the expected (mean over paths) feature counts, i.e., the sum of the feature values for each state along
@@ -47,7 +47,7 @@ def expected_feature_counts(trajectories: Union[List[Trajectory], List[TeamInfoM
 
 
 def estimate_feature_counts_with_inference(learner_agent: Agent,
-                                           team_trajs: List[TeamInfoModelTrajectory],
+                                           team_trajs: List[TeamModelDistTrajectory],
                                            n_trajectories: int,
                                            feature_func: Callable[[State], np.ndarray],
                                            exact: bool = False,
