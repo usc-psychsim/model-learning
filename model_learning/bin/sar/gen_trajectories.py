@@ -5,11 +5,12 @@ import os
 from typing import List, get_args
 
 from model_learning import SelectionType
-from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, TeamConfig
+from model_learning.bin.sar.config import TeamConfig, AgentProfiles
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.features.linear import add_linear_reward_model, LinearRewardFunction
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import str2bool, save_args
-from model_learning.util.io import create_clear_dir, save_object, get_file_name_without_extension
+from model_learning.util.io import create_clear_dir, save_object
 from model_learning.util.logging import change_log_handler
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
@@ -34,6 +35,7 @@ HORIZON = 2  # 0 for random actions
 PRUNE_THRESHOLD = 1e-2
 ACT_SELECTION = 'softmax'  # 'random'
 RATIONALITY = 1 / 0.1
+PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
 
 # default model params (make models less rational to get smoother (more cautious) inference over models)
 MODEL_SELECTION = 'softmax'
@@ -47,8 +49,11 @@ CLEAR = False  # True  # False
 
 
 def main():
+    # check config files
     assert os.path.isfile(args.team_config), \
         f'Could not find Json file with team\'s configuration in {args.team_config}'
+    assert os.path.isfile(args.profiles), \
+        f'Could not find Json file with agent profiles in {args.profiles}'
 
     np.set_printoptions(precision=3)
 
@@ -58,6 +63,16 @@ def main():
     change_log_handler(os.path.join(output_dir, 'collect.log'), level=logging.INFO)
     save_args(args, os.path.join(output_dir, 'args.json'))
 
+    logging.info('========================================')
+    logging.info('Loading agent configurations...')
+    profiles = AgentProfiles.load(args.profiles)
+    logging.info(f'Loaded a total of {sum([len(p) for r, p in profiles.items()])} profiles for {len(profiles)} roles')
+
+    team_config = TeamConfig.load(args.team_config)
+    team_config.check_profiles(profiles)
+
+    logging.info('========================================')
+    logging.info('Creating world and agents...')
     world = World()
     # world.setParallel()
     env = SearchRescueGridWorld(world, args.size, args.size, args.victims, WORLD_NAME,
@@ -65,12 +80,12 @@ def main():
     logging.info(f'Initialized World, h:{HORIZON}, x:{env.width}, y:{env.height}, v:{env.num_victims}')
 
     # team of two agents
-    team_config = TeamConfig.load(args.team_config)
     team: List[Agent] = []
-    for ag_name, ag_conf in team_config.items():
+    for role, ag_conf in team_config.items():
         # create and define agent dynamics
-        agent = world.addAgent(ag_name)
-        env.add_search_and_rescue_dynamics(agent, ag_conf.options)
+        agent = world.addAgent(role)
+        profile = profiles[role][ag_conf.profile]
+        env.add_search_and_rescue_dynamics(agent, profile)
         team.append(agent)
 
     env.world.setOrder([{agent.name for agent in team}])
@@ -79,9 +94,12 @@ def main():
     env.add_collaboration_dynamics(team)
 
     # set agent rewards and attributes
+    logging.info('Setting agent attributes...')
     for agent in team:
         agent_lrv = SearchRescueRewardVector(env, agent)
-        rwd_f_weights = team_config[agent.name].options.to_array()
+        role = agent.name
+        profile = profiles[role][team_config[role].profile]
+        rwd_f_weights = profile.to_array()
         agent_lrv.set_rewards(agent, rwd_f_weights)
 
         logging.info(f'{agent.name} Reward Features')
@@ -93,8 +111,9 @@ def main():
         agent.setAttribute('rationality', args.rationality)
         agent.setAttribute('discount', args.discount)
 
-    for ag_name, ag_conf in team_config.items():
-        agent = world.agents[ag_name]
+    logging.info('Creating agent models...')
+    for role, ag_conf in team_config.items():
+        agent = world.agents[role]
         agent_lrv = SearchRescueRewardVector(env, agent)
 
         if ag_conf.mental_models is not None:
@@ -103,18 +122,19 @@ def main():
 
         # create new agent reward models
         if ag_conf.models is not None:
-            for name, options in ag_conf.models.items():
-                rwd_function = LinearRewardFunction(agent_lrv, options.to_array())
-                model = f'{agent.name}_{name}'
-                add_linear_reward_model(agent, rwd_function, name=model, parent=None)
-                agent.setAttribute('rationality', MODEL_RATIONALITY, model=model)
-                agent.setAttribute('selection', MODEL_SELECTION, model=model)
+            for model in ag_conf.models:
+                profile = profiles[role][model]
+                rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
+                model = f'{agent.name}_{model}'
+                add_linear_reward_model(agent, rwd_function, model=model, parent=None,
+                                        rationality=MODEL_RATIONALITY,
+                                        selection=MODEL_SELECTION)
                 agent.create_belief_state(model=model)
 
-    # add agents' mental models
-    for ag_name, ag_conf in team_config.items():
+    logging.info('Creating agent mental models of teammates...')
+    for role, ag_conf in team_config.items():
         if ag_conf.mental_models is not None:
-            agent = world.agents[ag_name]
+            agent = world.agents[role]
             # set distribution over other agents' models
             for other_ag, models_probs in ag_conf.mental_models.items():
                 dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
@@ -140,8 +160,10 @@ def main():
 
     world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
-    # generate trajectories using agents' policies and models
+    logging.info('========================================')
     logging.info(f'Generating {args.trajectories} trajectories of length {args.length}...')
+
+    # generate trajectories using agents' policies and models
     team_trajectories = env.generate_team_trajectories(
         team,
         trajectory_length=args.length,
@@ -151,6 +173,9 @@ def main():
         processes=args.processes,
         threshold=args.prune,
         seed=args.seed)
+
+    logging.info('========================================')
+    logging.info(f'Saving results to {output_dir}...')
 
     # save trajectories to an animation (gif) file
     anim_path = os.path.join(output_dir, 'animations')
@@ -170,6 +195,8 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser(description=__description__)
     parser.add_argument('--team-config', '-cfg', type=str, required=True, help='Path to team configuration Json file.')
+    parser.add_argument('--profiles', '-pf', type=str, default=PROFILES_FILE_PATH,
+                        help='Path to agent profiles Json file.')
     parser.add_argument('--output', '-o', type=str, required=True, help='Directory in which to save results.')
     parser.add_argument('--size', '-sz', type=int, default=ENV_SIZE, help='Size of gridworld/environment.')
     parser.add_argument('--victims', '-nv', type=int, default=NUM_VICTIMS,
