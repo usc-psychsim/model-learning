@@ -52,7 +52,7 @@ class TeamConfig(Dict[str, AgentConfig]):
 
     def check_profiles(self, profiles: AgentProfiles):
         """
-        Verifies that all agent profiles referred to by this team configuration exist in the given set.
+        Verifies that all agent profiles referred to by this team configuration exist in the given profile set.
         Raises an assertion error whenever a profile is not defined for a role.
         :param AgentProfiles profiles: the set of existing agent profiles for each role.
         """
@@ -80,7 +80,44 @@ class TeamConfig(Dict[str, AgentConfig]):
         """
         Loads a team configuration from a file in the Json format.
         :param str file_path: the path to the file from which to load the team config.
-        :return: the loaded task model.
+        :return: the loaded configuration.
         """
         with open(file_path, 'r') as fp:
             return TeamConfig({n: AgentConfig(**ao) for n, ao in json.load(fp).items()})
+
+
+class ExperimentConfig(Dict[str, Dict[str, Dict[str, float]]]):
+    """
+    Represents a configuration of an experiment using the Multiagent IRL via Theory-of-Mind (MIRL-ToM) approach.
+    """
+
+    def save(self, file_path: str):
+        """
+        Saves the experiment configuration to a Json format file.
+        :param str file_path: the path to the file in which to save the task model.
+        """
+        with open(file_path, 'w') as fp:
+            json.dump(self, fp, indent=4)
+
+    @classmethod
+    def load(cls, file_path: str):
+        """
+        Loads an experiment from a file in the Json format.
+        :param str file_path: the path to the file from which to load the experiment.
+        :return: the loaded experiment.
+        """
+        with open(file_path, 'r') as fp:
+            return ExperimentConfig(json.load(fp))
+
+    def check_profiles(self, profiles: AgentProfiles):
+        """
+        Verifies that all agent profiles referred to by this experiment configuration exist in the given profile set.
+        Raises an assertion error whenever a profile is not defined for a role.
+        :param AgentProfiles profiles: the set of existing agent profiles for each role.
+        """
+        for role, mental_models in self.items():
+            assert role in profiles, f'No profiles found for role: {role}'
+            for other, models in mental_models.items():
+                assert other in profiles, f'No profiles found for role: {role}'
+                for model in models.keys():
+                    assert model in profiles[other], f'No profile found with model {model} for role {other}'

@@ -1,0 +1,16 @@
+{
+  "Medic": {
+    "Explorer": {
+      "GroundTruth": 1,
+      "Opposite": 1,
+      "Random": 1
+    }
+  },
+  "Explorer": {
+    "Medic": {
+      "GroundTruth": 1,
+      "Opposite": 1,
+      "Random": 1
+    }
+  }
+}
