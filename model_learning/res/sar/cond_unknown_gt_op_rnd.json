@@ -1,39 +1,11 @@
 {
   "Medic": {
-    "options": {
-      "dist_to_vic_feature": 0.1,
-      "search_action": 0.1,
-      "triage_action": 0.3,
-      "evacuate_action": 1,
-      "noop_action": 0.05,
-      "call_action": 0.05
-    },
-    "models": {
-      "GroundTruth": {
-        "dist_to_vic_feature": 0.1,
-        "search_action": 0.1,
-        "triage_action": 0.3,
-        "evacuate_action": 1,
-        "noop_action": 0.05,
-        "call_action": 0.05
-      },
-      "Opposite": {
-        "dist_to_vic_feature": -0.1,
-        "search_action": -0.1,
-        "triage_action": -0.3,
-        "evacuate_action": -1,
-        "noop_action": -0.05,
-        "call_action": -0.05
-      },
-      "Random": {
-        "dist_to_vic_feature": 0,
-        "search_action": 0,
-        "triage_action": 0,
-        "evacuate_action": 0,
-        "noop_action": 0,
-        "call_action": 0
-      }
-    },
+    "profile": "GroundTruth",
+    "models": [
+      "GroundTruth",
+      "Opposite",
+      "Random"
+    ],
     "mental_models": {
       "Explorer": {
         "GroundTruth": 1,
@@ -43,28 +15,12 @@
     }
   },
   "Explorer": {
-    "options": {
-      "dist_to_help_feature": 0.5,
-      "search_action": 0.5,
-      "evacuate_action": 1
-    },
-    "models": {
-      "GroundTruth": {
-        "dist_to_help_feature": 0.5,
-        "search_action": 0.5,
-        "evacuate_action": 1
-      },
-      "Opposite": {
-        "dist_to_help_feature": -0.5,
-        "search_action": -0.5,
-        "evacuate_action": -1
-      },
-      "Random": {
-        "dist_to_help_feature": 0,
-        "search_action": 0,
-        "evacuate_action": 0
-      }
-    },
+    "profile": "GroundTruth",
+    "models": [
+      "GroundTruth",
+      "Opposite",
+      "Random"
+    ],
     "mental_models": {
       "Medic": {
         "GroundTruth": 1,
