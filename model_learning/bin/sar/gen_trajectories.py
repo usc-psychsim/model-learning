@@ -4,7 +4,7 @@ import os
 from typing import get_args
 
 from model_learning import SelectionType
-from model_learning.bin.sar import create_sar_world, add_common_arguments
+from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models
 from model_learning.util.io import create_clear_dir, save_object
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
@@ -25,7 +25,13 @@ TRAJ_LENGTH = 25  # 30
 
 
 def main():
-    env, team = create_sar_world(args)
+    # create world and agents
+    env, team, team_config, profiles = create_sar_world(args)
+
+    # set agent mental models
+    create_mental_models(env, team_config, profiles)
+
+    env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
     logging.info('========================================')
     logging.info(f'Generating {args.trajectories} trajectories of length {args.length}...')

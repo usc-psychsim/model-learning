@@ -2,6 +2,7 @@ import argparse
 import logging
 import numpy as np
 import os
+import tqdm
 from typing import List, Tuple
 
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
@@ -61,13 +62,14 @@ def add_common_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--verbosity', '-v', type=int, default=0, help='Verbosity level.')
 
 
-def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, List[Agent]]:
+def create_sar_world(args: argparse.Namespace) -> \
+        Tuple[SearchRescueGridWorld, List[Agent], TeamConfig, AgentProfiles]:
     """
     Creates and initializes a search-and-rescue world from the given command-line arguments. A team of agents is also
-    created and initialized, including reward functions, models and mental models (beliefs) based on loaded team
-    configuration and agent profiles.
+    created and initialized, including setting their reward functions.
     :param argparse.Namespace args: the parsed arguments containing the parameters to initialize the world and agents.
-    :return: a tuple containing the created search-and-rescue world and the team of PsychSim agents.
+    :return: a tuple containing the created search-and-rescue world, the team of PsychSim agents, and the team config
+    and agent profiles loaded from file.
     """
     # check config files
     assert os.path.isfile(args.team_config), \
@@ -108,7 +110,7 @@ def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, L
         env.add_search_and_rescue_dynamics(agent, profile)
         team.append(agent)
 
-    env.world.setOrder([{agent.name for agent in team}])
+    world.setOrder([{agent.name for agent in team}])
 
     # collaboration dynamics
     env.add_collaboration_dynamics(team)
@@ -131,8 +133,21 @@ def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, L
         agent.setAttribute('rationality', args.rationality)
         agent.setAttribute('discount', args.discount)
 
+    return env, team, team_config, profiles
+
+
+def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
+    """
+    Create the agent models and mental models (beliefs) based on the given team configuration and agent profiles.
+    :param SearchRescueGridWorld env: the search-and-rescue environment.
+    :param TeamConfig team_config: the team's configuration.
+    :param AgentProfiles profiles: the set of agent profiles.
+    """
+    world = env.world
+
+    logging.info('========================================')
     logging.info('Creating agent models...')
-    for role, ag_conf in team_config.items():
+    for role, ag_conf in tqdm.tqdm(team_config.items()):
         agent = world.agents[role]
         agent_lrv = SearchRescueRewardVector(env, agent)
 
@@ -150,9 +165,10 @@ def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, L
                                         rationality=MODEL_RATIONALITY,
                                         selection=MODEL_SELECTION)
                 agent.create_belief_state(model=model)
+                logging.info(f'Set model {model} to agent {role}')
 
     logging.info('Creating agent mental models of teammates...')
-    for role, ag_conf in team_config.items():
+    for role, ag_conf in tqdm.tqdm(team_config.items()):
         if ag_conf.mental_models is not None:
             agent = world.agents[role]
             # set distribution over other agents' models
@@ -160,6 +176,7 @@ def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, L
                 dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
                 dist.normalize()
                 world.setMentalModel(agent.name, other_ag, dist, model=None)
+                logging.info(f'Set mental models to agent {role} of agent {other_ag}:\n{dist}')
 
             zero_level = agent.zero_level(static=True, sample=True)
 
@@ -177,7 +194,3 @@ def create_sar_world(args: argparse.Namespace) -> Tuple[SearchRescueGridWorld, L
                     #     world.agents[other_ag].create_belief_state(model=f'{other_ag}_{model}')
 
                     world.setMentalModel(other_ag, agent.name, zero_level, model=f'{other_ag}_{model}')
-
-    world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
-
-    return env, team
