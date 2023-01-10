@@ -1,21 +1,23 @@
 import itertools as it
-import json
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import tqdm
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from typing import Any, Dict
+from typing import Any, Dict, Optional, NamedTuple, List
 
 from model_learning import TeamTrajectory, SelectionType
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
     DOWN_ACTION
-from model_learning.features.linear import *
 from model_learning.trajectory import generate_team_trajectories, generate_expert_learner_trajectories
 from model_learning.util.plot import distinct_colors
 from psychsim.action import ActionSet
-from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, makeFuture, equalFeatureRow, WORLD
+from psychsim.agent import Agent
+from psychsim.pwl import incrementMatrix, noChangeMatrix, stateKey, equalRow, makeFuture, equalFeatureRow, WORLD, \
+    makeTree, setToConstantMatrix, KeyedPlane, KeyedVector, actionKey
+from psychsim.world import World
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
 __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
@@ -52,14 +54,14 @@ NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
 
-TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/medic.png')
-NON_TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/explorer.png')
-VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '../../res/sar/victim.png')
+TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/medic.png')
+NON_TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/explorer.png')
+VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/victim.png')
 
 
-class AgentOptions(NamedTuple):
+class AgentProfile(NamedTuple):
     """
-    Options for an agent's actions and features, to create different search-and-rescue behaviors.
+    Represents a set of options for an agent's actions and features, to create different search-and-rescue behaviors.
     Each option is associated with a number denoting the weight of the option, which can be used to create linear reward
     reward vectors. `None` means that an option is disabled, meaning the corresponding weight will not be considered.
     """
@@ -79,56 +81,6 @@ class AgentOptions(NamedTuple):
         discarded.
         """
         return np.array([v for v in self if v is not None])
-
-
-class AgentConfig(NamedTuple):
-    """
-    Configuration for an agent in the search-and-rescue domain.
-    """
-    options: AgentOptions
-    models: Optional[Dict[str, AgentOptions]] = None
-    mental_models: Optional[Dict[str, Dict[str, float]]] = None
-
-    def to_json(self) -> Dict[str, Any]:
-        options = self.options._asdict()
-        models = None
-        if self.models is not None:
-            models = {n: opt._asdict() for n, opt in self.models.items()}
-        return AgentConfig(options, models, self.mental_models)._asdict()
-
-    @classmethod
-    def from_json(cls, d: Dict[str, Any]):
-        conf = AgentConfig(**d)
-        options = AgentOptions(**conf.options)
-        models = None
-        if conf.models is not None:
-            models = {n: AgentOptions(**opt) for n, opt in conf.models.items()}
-        return AgentConfig(options, models, conf.mental_models)
-
-
-class TeamConfig(Dict[str, AgentConfig]):
-    """
-    Configuration for a team of agents in the search-and-rescue domain, including the agent's true rewards and models,
-    and mental models of the other agents in the team.
-    """
-
-    def save(self, file_path: str):
-        """
-        Saves the team configuration to a Json format file.
-        :param str file_path: the path to the file in which to save the task model.
-        """
-        with open(file_path, 'w') as fp:
-            json.dump({n: ao.to_json() for n, ao in self.items()}, fp, indent=4)
-
-    @classmethod
-    def load(cls, file_path: str):
-        """
-        Loads a team configuration from a file in the Json format.
-        :param str file_path: the path to the file from which to load the team config.
-        :return: the loaded task model.
-        """
-        with open(file_path, 'r') as fp:
-            return TeamConfig({n: AgentConfig.from_json(ao) for n, ao in json.load(fp).items()})
 
 
 class SearchRescueGridWorld(GridWorld):
@@ -160,7 +112,7 @@ class SearchRescueGridWorld(GridWorld):
         self.num_victims: int = num_victims
         self.vics_cleared_feature: bool = vics_cleared_feature
 
-        self.agent_options: Dict[str, AgentOptions] = {}  # to store the different agent options
+        self.agent_options: Dict[str, AgentProfile] = {}  # to store the different agent options
         self.team: List[Agent] = []
 
         num_locs = self.width * self.height
@@ -303,12 +255,12 @@ class SearchRescueGridWorld(GridWorld):
         f = f'{self.name}_{NUM_EMPTY_FEATURE}'
         return stateKey(agent.name, f) if key else f
 
-    def add_search_and_rescue_dynamics(self, agent: Agent, options: AgentOptions) -> List[ActionSet]:
+    def add_search_and_rescue_dynamics(self, agent: Agent, options: AgentProfile) -> List[ActionSet]:
         """
         Adds the PsychSim action dynamics for the given agent to search for and triage victims in the environment.
         Also adds the gridworld navigation actions.
         :param Agent agent: the agent to add the action search and rescue dynamics to.
-        :param AgentOptions options: the search-and-rescue action and feature options for this agent.
+        :param AgentProfile options: the search-and-rescue action and feature options for this agent.
         :rtype: list[ActionSet]
         :return: a list containing the agent's newly created actions.
         """
@@ -657,49 +609,6 @@ class SearchRescueGridWorld(GridWorld):
         raise ValueError(f'Could not find the next combination index for location: {loc_idx} '
                          f'given combination index: {vic_comb_idx} and next clear status: {next_clear_status}')
 
-    def add_agent_models(self, agent: Agent, roles: Dict[str, float], model_names: List[str]) -> Agent:
-        """
-        Function called to add models to agent
-        @param Agent agent: the agent that has models
-        @param roles: agent roles in the team, used to get reward features
-        @param model_names: possible models of agent
-        @return: the modified agent
-        """
-        for model_name in model_names:
-            true_model = agent.get_true_model()
-            model_name = f'{agent.name}_{model_name}'
-            agent.addModel(model_name, parent=true_model)
-            rwd_features, rwd_weights = self.get_role_reward_vector(agent, roles)
-            agent_lrv = LinearRewardVector(rwd_features)
-            rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Opposite':
-                rwd_weights = -1. * np.array(rwd_weights)
-                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Uniform':
-                rwd_weights = [1.] * len(rwd_weights)
-                rwd_weights = np.array(rwd_weights) / np.linalg.norm(rwd_weights, 1)
-            if model_name == f'{agent.name}_Random':
-                rwd_weights = [0.] * len(rwd_weights)
-
-            if agent.name == 'Medic':
-                selected_feats = {'dc', 'triage', 'evacuate'}
-            elif agent.name == 'Explorer':
-                selected_feats = {'search'}
-            else:
-                selected_feats = {}
-            if model_name == f'{agent.name}_Task':
-                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
-                    if rwd_feat not in selected_feats:
-                        rwd_weights[rwd_i] = 0
-            if model_name == f'{agent.name}_Social':
-                for rwd_i, rwd_feat in enumerate(agent_lrv.names):
-                    if rwd_feat in selected_feats:
-                        rwd_weights[rwd_i] = 0
-
-            agent_lrv.set_rewards(agent, rwd_weights, model=model_name)
-            print(agent.name, model_name, agent_lrv.names, rwd_weights)
-        return agent
-
     def generate_team_trajectories(self, team: List[Agent],
                                    trajectory_length: int,
                                    n_trajectories: int = 1,
@@ -927,5 +836,5 @@ class SearchRescueGridWorld(GridWorld):
                 return axes
 
             anim = FuncAnimation(fig, update, len(team_traj))
-            out_file = os.path.join(output_dir, f'traj{traj_i}_{self.width}x{self.height}_v{self.num_victims}.gif')
+            out_file = os.path.join(output_dir, f'trajectory-{traj_i:03}.gif')
             anim.save(out_file, dpi=300, fps=1, writer='pillow')
