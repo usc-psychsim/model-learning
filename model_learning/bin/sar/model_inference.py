@@ -1,29 +1,31 @@
-import os
+import bz2
 import logging
 import numpy as np
-import string
+import os
 import pickle
-import bz2
+import string
 import time
 from typing import List, Optional, Union
+
+from model_learning import TeamTrajectory, TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
+from model_learning.features.linear import LinearRewardVector
+from model_learning.trajectory import copy_world
+from model_learning.util.io import create_clear_dir
+from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
 from psychsim.world import World
-from model_learning import TeamTrajectory, TeamStateinfoActionModelTuple, TeamInfoModelTrajectory
-from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
-from model_learning.trajectory import copy_world
-from model_learning.util.io import create_clear_dir
-from model_learning.features.linear import LinearRewardVector
-from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira and Haochen Wu'
 __email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
-__description__ = 'Perform reward model inference in the property gridworld with two collaborative agents.' \
-                  'There is an observer agent that has 2 models of the agents).' \
-                  'The world is updated for some steps, where observer updates its belief over the models of the ' \
-                  'moving agent via PsychSim inference.' \
-                  'Trajectories with model inference are saved into .pkl file.'
+__description__ = 'Performs reward model inference in the search-and-rescue domain.' \
+                  'First, it loads a set of team trajectories corresponding to observed behavior between two ' \
+                  'collaborative agents. ' \
+                  'An observer agent then maintains beliefs (a probability distribution over reward models) about ' \
+                  'each agent, which are updated via PsychSim inference according to the agents\' actions  .' \
+                  'Trajectories with model inference are saved into a .pkl file.'
 
 GOAL_FEATURE = 'g'
 NAVI_FEATURE = 'f'
@@ -152,7 +154,7 @@ def generate_trajectory_model_distribution(world: World,
 
         model_dist = Distribution(team_models)
         print('====================')
-        print(f'Step {step_i+1}:')
+        print(f'Step {step_i + 1}:')
         [print(a) for a in team_action.values()]
         for ag_i, agent in enumerate(_team):
             if ag_i == 1:
@@ -174,7 +176,6 @@ def _generate_trajectories_model_distribution(world: World,
                                               team_trajectories: Union[List[TeamTrajectory],
                                                                        List[TeamInfoModelTrajectory]],
                                               processes: Optional[int] = -1) -> List[TeamInfoModelTrajectory]:
-
     args = [(world, env, team, team_trajectories, t) for t in range(len(team_trajectories))]
     team_trajectories_with_model_dist: List[TeamInfoModelTrajectory] = \
         run_parallel(generate_trajectory_model_distribution, args,
