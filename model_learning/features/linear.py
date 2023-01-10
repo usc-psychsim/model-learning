@@ -193,21 +193,27 @@ class NumericLinearRewardFeature(LinearRewardFeature):
 
 def add_linear_reward_model(agent: Agent,
                             rwd_function: LinearRewardFunction,
-                            name: str = None,
-                            parent: str = None):
+                            model: str = None,
+                            parent: str = None,
+                            **kwargs):
     """
     Adds an agent model that differs from the true model of an agent in the reward function.
     :param Agent agent: the agent for which to add the reward models.
     :param LinearRewardFunction rwd_function: the reward function to set to the new model.
-    :param str name: the name of the new model.
+    :param str model: the name of the new model.
     :param str parent: the name of the parent model based on which the new models will be created.
+    :param kwargs: the agent attributes to set to the new model.
     """
-    if name is None:
-        name = str(rwd_function)
+    if model is None:
+        model = str(rwd_function)
 
     if parent is None:
         parent = agent.get_true_model()
 
     # create agent model, set the reward for the created model
-    agent.addModel(name, parent=parent)
-    rwd_function.feature_vector.set_rewards(agent, rwd_function.weights, model=name)
+    agent.addModel(model, parent=parent)
+    rwd_function.feature_vector.set_rewards(agent, rwd_function.weights, model=model)
+
+    # set model attributes
+    for attribute, val in kwargs.items():
+        agent.setAttribute(attribute, val, model=model)
