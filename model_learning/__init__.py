@@ -28,13 +28,17 @@ class TeamStateActionPair(NamedTuple):
     prob: float = 1.
 
 
+# a distribution over other agents' models for each agent
+ModelsDistributions = Dict[str, Dict[str, Distribution]]
+
+
 class TeamStateActionModelDistTuple(NamedTuple):
     """
     Represents a state-action-model distribution tuple for a team of agents, with an associated likelihood.
     """
     state: VectorDistributionSet
     action: Dict[str, Distribution]
-    model_dist: Distribution
+    models_dists: ModelsDistributions
     prob: float = 1.
 
 

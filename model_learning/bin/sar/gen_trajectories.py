@@ -4,7 +4,8 @@ import os
 from typing import get_args
 
 from model_learning import SelectionType
-from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models
+from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models, DISCOUNT, HORIZON, \
+    ACT_SELECTION, RATIONALITY
 from model_learning.util.io import create_clear_dir, save_object
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
@@ -13,13 +14,7 @@ __maintainer__ = 'Pedro Sequeira'
 __description__ = 'Collects a set of fixed-length trajectories in the search-and-rescue domain. ' \
                   'Saves the trajectories to a gif animation and pickle file.'
 
-# default agent params
-DISCOUNT = 0.7
-HORIZON = 2  # 0 for random actions
 PRUNE_THRESHOLD = 1e-2
-ACT_SELECTION = 'softmax'  # 'random'
-RATIONALITY = 1 / 0.1
-
 NUM_TRAJECTORIES = 1  # 5  # 10
 TRAJ_LENGTH = 25  # 30
 
@@ -28,7 +23,7 @@ def main():
     # create world and agents
     env, team, team_config, profiles = create_sar_world(args)
 
-    # set agent mental models
+    # create and set agent mental models
     create_mental_models(env, team_config, profiles)
 
     env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
@@ -77,12 +72,12 @@ if __name__ == '__main__':
     parser.add_argument('--rationality', '-r', type=float, default=RATIONALITY,
                         help='Agents\' rationality when selecting actions under a probabilistic criterion.')
     parser.add_argument('--discount', '-d', type=float, default=DISCOUNT, help='Agents\' planning discount factor.')
-    parser.add_argument('--prune', '-pt', type=float, default=PRUNE_THRESHOLD,
-                        help='Likelihood threshold for pruning outcomes during planning. `None` means no pruning.')
 
     parser.add_argument('--trajectories', '-t', type=int, default=NUM_TRAJECTORIES,
                         help='Number of trajectories to generate.')
     parser.add_argument('--length', '-l', type=int, default=TRAJ_LENGTH, help='Length of the trajectories to generate.')
+    parser.add_argument('--prune', '-pt', type=float, default=PRUNE_THRESHOLD,
+                        help='Likelihood threshold for pruning outcomes during planning. `None` means no pruning.')
 
     args = parser.parse_args()
 

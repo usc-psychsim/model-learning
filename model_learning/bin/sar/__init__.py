@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import os
 import tqdm
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
@@ -26,6 +26,12 @@ ENV_SIZE = 3
 SEED = 48
 NUM_VICTIMS = 3
 VICS_CLEARED_FEATURE = False
+
+# default agent params
+DISCOUNT = 0.7
+HORIZON = 2  # 0 for random actions
+ACT_SELECTION = 'softmax'  # 'random'
+RATIONALITY = 1 / 0.1
 
 # default model params (make models less rational to get smoother (more cautious) inference over models)
 MODEL_SELECTION = 'softmax'
@@ -100,7 +106,7 @@ def create_sar_world(args: argparse.Namespace) -> \
     # world.setParallel()
     env = SearchRescueGridWorld(world, args.size, args.size, args.victims, WORLD_NAME,
                                 vics_cleared_feature=args.vics_cleared_feature, seed=args.seed)
-    logging.info(f'Initialized World, h:{args.horizon}, x:{env.width}, y:{env.height}, v:{env.num_victims}')
+    logging.info(f'Initialized World, w:{env.width}, h:{env.height}, v:{env.num_victims}')
 
     # team of two agents
     team: List[Agent] = []
@@ -118,6 +124,7 @@ def create_sar_world(args: argparse.Namespace) -> \
 
     # set agent rewards and attributes
     logging.info('Setting agent attributes...')
+    args = vars(args)
     for agent in team:
         agent_lrv = SearchRescueRewardVector(env, agent)
         role = agent.name
@@ -129,10 +136,10 @@ def create_sar_world(args: argparse.Namespace) -> \
         logging.info(agent_lrv.names)
         logging.info(rwd_f_weights)
 
-        agent.setAttribute('selection', args.selection)
-        agent.setAttribute('horizon', args.horizon)
-        agent.setAttribute('rationality', args.rationality)
-        agent.setAttribute('discount', args.discount)
+        agent.setAttribute('selection', args.get('selection', ACT_SELECTION))
+        agent.setAttribute('horizon', args.get('horizon', HORIZON))
+        agent.setAttribute('rationality', args.get('rationality', RATIONALITY))
+        agent.setAttribute('discount', args.get('discount', DISCOUNT))
 
     return env, team, team_config, profiles
 
@@ -210,3 +217,40 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
                     world.agents[other].create_belief_state(model=model)
                     world.setMentalModel(other, agent.name, zero_level, model=model)
 
+
+def create_observers(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles) -> \
+        Dict[str, Agent]:
+    logging.info('========================================')
+
+    # creates agents' models
+    create_agent_models(env, team_config, profiles)
+
+    logging.info('Creating observers...')
+    world = env.world
+    observers: Dict[str, Agent] = {}
+    for role, ag_conf in tqdm.tqdm(team_config.items()):
+        observer = world.addAgent(f'{OBSERVER_NAME}_{role}')  # create observer agent
+        observer.set_observations()  # observer does not observe agents' true models
+        observers[role] = observer
+
+    logging.info('Setting observers\' mental models...')
+    for role, ag_conf in tqdm.tqdm(team_config.items()):
+        observer = observers[role]
+
+        # TODO make agents and their models ignore the observer
+        for _role in team_config.keys():
+            agent = world.agents[_role]
+            agent.ignore(observer.name)
+            models = team_config.get_all_model_profiles(_role, profiles)
+            for model in models.keys():
+                agent.ignore(observer.name, model=f'{agent.name}_{model}')
+
+        if ag_conf.mental_models is not None:
+            for other_ag, models_probs in ag_conf.mental_models.items():
+                # set distribution over other agents' models to observer
+                dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
+                dist.normalize()
+                world.setMentalModel(observer.name, other_ag, dist, model=None)
+                logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
+
+    return observers
