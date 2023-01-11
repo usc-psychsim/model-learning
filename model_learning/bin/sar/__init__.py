@@ -27,8 +27,6 @@ SEED = 48
 NUM_VICTIMS = 3
 VICS_CLEARED_FEATURE = False
 
-PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
-
 # default model params (make models less rational to get smoother (more cautious) inference over models)
 MODEL_SELECTION = 'softmax'
 MODEL_RATIONALITY = 1
@@ -36,6 +34,9 @@ MODEL_RATIONALITY = 1
 # default common params
 PROCESSES = -1
 CLEAR = False  # True  # False
+PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
+
+OBSERVER_NAME = 'Observer'
 
 
 def add_common_arguments(parser: argparse.ArgumentParser):
@@ -136,6 +137,29 @@ def create_sar_world(args: argparse.Namespace) -> \
     return env, team, team_config, profiles
 
 
+def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
+    """
+    Creates reward-based agent models according to the given team configuration and profiles.
+    :param SearchRescueGridWorld env: the search-and-rescue environment.
+    :param TeamConfig team_config: the team's configuration.
+    :param AgentProfiles profiles: the set of agent profiles.
+    """
+    logging.info('Creating agent models...')
+    for role, ag_conf in tqdm.tqdm(team_config.items()):
+        agent = env.world.agents[role]
+        agent_lrv = SearchRescueRewardVector(env, agent)
+
+        # create new agent reward models
+        models = team_config.get_all_model_profiles(role, profiles)
+        for model, profile in models.items():
+            rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
+            model = f'{agent.name}_{model}'
+            add_linear_reward_model(agent, rwd_function, model=model, parent=None,
+                                    rationality=MODEL_RATIONALITY,
+                                    selection=MODEL_SELECTION)
+            logging.info(f'Set model {model} to agent {role}')
+
+
 def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
     """
     Create the agent models and mental models (beliefs) based on the given team configuration and agent profiles.
@@ -143,46 +167,35 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
     :param TeamConfig team_config: the team's configuration.
     :param AgentProfiles profiles: the set of agent profiles.
     """
-    world = env.world
-
     logging.info('========================================')
-    logging.info('Creating agent models...')
+
+    world = env.world
     for role, ag_conf in tqdm.tqdm(team_config.items()):
         agent = world.agents[role]
-        agent_lrv = SearchRescueRewardVector(env, agent)
-
         if ag_conf.mental_models is not None:
             agent.create_belief_state()
             agent.set_observations()  # agent does not observe other agents' true models
 
-        # create new agent reward models
-        if ag_conf.models is not None:
-            for model in ag_conf.models:
-                profile = profiles[role][model]
-                rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
-                model = f'{agent.name}_{model}'
-                add_linear_reward_model(agent, rwd_function, model=model, parent=None,
-                                        rationality=MODEL_RATIONALITY,
-                                        selection=MODEL_SELECTION)
-                agent.create_belief_state(model=model)
-                logging.info(f'Set model {model} to agent {role}')
+    # creates agent models
+    create_agent_models(env, team_config, profiles)
 
     logging.info('Creating agent mental models of teammates...')
     for role, ag_conf in tqdm.tqdm(team_config.items()):
+        agent = world.agents[role]
         if ag_conf.mental_models is not None:
-            agent = world.agents[role]
+
             # set distribution over other agents' models
-            for other_ag, models_probs in ag_conf.mental_models.items():
-                dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
+            for other, models_probs in ag_conf.mental_models.items():
+                dist = Distribution({f'{other}_{model}': prob for model, prob in models_probs.items()})
                 dist.normalize()
-                world.setMentalModel(agent.name, other_ag, dist, model=None)
-                logging.info(f'Set mental models to agent {role} of agent {other_ag}:\n{dist}')
+                world.setMentalModel(agent.name, other, dist, model=None)
+                logging.info(f'Set mental models to agent {role} of agent {other}:\n{dist}')
 
             zero_level = agent.zero_level(static=True, sample=True)
 
             # also, set mental model of other agents' models to a zero-level model
             # (exact same behavior as true agent) to avoid infinite recursion
-            for other_ag, models_probs in ag_conf.mental_models.items():
+            for other, models_probs in ag_conf.mental_models.items():
                 for model in models_probs.keys():
                     # zero_level = f'{agent.name}_zero_{other_ag}_{model}'
                     # agent.addModel(zero_level, parent=agent.get_true_model())
@@ -193,4 +206,7 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
                     # if world.agents[other_ag].getAttribute('beliefs', model= f'{other_ag}_{model}') is True:
                     #     world.agents[other_ag].create_belief_state(model=f'{other_ag}_{model}')
 
-                    world.setMentalModel(other_ag, agent.name, zero_level, model=f'{other_ag}_{model}')
+                    model = f'{other}_{model}'
+                    world.agents[other].create_belief_state(model=model)
+                    world.setMentalModel(other, agent.name, zero_level, model=model)
+
