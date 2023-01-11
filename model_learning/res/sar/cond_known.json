@@ -1,12 +1,10 @@
 {
   "Medic": {
     "profile": "GroundTruth",
-    "models": null,
     "mental_models": null
   },
   "Explorer": {
     "profile": "GroundTruth",
-    "models": null,
     "mental_models": null
   }
 }

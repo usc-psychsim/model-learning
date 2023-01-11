@@ -40,7 +40,6 @@ class AgentConfig(NamedTuple):
     Configuration for an agent in the search-and-rescue domain.
     """
     profile: str
-    models: Optional[List[str]] = None
     mental_models: Optional[Dict[str, Dict[str, float]]] = None
 
 
@@ -58,14 +57,29 @@ class TeamConfig(Dict[str, AgentConfig]):
         """
         for role, ag_conf in self.items():
             assert role in profiles, f'No profiles found for role: {role}'
-            if ag_conf.models is not None:
-                for model in ag_conf.models:
-                    assert model in profiles[role], f'No profile found with model {model} for role {role}'
             if ag_conf.mental_models is not None:
                 for other, models in ag_conf.mental_models.items():
                     assert other in profiles, f'No profiles found for role: {role}'
                     for model in models.keys():
-                        assert model in profiles[other], f'No profile found with model {model} for role {other}'
+                        assert model in profiles[other], f'No profile found with name {model} for role {other}'
+
+    def get_all_model_profiles(self, role: str, profiles: AgentProfiles) -> Dict[str, AgentProfile]:
+        """
+        Gets all model profiles for a given agent by searching in the mental model definition of all other agents.
+        :param str role: the agent's role for which to retrieve all the model profiles..
+        :param AgentProfiles profiles: the set of existing agent profiles for each role.
+        :return: a dictionary containing an agent profile for each model.
+        """
+        assert role in self, f'Could not find role {role}'
+
+        ag_models: Dict[str, AgentProfile] = {}
+        for ag_conf in self.values():
+            if ag_conf.mental_models is not None:
+                for other, models in ag_conf.mental_models.items():
+                    if other == role:
+                        ag_models.update({model: profiles[other][model] for model in models.keys()})
+
+        return ag_models
 
     def save(self, file_path: str):
         """

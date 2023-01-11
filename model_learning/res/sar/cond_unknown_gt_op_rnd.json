@@ -1,11 +1,6 @@
 {
   "Medic": {
     "profile": "GroundTruth",
-    "models": [
-      "GroundTruth",
-      "Opposite",
-      "Random"
-    ],
     "mental_models": {
       "Explorer": {
         "GroundTruth": 1,
@@ -16,11 +11,6 @@
   },
   "Explorer": {
     "profile": "GroundTruth",
-    "models": [
-      "GroundTruth",
-      "Opposite",
-      "Random"
-    ],
     "mental_models": {
       "Medic": {
         "GroundTruth": 1,
