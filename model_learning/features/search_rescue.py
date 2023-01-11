@@ -80,5 +80,6 @@ class SearchRescueRewardVector(LinearRewardVector):
         super().__init__(reward_features)
 
     def set_rewards(self, agent: Agent, weights: np.ndarray, model: Optional[str] = None):
-        weights = weights / np.linalg.norm(weights, 1)  # normalize vector length
+        norm = np.linalg.norm(weights, 1)
+        weights = weights / (norm if norm != 0 else 1.)  # normalize vector length
         super().set_rewards(agent, weights, model)
