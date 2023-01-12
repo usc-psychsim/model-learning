@@ -58,14 +58,14 @@ class MultiProcessLogger(object):
 
         # creates queue and log listener process
         m = mp.Manager()
-        MultiProcessLogger.queue = m.Queue()
-        self.listener = mp.Process(target=self._listener, args=(log_file, level, append, fmt))
+        queue = MultiProcessLogger.queue = m.Queue()
+        self.listener = mp.Process(target=self._listener, args=(queue, log_file, level, append, fmt))
         self.listener.start()
 
-    def _listener(self, log_file: str, level: int, append: bool, fmt: str):
+    def _listener(self, queue: mp.Queue, log_file: str, level: int, append: bool, fmt: str):
         change_log_handler(log_file, level, append, fmt)
         while True:
-            record = MultiProcessLogger.queue.get()
+            record = queue.get()
             if record is None:  # waits for None to exit log listener process
                 return
             logger = logging.getLogger(record.name)
