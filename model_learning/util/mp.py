@@ -55,7 +55,7 @@ def run_parallel(func: Callable,
     processes = min(processes, len(args), os.cpu_count())
 
     # check multiprocess logging
-    if mp_logging:
+    if mp_logging and processes > 1:
         # redirects function to _log_processor to assign log handler
         assert MultiProcessLogger.queue is not None, 'MultiProcessLogger has not been created'
         args = [(func, _a, MultiProcessLogger.queue) for _a in args]
