@@ -1,17 +1,15 @@
 import argparse
+import itertools as it
 import logging
-import numpy as np
 import os
 import tqdm
 from typing import List, Tuple, Dict
 
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
-from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentProfile
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model
 from model_learning.features.search_rescue import SearchRescueRewardVector
-from model_learning.util.cmd_line import save_args, str2bool
-from model_learning.util.io import create_clear_dir
-from model_learning.util.logging import change_log_handler
+from model_learning.util.cmd_line import str2bool, str2log_level
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -34,10 +32,13 @@ ACT_SELECTION = 'softmax'  # 'random'
 RATIONALITY = 1 / 0.1
 
 # default model params (make models less rational to get smoother (more cautious) inference over models)
-MODEL_SELECTION = 'softmax'
+MODEL_SELECTION = 'distribution'  # 'softmax'
 MODEL_RATIONALITY = 1
+MODEL_HORIZON = 1  # TODO HORIZON
+OBSERVER_MODEL_NAME = 'OBSERVER'
 
 # default common params
+PRUNE_THRESHOLD = 1e-3  # 1e-2
 PROCESSES = -1
 CLEAR = False  # True  # False
 PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
@@ -60,13 +61,15 @@ def add_common_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--vics-cleared-feature', '-vcf', type=str2bool, default=VICS_CLEARED_FEATURE,
                         help='Whether to create a feature that counts the number of victims cleared.')
 
+    parser.add_argument('--prune', '-pt', type=float, default=PRUNE_THRESHOLD,
+                        help='Likelihood threshold for pruning outcomes during planning. `None` means no pruning.')
     parser.add_argument('--img-format', '-f', type=str, default='pdf', help='The format of image files.')
 
     parser.add_argument('--seed', '-s', type=int, default=SEED, help='Random seed to initialize world and agents.')
     parser.add_argument('--processes', '-p', type=int, default=PROCESSES,
                         help='The number of parallel processes to use. `-1` or `None` will use all available CPUs.')
     parser.add_argument('--clear', '-c', type=str2bool, help='Clear output directories before generating results.')
-    parser.add_argument('--verbosity', '-v', type=int, default=0, help='Verbosity level.')
+    parser.add_argument('--verbosity', '-v', type=str2log_level, default=logging.INFO, help='Logging verbosity level.')
 
 
 def create_sar_world(args: argparse.Namespace) -> \
@@ -83,14 +86,6 @@ def create_sar_world(args: argparse.Namespace) -> \
         f'Could not find Json file with team\'s configuration in {args.team_config}'
     assert os.path.isfile(args.profiles), \
         f'Could not find Json file with agent profiles in {args.profiles}'
-
-    np.set_printoptions(precision=3)
-
-    # create output
-    output_dir = args.output
-    create_clear_dir(output_dir, clear=args.clear)
-    change_log_handler(os.path.join(output_dir, 'collect.log'), level=logging.INFO)
-    save_args(args, os.path.join(output_dir, 'args.json'))
 
     logging.info('========================================')
     logging.info('Loading agent configurations...')
@@ -112,7 +107,7 @@ def create_sar_world(args: argparse.Namespace) -> \
     team: List[Agent] = []
     for role, ag_conf in team_config.items():
         # create and define agent dynamics
-        agent = world.addAgent(role)
+        agent = world.add_agent(role)
         profile = profiles[role][ag_conf.profile]
         env.add_search_and_rescue_dynamics(agent, profile)
         team.append(agent)
@@ -140,6 +135,7 @@ def create_sar_world(args: argparse.Namespace) -> \
         agent.setAttribute('horizon', args.get('horizon', HORIZON))
         agent.setAttribute('rationality', args.get('rationality', RATIONALITY))
         agent.setAttribute('discount', args.get('discount', DISCOUNT))
+        agent.belief_threshold = args.get('prune', PRUNE_THRESHOLD)
 
     return env, team, team_config, profiles
 
@@ -159,12 +155,17 @@ def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, pro
         # create new agent reward models
         models = team_config.get_all_model_profiles(role, profiles)
         for model, profile in models.items():
-            rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
-            model = f'{agent.name}_{model}'
-            add_linear_reward_model(agent, rwd_function, model=model, parent=None,
-                                    rationality=MODEL_RATIONALITY,
-                                    selection=MODEL_SELECTION)
-            logging.info(f'Set model {model} to agent {role}')
+            create_agent_model(agent, agent_lrv, model, profile)
+
+
+def create_agent_model(agent: Agent, agent_lrv: SearchRescueRewardVector, model: str, profile: AgentProfile):
+    rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
+    model = f'{agent.name}_{model}'
+    add_linear_reward_model(agent, rwd_function, model=model, parent=None,
+                            rationality=MODEL_RATIONALITY,
+                            selection=MODEL_SELECTION,
+                            horizon=MODEL_HORIZON)
+    logging.info(f'Set model {model} to agent {agent.name}')
 
 
 def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
@@ -218,8 +219,20 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
                     world.setMentalModel(other, agent.name, zero_level, model=model)
 
 
-def create_observers(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles) -> \
-        Dict[str, Agent]:
+def create_observers(env: SearchRescueGridWorld,
+                     team_config: TeamConfig,
+                     profiles: AgentProfiles) -> Dict[str, Agent]:
+    """
+    Creates model observers that will maintain a probability distribution over agent models (beliefs) as the agents
+    act in the environment. One observer will be created per agent and the beliefs will be created and initialized
+    according to the provided configuration.
+    :param SearchRescueGridWorld env: the search-and-rescue environment.
+    :param TeamConfig team_config: the team's configuration.
+    :param AgentProfiles profiles: the set of agent profiles.
+    :rtype: dict[str, Agent]
+    :return: a dictionary containing the observer agent created for each agent role.
+    """
+
     logging.info('========================================')
 
     # creates agents' models
@@ -229,28 +242,40 @@ def create_observers(env: SearchRescueGridWorld, team_config: TeamConfig, profil
     world = env.world
     observers: Dict[str, Agent] = {}
     for role, ag_conf in tqdm.tqdm(team_config.items()):
-        observer = world.addAgent(f'{OBSERVER_NAME}_{role}')  # create observer agent
-        observer.set_observations()  # observer does not observe agents' true models
+        # create observer agent
+        observer = world.addAgent(f'{OBSERVER_NAME}_{role}')
         observers[role] = observer
+        observer.belief_threshold = PRUNE_THRESHOLD
+
+    # make observers ignore each other
+    for obs1, obs2 in it.combinations(list(observers.keys()), 2):
+        observers[obs1].ignore(observers[obs2].name)
+        observers[obs2].ignore(observers[obs1].name)
 
     logging.info('Setting observers\' mental models...')
     for role, ag_conf in tqdm.tqdm(team_config.items()):
         observer = observers[role]
+        observer.set_observations()  # observer does not observe other agents' true models
 
-        # TODO make agents and their models ignore the observer
-        for _role in team_config.keys():
-            agent = world.agents[_role]
-            agent.ignore(observer.name)
-            models = team_config.get_all_model_profiles(_role, profiles)
-            for model in models.keys():
-                agent.ignore(observer.name, model=f'{agent.name}_{model}')
-
+        # set distribution over other agents' models for this observer
         if ag_conf.mental_models is not None:
             for other_ag, models_probs in ag_conf.mental_models.items():
-                # set distribution over other agents' models to observer
                 dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
                 dist.normalize()
                 world.setMentalModel(observer.name, other_ag, dist, model=None)
                 logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
+
+        # create agent model just for observer (needs to have special action selection)
+        if ag_conf.profile is not None:
+            agent = world.agents[role]
+            create_agent_model(agent, SearchRescueRewardVector(env, agent), OBSERVER_MODEL_NAME,
+                               profiles[role][ag_conf.profile])
+            world.setMentalModel(observer.name, role, f'{role}_{OBSERVER_MODEL_NAME}', model=None)
+
+        # make all agents and their models ignore this observer
+        for _role in team_config.keys():
+            agent = world.agents[_role]
+            for model in agent.models.keys():
+                agent.ignore(observer.name, model=model)
 
     return observers
