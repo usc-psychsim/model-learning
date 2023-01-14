@@ -10,8 +10,8 @@ import string
 from plotly import graph_objs as go
 from typing import List, Optional, Dict
 
-from model_learning import Trajectory, ModelsDistributions, TeamModelDistTrajectory, TeamTrajectory, \
-    TeamStateActionModelDist
+from model_learning import Trajectory, TeamModelsDistributions, TeamModelDistTrajectory, TeamTrajectory, \
+    TeamStateActionModelDist, ModelDistTrajectory, StateActionModelDist
 from model_learning.trajectory import copy_world
 from model_learning.util.mp import run_parallel
 from model_learning.util.plot_new import plot_timeseries
@@ -36,7 +36,7 @@ def model_inference(trajectory: Trajectory,
                     agent: Agent,
                     observer: Agent,
                     features: Optional[List[str]] = None,
-                    verbose: bool = True) -> np.ndarray:
+                    verbose: bool = True) -> ModelDistTrajectory:
     """
     Updates and tracks the evolution of an observer agent's posterior distribution over the possible reward models of
     an "actor" agent.
@@ -49,21 +49,18 @@ def model_inference(trajectory: Trajectory,
     :param list[str] features: a list of world features to print at each timestep, if `verbose` is `True`.
     :param bool verbose: whether to print info messages to the logger at each timestep.
     :rtype: np.ndarray
-    :return: an array of shape (trajectory_length, num_models) containing the probability attributed by the observer
-    agent to the reward model of the actor agent, at each timestep along the trajectory.
+    :return: a trajectory containing the state-action-model distribution tuples.
     """
     # gets the reward models the posterior over which we want to update and track
     rwd_models = [agent.getReward(model) for model in models]
 
-    probs = np.zeros((len(trajectory), len(models)))
+    models_dist = ModelDistTrajectory()
     for t, sa in enumerate(trajectory):
-        world = sa.world
-        action = sa.action
-        # world, action = sa
+        world, action, prob = sa
 
         if verbose and features is not None:
             logging.info('===============================================')
-            logging.info('{}.\t({})'.format(t, ','.join([str(world.getFeature(f, unique=True)) for f in features])))
+            logging.info(f'{t}.\t({",".join([str(world.getFeature(f, unique=True)) for f in features])})')
 
         # get actual agents from the trajectory world
         observer = world.agents[observer.name]
@@ -76,16 +73,52 @@ def model_inference(trajectory: Trajectory,
 
         # update posterior distribution over models
         model_dist = world.getFeature(modelKey(agent.name), belief)
+        dist = {}
         for model in model_dist.domain():
             rwd_model = agent.getReward(model)
-            probs[t, rwd_models.index(rwd_model)] = model_dist[model]
+            dist[rwd_models.index(rwd_model)] = model_dist[model]
+        models_dist.append(StateActionModelDist(world.state, action, Distribution(dist), sa.prob))
 
         if verbose:
             logging.info('Observer models agent as:')
             logging.info(model_dist)
             logging.info(action if len(action) > 1 else action.first())
 
-    return probs
+    return models_dist
+
+
+def plot_model_inference(trajectories: List[ModelDistTrajectory], agent: str, output_img: str) -> go.Figure:
+    """
+    Creates plots that show the mean curves of an agent models' likelihoods over time given a set of trajectories.
+    :param list[ModelDistTrajectory] trajectories: a list of trajectories with distributions over the agent's
+    models for each timestep.
+    :param str agent:the name of the modelee, i.e., the agent being modeled.
+    :param str output_img: the path to the file in which to save the plot.
+    :return:
+    """
+    models = [model.replace(f'{agent}_', '') for model in trajectories[0][0].models_dist.keys()]
+
+    # collect model distribution data from each step of each trajectory
+    dfs: List[pd.DataFrame] = []
+    for i, trajectory in enumerate(trajectories):
+        traj_dist: Dict[str, List[float]] = {model: [] for model in models}
+        for _, _, dist, _ in trajectory:
+            for model, prob in dist.items():
+                traj_dist[model.replace(f'{agent}_', '')].append(prob)
+
+        # create dataframe and rearrange columns
+        df = pd.DataFrame(traj_dist)
+        df[TRAJ_NUM_COL] = i
+        df = df[[TRAJ_NUM_COL] + models]
+        dfs.append(df)
+
+    df = pd.concat(dfs, axis=0)
+
+    # save plot to file
+    return plot_timeseries(df, f'{agent.title()} Model Inference', output_img,
+                           x_label='Timesteps', y_label='Model Likelihood', var_label='Model',
+                           average=True, group_by=TRAJ_NUM_COL, y_min=0, y_max=1,
+                           legend=dict(x=0.01, y=0.99, yanchor='top'))
 
 
 def update_state(state: VectorDistributionSet, new_state: VectorDistributionSet):
@@ -105,7 +138,7 @@ def team_model_inference(world: World,
                          team: List[Agent],
                          trajectory: TeamTrajectory,
                          observers: Dict[str, Agent],
-                         models_dists: ModelsDistributions,
+                         models_dists: TeamModelsDistributions,
                          threshold: Optional[float] = None,
                          seed: int = 0,
                          verbose: bool = False) -> TeamModelDistTrajectory:
@@ -115,12 +148,12 @@ def team_model_inference(world: World,
     :param list[Agent] team: the list of agents over which to perform model inference.
     :param TeamTrajectory trajectory: the trajectory with the agent's actions used to perform model inference.
     :param dict[str, Agent] observers: the observer agent's containing the beliefs over models to be updated.
-    :param ModelsDistributions models_dists: the models distributions with references to the desired mental models.
+    :param TeamModelsDistributions models_dists: the models distributions with references to the desired mental models.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int seed: the seed used to initialize the random number generator.
     :param bool verbose: whether to show time information at each timestep during trajectory generation.
     :rtype: TeamModelDistTrajectory
-    :return: a trajectory containing the state-team action-model distribution tuples.
+    :return: a trajectory containing the state-team action-models distributions tuples.
     """
     random.seed(seed)
 
@@ -174,7 +207,7 @@ def team_trajectories_model_inference(world: World,
                                       team: List[Agent],
                                       trajectories: List[TeamTrajectory],
                                       observers: Dict[str, Agent],
-                                      models_dists: ModelsDistributions,
+                                      models_dists: TeamModelsDistributions,
                                       threshold: Optional[float] = None,
                                       processes: Optional[int] = -1,
                                       seed: int = 0,
@@ -185,7 +218,7 @@ def team_trajectories_model_inference(world: World,
     :param list[Agent] team: the list of agents over which to perform model inference.
     :param list[TeamTrajectory] trajectories: the trajectories with the agent's actions used to perform model inference.
     :param dict[str, Agent] observers: the observer agent's containing the beliefs over models to be updated.
-    :param ModelsDistributions models_dists: the models distributions with references to the desired mental models.
+    :param TeamModelsDistributions models_dists: the models distributions with references to the desired mental models.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int processes: number of processes to use. Follows `joblib` convention.
     :param int seed: the seed used to initialize the random number generator.
@@ -201,14 +234,14 @@ def team_trajectories_model_inference(world: World,
 
 
 def create_inference_observers(world: World,
-                               init_models_dists: ModelsDistributions,
+                               init_models_dists: TeamModelsDistributions,
                                belief_threshold: float) -> Dict[str, Agent]:
     """
     Creates model observers that will maintain a probability distribution over agent models (beliefs) as the agents
     act in the environment. One observer will be created per agent and the beliefs will be created and initialized
     according to the provided initial distribution.
     :param World world: the PsychSim world in which to create the observer agents.
-    :param ModelsDistributions init_models_dists: the initial distribution over other agents' models for each agent.
+    :param TeamModelsDistributions init_models_dists: the initial distribution over other agents' models for each agent.
     :param float belief_threshold: beliefs with probability below this will be pruned.
     :rtype: dict[str, Agent]
     :return: a dictionary containing the observer agent created for each agent.
@@ -256,14 +289,14 @@ def create_inference_observers(world: World,
 
 
 def get_model_distributions(observers: Dict[str, Agent],
-                            prev_models_dists: ModelsDistributions) -> ModelsDistributions:
+                            prev_models_dists: TeamModelsDistributions) -> TeamModelsDistributions:
     """
     Gets the distribution over models of other agents for all agents given the observers' current beliefs.
     :param dict[str, Agent] observers: the PsychSim observer for each agent/role.
-    :param ModelsDistributions prev_models_dists: the previous distribution with references to the desired mental models.
+    :param TeamModelsDistributions prev_models_dists: the previous distribution with references to the desired mental models.
     :return: a distribution over other agents' model names for each agent.
     """
-    models_dists: ModelsDistributions = {}
+    models_dists: TeamModelsDistributions = {}
     for agent, observer in observers.items():
         world = observer.world
 
@@ -283,10 +316,10 @@ def get_model_distributions(observers: Dict[str, Agent],
     return models_dists
 
 
-def plot_model_inference(trajectories: List[TeamModelDistTrajectory],
-                         agent: str,
-                         other_ag: str,
-                         output_img: str) -> go.Figure:
+def plot_team_model_inference(trajectories: List[TeamModelDistTrajectory],
+                              agent: str,
+                              other_ag: str,
+                              output_img: str) -> go.Figure:
     """
     Creates plots that show the mean curves of an agent's mental models' likelihoods over time given a set of
     trajectories.

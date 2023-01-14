@@ -4,7 +4,7 @@ import os
 import tqdm
 from typing import List, Tuple, Dict
 
-from model_learning import ModelsDistributions
+from model_learning import TeamModelsDistributions
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentProfile
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model

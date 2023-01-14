@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from model_learning import TeamTrajectory, TeamModelDistTrajectory
 from model_learning.bin.sar import add_common_arguments, create_sar_world, create_observers
-from model_learning.inference import plot_model_inference, team_trajectories_model_inference
+from model_learning.inference import plot_team_model_inference, team_trajectories_model_inference
 from model_learning.util.cmd_line import save_args
 from model_learning.util.io import load_object, create_clear_dir, save_object
 from model_learning.util.logging import change_log_handler, MultiProcessLogger
@@ -79,7 +79,7 @@ def main():
     for role, ag_conf in tqdm.tqdm(team_config.items()):
         for other_role, models in ag_conf.mental_models.items():
             output_img = os.path.join(plots_dir, f'{role.lower()}_{other_role.lower()}_inference.{args.img_format}')
-            plot_model_inference(trajectories, role, other_role, output_img)
+            plot_team_model_inference(trajectories, role, other_role, output_img)
 
     logging.info('Done!')
 

@@ -1,7 +1,7 @@
 import json
 from typing import NamedTuple, Optional, Dict
 
-from model_learning import ModelsDistributions
+from model_learning import TeamModelsDistributions
 from model_learning.environments.search_rescue_gridworld import AgentProfile
 from psychsim.probability import Distribution
 
@@ -83,10 +83,10 @@ class TeamConfig(Dict[str, AgentConfig]):
 
         return ag_models
 
-    def get_models_distributions(self) -> ModelsDistributions:
+    def get_models_distributions(self) -> TeamModelsDistributions:
         """
         Creates distributions over other agents' models for each agent as specified in this configuration.
-        :rtype:ModelsDistributions
+        :rtype:TeamModelsDistributions
         :return: a dictionary containing a PsychSim distribution over other agents' models for each agent.
         """
         return {

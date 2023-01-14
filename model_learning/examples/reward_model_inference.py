@@ -1,6 +1,6 @@
 import os
 import logging
-from model_learning.inference import model_inference
+from model_learning.inference import model_inference, plot_model_inference
 from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -40,6 +40,8 @@ DEBUG = False
 SHOW = True
 INCLUDE_RANDOM_MODEL = True
 
+IMG_FORMAT = 'pdf'
+
 
 def _get_fancy_name(name):
     return name.title().replace('_', ' ')
@@ -73,7 +75,6 @@ if __name__ == '__main__':
     # observer does not model itself
     # observer.resetBelief(ignore={modelKey(observer.name)})
     # observer.resetBelief()
-
 
     # agent does not model itself and sees everything except true models and its reward
     # agent.resetBelief(ignore={modelKey(observer.name)})
@@ -112,16 +113,15 @@ if __name__ == '__main__':
     observer.set_observations()
 
     # generates trajectory
-    logging.info('Generating trajectory of length {}...'.format(NUM_STEPS))
+    logging.info(f'Generating trajectory of length {NUM_STEPS}...')
     x, y = env.get_location_features(agent)
     trajectory = env.generate_trajectories(1, NUM_STEPS, agent, {x: 0, y: 0})[0]
-    print(trajectory)
+    logging.info(trajectory)
     env.plot_trajectories([trajectory], agent, os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
     # gets evolution of inference over reward models of the agent
-    probs = model_inference(trajectory, model_names, agent, observer, [x, y])
+    trajectory = model_inference(trajectory, model_names, agent, observer, [x, y])
 
     # create and save inference evolution plot
-    plot_evolution(probs.T, [_get_fancy_name(name) for name in model_names],
-                   'Evolution of Model Inference', None,
-                   os.path.join(OUTPUT_DIR, 'inference.png'), 'Time', 'Model Probability', True)
+    output_img = os.path.join(OUTPUT_DIR, f'model_inference.{IMG_FORMAT}')
+    plot_model_inference([trajectory], agent.name, output_img)

@@ -8,6 +8,10 @@ from psychsim.world import World
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
+PsychSimType = Union[float, int, str, ActionSet]
+SelectionType = Literal['distribution', 'random', 'uniform', 'consistent', 'softmax']
+State = VectorDistributionSet
+
 
 # types
 class StateActionPair(NamedTuple):
@@ -19,33 +23,42 @@ class StateActionPair(NamedTuple):
     prob: float = 1.
 
 
+class StateActionModelDist(NamedTuple):
+    """
+    Represents a state-action-model distribution tuple for a agents with an associated likelihood.
+    """
+    state: State
+    action: Distribution
+    models_dist: Distribution  # a distribution over other an agent's models
+    prob: float = 1.
+
+
+Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
+ModelDistTrajectory = List[StateActionModelDist]
+
+
 class TeamStateActionPair(NamedTuple):
     """
     Represents a state-action pair for a team of agents, with an associated likelihood.
     """
-    state: VectorDistributionSet
+    state: State
     action: Dict[str, Distribution]
     prob: float = 1.
 
 
 # a distribution over other agents' models for each agent
-ModelsDistributions = Dict[str, Dict[str, Distribution]]
+TeamModelsDistributions = Dict[str, Dict[str, Distribution]]
 
 
 class TeamStateActionModelDist(NamedTuple):
     """
-    Represents a state-action-model distribution tuple for a team of agents, with an associated likelihood.
+    Represents a state-action-models distributions tuple for a team of agents, with an associated likelihood.
     """
-    state: VectorDistributionSet
+    state: State
     action: Dict[str, Distribution]
-    models_dists: ModelsDistributions
+    models_dists: TeamModelsDistributions
     prob: float = 1.
 
 
-PsychSimType = Union[float, int, str, ActionSet]
-SelectionType = Literal['distribution', 'random', 'uniform', 'consistent', 'softmax']
-
-State = VectorDistributionSet
-Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
 TeamTrajectory = List[TeamStateActionPair]
 TeamModelDistTrajectory = List[TeamStateActionModelDist]
