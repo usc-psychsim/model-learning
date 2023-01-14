@@ -62,6 +62,9 @@ class MultiProcessLogger(object):
         self.listener = mp.Process(target=self._listener, args=(queue, log_file, level, append, fmt))
         self.listener.start()
 
+        # modifies the root logger
+        create_mp_log_handler(MultiProcessLogger.queue)
+
     def _listener(self, queue: mp.Queue, log_file: str, level: int, append: bool, fmt: str):
         change_log_handler(log_file, level, append, fmt)
         while True:
