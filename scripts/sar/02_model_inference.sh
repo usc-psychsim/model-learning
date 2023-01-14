@@ -9,21 +9,16 @@ cd "$DIR/../../.." || exit
 clear
 
 echo "========================================"
-echo "Processing '${GEN_TEAM_CONFIG}', saving results in ${EXP_DIR}..."
+echo "Processing '${TEAM_CONFIG}', saving results in ${EXP_DIR}..."
 
-python -m model_learning.bin.sar.gen_trajectories \
-  --team-config=$GEN_TEAM_CONFIG \
-  --output=$TRAJ_DIR \
+python -m model_learning.bin.sar.model_inference \
+  --team-config=$INF_TEAM_CONFIG \
+  --traj-file=$TRAJ_FILE \
+  --output=$MODEL_INF_DIR \
   --size=$ENV_SIZE \
   --victims=$NUM_VICTIMS \
   --vics-cleared-feature=$VICS_CLEARED_FEAT \
-  --discount=$DISCOUNT \
-  --horizon=$HORIZON \
-  --selection=$AG_SELECTION \
-  --rationality=$AG_RATIONALITY \
   --prune=$PRUNE_THRESH \
-  --trajectories=$NUM_TRAJ \
-  --length=$TRAJ_LEN \
   --img-format=$IMG_FORMAT \
   --processes=$PROCESSES \
   --seed=$SEED \
@@ -31,4 +26,4 @@ python -m model_learning.bin.sar.gen_trajectories \
 
 echo "========================================"
 echo "Saving pip packages..."
-pip freeze >"${TRAJ_DIR}/packages.txt"
+pip freeze >"${MODEL_INF_DIR}/packages.txt"
