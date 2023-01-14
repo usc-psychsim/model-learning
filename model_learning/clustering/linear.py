@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram
 from sklearn.cluster import AgglomerativeClustering
 from model_learning.algorithms.max_entropy import THETA_STR
-from model_learning.util.plot import format_and_save_plot
 from model_learning.util.io import get_file_changed_extension
 
 __author__ = 'Pedro Sequeira'

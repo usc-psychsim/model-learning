@@ -1,14 +1,13 @@
-import os
 import logging
-from model_learning.inference import model_inference, plot_model_inference
-from model_learning.util.plot import plot_evolution
-from psychsim.probability import Distribution
-from psychsim.world import World
-from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, rewardKey, actionKey
-from psychsim.reward import maximizeFeature
-from psychsim.helper_functions import get_true_model_name
+import os
+
 from model_learning.environments.gridworld import GridWorld
+from model_learning.inference import model_inference, plot_model_inference
 from model_learning.util.io import create_clear_dir
+from psychsim.probability import Distribution
+from psychsim.pwl import makeTree, setToConstantMatrix, rewardKey
+from psychsim.reward import maximizeFeature
+from psychsim.world import World
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'

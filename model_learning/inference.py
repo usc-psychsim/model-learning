@@ -14,7 +14,7 @@ from model_learning import Trajectory, TeamModelsDistributions, TeamModelDistTra
     TeamStateActionModelDist, ModelDistTrajectory, StateActionModelDist
 from model_learning.trajectory import copy_world
 from model_learning.util.mp import run_parallel
-from model_learning.util.plot_new import plot_timeseries
+from model_learning.util.plot import plot_timeseries
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey, VectorDistributionSet, isSpecialKey, makeTree, setToConstantMatrix, actionKey

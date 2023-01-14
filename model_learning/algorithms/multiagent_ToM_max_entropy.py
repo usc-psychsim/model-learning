@@ -1,14 +1,17 @@
-import logging
-import os
-import numpy as np
 from timeit import default_timer as timer
+
+import logging
+import numpy as np
+import os
+import pandas as pd
 from typing import Optional, List
-from psychsim.agent import Agent
+
 from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
 from model_learning.features import expected_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
-from model_learning.util.plot import plot_evolution
+from model_learning.util.plot import plot_timeseries
+from psychsim.agent import Agent
 
 __author__ = 'Pedro Sequeira and Haochen Wu'
 __email__ = 'pedrodbs@gmail.com and hcaawu@gmail.com'
@@ -20,6 +23,7 @@ THETA_STR = 'Optimal Weight Vector'
 TIME_STR = 'Time'
 LEARN_RATE_STR = 'Learning Rate'
 LEARNING_DECAY = 0.9
+
 
 class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
     """
@@ -198,15 +202,20 @@ class MultiagentToMMaxEntRewardLearning(ModelLearningAlgorithm):
         np.savetxt(os.path.join(output_dir, 'learner-theta.csv'), stats[THETA_STR].reshape(1, -1), '%s', ',',
                    header=','.join(self.reward_vector.names), comments='')
 
-        plot_evolution(stats[FEATURE_COUNT_DIFF_STR], ['diff'], 'Reward Param. Diff. Evolution', None,
-                       os.path.join(output_dir, f'evo-rwd-weights-diff.{img_format}'), 'Epoch',
-                       '$\Delta \\theta$')
+        plot_timeseries(pd.DataFrame(stats[FEATURE_COUNT_DIFF_STR], columns=['diff']),
+                        'Reward Param. Diff. Evolution',
+                        os.path.join(output_dir, f'evo-rwd-weights-diff.{img_format}'),
+                        x_label='Epoch', y_label='$\Delta \\theta$')
 
-        plot_evolution(stats[REWARD_WEIGHTS_STR], self.reward_vector.names, 'Reward Parameters Evolution', None,
-                       os.path.join(output_dir, f'evo-rwd-weights.{img_format}'), 'Epoch', 'Weight', y_lim=[-0.25, 1])
+        plot_timeseries(pd.DataFrame(stats[REWARD_WEIGHTS_STR], columns=self.reward_vector.names),
+                        'Reward Parameters Evolution',
+                        os.path.join(output_dir, f'evo-rwd-weights.{img_format}'),
+                        x_label='Epoch', y_label='Weight')
 
-        plot_evolution(stats[TIME_STR], ['time'], 'Step Time Evolution', None,
-                       os.path.join(output_dir, f'evo-time.{img_format}'), 'Epoch', 'Time (secs.)')
+        plot_timeseries(pd.DataFrame(stats[TIME_STR], columns=['time']), 'Step Time Evolution',
+                        os.path.join(output_dir, f'evo-time.{img_format}'),
+                        x_label='Epoch', y_label='Time (secs.)')
 
-        plot_evolution(stats[LEARN_RATE_STR], ['learning rate'], 'Learning Rate Evolution', None,
-                       os.path.join(output_dir, f'learning-rate.{img_format}'), 'Epoch', 'α')
+        plot_timeseries(pd.DataFrame(stats[LEARN_RATE_STR], columns=['learning rate']), 'Learning Rate Evolution',
+                        os.path.join(output_dir, f'learning-rate.{img_format}'),
+                        x_label='Epoch', y_label='α')

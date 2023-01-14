@@ -10,7 +10,7 @@ from model_learning.inference import plot_team_model_inference, team_trajectorie
 from model_learning.util.cmd_line import save_args
 from model_learning.util.io import load_object, create_clear_dir, save_object
 from model_learning.util.logging import change_log_handler, MultiProcessLogger
-from model_learning.util.plot_new import dummy_plotly
+from model_learning.util.plot import dummy_plotly
 
 __author__ = 'Pedro Sequeira, Haochen Wu'
 __email__ = 'pedrodbs@gmail.com, hcaawu@gmail.com'
