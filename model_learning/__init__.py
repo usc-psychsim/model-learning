@@ -23,7 +23,7 @@ class TeamStateActionPair(NamedTuple):
     """
     Represents a state-action pair for a team of agents, with an associated likelihood.
     """
-    world: World
+    state: VectorDistributionSet
     action: Dict[str, Distribution]
     prob: float = 1.
 
@@ -32,7 +32,7 @@ class TeamStateActionPair(NamedTuple):
 ModelsDistributions = Dict[str, Dict[str, Distribution]]
 
 
-class TeamStateActionModelDistTuple(NamedTuple):
+class TeamStateActionModelDist(NamedTuple):
     """
     Represents a state-action-model distribution tuple for a team of agents, with an associated likelihood.
     """
@@ -48,4 +48,4 @@ SelectionType = Literal['distribution', 'random', 'uniform', 'consistent', 'soft
 State = VectorDistributionSet
 Trajectory = List[StateActionPair]  # list of state (world) - action (distribution) pairs
 TeamTrajectory = List[TeamStateActionPair]
-TeamModelDistTrajectory = List[TeamStateActionModelDistTuple]
+TeamModelDistTrajectory = List[TeamStateActionModelDist]

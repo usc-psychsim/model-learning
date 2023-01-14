@@ -613,7 +613,7 @@ class SearchRescueGridWorld(GridWorld):
                                    trajectory_length: int,
                                    n_trajectories: int = 1,
                                    init_feats: Optional[Dict[str, Any]] = None,
-                                   model: Optional[str] = None,
+                                   models: Optional[Dict[str, str]] = None,
                                    select: bool = True,
                                    selection: Optional[SelectionType] = None,
                                    horizon: Optional[int] = None,
@@ -631,7 +631,7 @@ class SearchRescueGridWorld(GridWorld):
         trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
         values to choose from, a single value, or `None`, in which case a random value will be picked based on the
         feature's domain.
-        :param str model: the agent model used to generate the trajectories.
+        :param dict[str,str] models: the agents' models used to generate the trajectories.
         :param bool select: whether to select from stochastic states after each world step.
         :param str selection: the action selection criterion, to untie equal-valued actions.
         :param int horizon: the agent's planning horizon.
@@ -656,7 +656,7 @@ class SearchRescueGridWorld(GridWorld):
                 init_feats[y] = None
         # generate trajectories starting from random locations in the property gridworld
         return generate_team_trajectories(team, n_trajectories, trajectory_length,
-                                          init_feats, model, select, horizon, selection, threshold,
+                                          init_feats, models, select, horizon, selection, threshold,
                                           processes, seed, verbose, use_tqdm)
 
     def generate_expert_learner_trajectories(self, expert_team: List[Agent], learner_team: List[Agent],
@@ -767,13 +767,13 @@ class SearchRescueGridWorld(GridWorld):
                 for ag_i, agent in enumerate(self.team):
                     x, y = self.get_location_features(agent)
                     action = actionKey(agent.name)
-                    x_t = tsa.world.getFeature(x, unique=True)
-                    y_t = tsa.world.getFeature(y, unique=True)
-                    a = tsa.world.getFeature(action, unique=True)
+                    x_t = self.world.getFeature(x, tsa.state, unique=True)
+                    y_t = self.world.getFeature(y, tsa.state, unique=True)
+                    a = self.world.getFeature(action, tsa.state, unique=True)
                     a = a['action']
                     if ag_i == 0:
                         for loc in range(self.width * self.height):
-                            vic_status = tsa.world.getFeature(self.vic_status_features[loc], unique=True)
+                            vic_status = self.world.getFeature(self.vic_status_features[loc], tsa.state, unique=True)
                             world_ps[loc][i] = vic_status
                     team_xs[agent.name][i] = x_t + 0.5
                     team_ys[agent.name][i] = y_t + 0.5

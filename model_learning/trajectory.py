@@ -7,7 +7,7 @@ import random
 from typing import List, Dict, Any, Optional
 
 from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
-    TeamStateActionModelDistTuple, TeamModelDistTrajectory, SelectionType
+    TeamStateActionModelDist, TeamModelDistTrajectory, SelectionType
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_random_value
@@ -124,10 +124,63 @@ def generate_trajectory(agent: Agent,
     return trajectory
 
 
+def generate_trajectories(agent: Agent,
+                          n_trajectories: int,
+                          trajectory_length: int,
+                          init_feats: Optional[Dict[str, Any]] = None,
+                          model: Optional[str] = None,
+                          select: Optional[bool] = None,
+                          horizon: Optional[int] = None,
+                          selection: Optional[SelectionType] = None,
+                          threshold: Optional[float] = None,
+                          processes: int = -1,
+                          seed: int = 0,
+                          verbose: bool = False,
+                          use_tqdm: bool = True) -> List[Trajectory]:
+    """
+    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
+    :param Agent agent: the agent for which to record the actions.
+    :param int n_trajectories: the number of trajectories to be generated.
+    :param int trajectory_length: the length of the generated trajectories.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
+    :param str model: the agent model used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
+    :param int horizon: the agent's planning horizon.
+    :param str selection: the action selection criterion, to untie equal-valued actions.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+    :rtype: list[Trajectory]
+    :return: a list of trajectories, each containing a list of state-action pairs.
+    """
+    # initial checks
+    world = agent.world
+    if init_feats is not None:
+        for feature in init_feats:
+            assert feature in world.variables, f'World does not have feature \'{feature}\'!'
+
+    # generates each trajectory in parallel using a different random seed
+    start = timer()
+    args = [(agent, trajectory_length, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
+            for t in range(n_trajectories)]
+    trajectories: List[Trajectory] = run_parallel(generate_trajectory, args, processes=processes, use_tqdm=use_tqdm)
+
+    if verbose:
+        logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
+                     f'{timer() - start:.3f}s')
+
+    return trajectories
+
+
 def generate_team_trajectory(team: List[Agent],
                              trajectory_length: int,
                              init_feats: Optional[Dict[str, Any]] = None,
-                             model: Optional[str] = None,
+                             models: Optional[Dict[str, str]] = None,
                              select: Optional[bool] = None,
                              horizon: Optional[int] = None,
                              selection: Optional[SelectionType] = None,
@@ -142,7 +195,7 @@ def generate_team_trajectory(team: List[Agent],
     trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
     values to choose from, a single value, or `None`, in which case a random value will be picked based on the
     feature's domain.
-    :param str model: the agent model used to generate the trajectories.
+    :param dict[str,str] models: the agents' models used to generate the trajectories.
     :param bool select: whether to select from stochastic states after each world step.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
@@ -161,16 +214,17 @@ def generate_team_trajectory(team: List[Agent],
             elif isinstance(init_value, List):
                 init_value = rng.choice(init_value)
             world.setFeature(feature, init_value)
+
     random.seed(seed)
 
     # for each step, agents take an action and we register the state-team action pairs
     team_trajectory: TeamTrajectory = []
-
     total = 0
     prob = 1.
-    if model is not None:
+    if models is not None:
         for agent in team:
-            world.setFeature(modelKey(agent.name), model)
+            if agent.name in models:
+                world.setFeature(modelKey(agent.name), models[agent.name])
 
     for i in range(trajectory_length):
         start = timer()
@@ -182,7 +236,7 @@ def generate_team_trajectory(team: List[Agent],
                 world.step()
                 turn = world.getFeature(turnKey(agent.name), unique=True)
 
-        prev_world = copy_world(world)  # keep (possibly stochastic) state and prob before selection
+        prev_state = copy.deepcopy(world.state)  # keep (possibly stochastic) state and prob before selection
         prev_prob = prob
         if select:
             # select if state is stochastic and update probability of reaching state
@@ -194,17 +248,72 @@ def generate_team_trajectory(team: List[Agent],
         for agent in team:
             action = world.getAction(agent.name)
             team_action[agent.name] = action
-        team_trajectory.append(TeamStateActionPair(prev_world, team_action, prev_prob))
+        team_trajectory.append(TeamStateActionPair(prev_state, team_action, prev_prob))
 
         step_time = timer() - start
         total += step_time
         if verbose:
-            logging.info(f'Step {i} took {step_time:.2f}')
+            logging.info(f'[Seed {seed}] Step {i} took {step_time:.2f}')
 
     if verbose:
-        logging.info(f'Total time: {total:.2f}s')
+        logging.info(f'[Seed {seed}] Total time: {total:.2f}s')
 
     return team_trajectory
+
+
+def generate_team_trajectories(team: List[Agent],
+                               n_trajectories: int,
+                               trajectory_length: int,
+                               init_feats: Optional[Dict[str, Any]] = None,
+                               models: Optional[Dict[str, str]] = None,
+                               select: Optional[bool] = None,
+                               horizon: Optional[int] = None,
+                               selection: Optional[SelectionType] = None,
+                               threshold: Optional[float] = None,
+                               processes: int = -1,
+                               seed: int = 0,
+                               verbose: bool = False,
+                               use_tqdm: bool = True) -> List[TeamTrajectory]:
+    """
+    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agents in the world.
+    :param List[Agent] team: the team of agents for which to record the actions.
+    :param int n_trajectories: the number of trajectories to be generated.
+    :param int trajectory_length: the length of the generated trajectories.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
+    :param dict[str,str] models: the agents' models used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
+    :param int horizon: the agent's planning horizon.
+    :param str selection: the action selection criterion, to untie equal-valued actions.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+    :rtype: list[Trajectory]
+    :return: a list of trajectories, each containing a list of state-action pairs.
+    """
+    # initial checks
+    for ag_i, agent in enumerate(team):
+        assert agent.world == team[ag_i - 1].world
+    world = team[0].world
+    for feature in init_feats:
+        assert feature in world.variables, f'World does not have feature \'{feature}\'!'
+
+    # generates each trajectory in parallel using a different random seed
+    start = timer()
+    args = [(team, trajectory_length, init_feats, models, select, horizon, selection, threshold, seed + t, verbose)
+            for t in range(n_trajectories)]
+    trajectories: List[TeamTrajectory] = run_parallel(
+        generate_team_trajectory, args, processes=processes, use_tqdm=use_tqdm)
+
+    if verbose:
+        logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
+                     f'{timer() - start:.3f}s')
+
+    return trajectories
 
 
 def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: List[Agent],
@@ -317,114 +426,6 @@ def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: L
         logging.info(f'Total time: {total:.2f}s')
 
     return team_trajectory
-
-
-def generate_trajectories(agent: Agent,
-                          n_trajectories: int,
-                          trajectory_length: int,
-                          init_feats: Optional[Dict[str, Any]] = None,
-                          model: Optional[str] = None,
-                          select: Optional[bool] = None,
-                          horizon: Optional[int] = None,
-                          selection: Optional[SelectionType] = None,
-                          threshold: Optional[float] = None,
-                          processes: int = -1,
-                          seed: int = 0,
-                          verbose: bool = False,
-                          use_tqdm: bool = True) -> List[Trajectory]:
-    """
-    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
-    :param Agent agent: the agent for which to record the actions.
-    :param int n_trajectories: the number of trajectories to be generated.
-    :param int trajectory_length: the length of the generated trajectories.
-    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
-    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
-    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
-    feature's domain.
-    :param str model: the agent model used to generate the trajectories.
-    :param bool select: whether to select from stochastic states after each world step.
-    :param int horizon: the agent's planning horizon.
-    :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int processes: number of processes to use. Follows `joblib` convention.
-    :param int seed: the seed used to initialize the random number generator.
-    :param bool verbose: whether to show information at each timestep during trajectory generation.
-    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
-    :rtype: list[Trajectory]
-    :return: a list of trajectories, each containing a list of state-action pairs.
-    """
-    # initial checks
-    world = agent.world
-    if init_feats is not None:
-        for feature in init_feats:
-            assert feature in world.variables, f'World does not have feature \'{feature}\'!'
-
-    # generates each trajectory in parallel using a different random seed
-    start = timer()
-    args = [(agent, trajectory_length, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
-            for t in range(n_trajectories)]
-    trajectories: List[Trajectory] = run_parallel(generate_trajectory, args, processes=processes, use_tqdm=use_tqdm)
-
-    if verbose:
-        logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
-                     f'{timer() - start:.3f}s')
-
-    return trajectories
-
-
-def generate_team_trajectories(team: List[Agent],
-                               n_trajectories: int,
-                               trajectory_length: int,
-                               init_feats: Optional[Dict[str, Any]] = None,
-                               model: Optional[str] = None,
-                               select: Optional[bool] = None,
-                               horizon: Optional[int] = None,
-                               selection: Optional[SelectionType] = None,
-                               threshold: Optional[float] = None,
-                               processes: int = -1,
-                               seed: int = 0,
-                               verbose: bool = False,
-                               use_tqdm: bool = True) -> List[TeamTrajectory]:
-    """
-    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agents in the world.
-    :param List[Agent] team: the team of agents for which to record the actions.
-    :param int n_trajectories: the number of trajectories to be generated.
-    :param int trajectory_length: the length of the generated trajectories.
-    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
-    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
-    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
-    feature's domain.
-    :param str model: the agent model used to generate the trajectories.
-    :param bool select: whether to select from stochastic states after each world step.
-    :param int horizon: the agent's planning horizon.
-    :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int processes: number of processes to use. Follows `joblib` convention.
-    :param int seed: the seed used to initialize the random number generator.
-    :param bool verbose: whether to show information at each timestep during trajectory generation.
-    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
-    :rtype: list[Trajectory]
-    :return: a list of trajectories, each containing a list of state-action pairs.
-    """
-    # initial checks
-    for ag_i, agent in enumerate(team):
-        assert agent.world == team[ag_i - 1].world
-    world = team[0].world
-    for feature in init_feats:
-        assert feature in world.variables, f'World does not have feature \'{feature}\'!'
-
-    # generates each trajectory in parallel using a different random seed
-    start = timer()
-    args = [(team, trajectory_length, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
-            for t in range(n_trajectories)]
-    trajectories: List[TeamTrajectory] = run_parallel(generate_team_trajectory, args, processes=processes,
-                                                      use_tqdm=use_tqdm)
-
-    if verbose:
-        logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
-                     f'{timer() - start:.3f}s')
-
-    return trajectories
 
 
 def generate_expert_learner_trajectories(expert_team: List[Agent],
@@ -585,10 +586,10 @@ def generate_trajectory_with_inference(learner_agent: Agent,
                     threshold=threshold, updateBeliefs=False)
 
         action = _world.getAction(learner_agent.name)
-        trajectory.append(TeamStateActionModelDistTuple(prev_world.state,
-                                                        action,
-                                                        team_trajs[traj_i][step_i].model_dist,
-                                                        prev_prob))
+        trajectory.append(TeamStateActionModelDist(prev_world.state,
+                                                   action,
+                                                   team_trajs[traj_i][step_i].model_dist,
+                                                   prev_prob))
 
         step_time = timer() - start
         total += step_time
