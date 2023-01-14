@@ -1,7 +1,9 @@
 import json
-from typing import NamedTuple, Optional, Dict, List
+from typing import NamedTuple, Optional, Dict
 
+from model_learning import ModelsDistributions
 from model_learning.environments.search_rescue_gridworld import AgentProfile
+from psychsim.probability import Distribution
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -77,9 +79,21 @@ class TeamConfig(Dict[str, AgentConfig]):
             if ag_conf.mental_models is not None:
                 for other, models in ag_conf.mental_models.items():
                     if other == role:
-                        ag_models.update({model: profiles[other][model] for model in models.keys()})
+                        ag_models.update({f'{role}_{model}': profiles[other][model] for model in models.keys()})
 
         return ag_models
+
+    def get_models_distributions(self) -> ModelsDistributions:
+        """
+        Creates distributions over other agents' models for each agent as specified in this configuration.
+        :rtype:ModelsDistributions
+        :return: a dictionary containing a PsychSim distribution over other agents' models for each agent.
+        """
+        return {
+            role: {other_ag: Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
+                   for other_ag, models_probs in ag_conf.mental_models.items() if ag_conf.mental_models is not None}
+            for role, ag_conf in self.items()
+        }
 
     def save(self, file_path: str):
         """
@@ -98,40 +112,3 @@ class TeamConfig(Dict[str, AgentConfig]):
         """
         with open(file_path, 'r') as fp:
             return TeamConfig({n: AgentConfig(**ao) for n, ao in json.load(fp).items()})
-
-
-class ExperimentConfig(Dict[str, Dict[str, Dict[str, float]]]):
-    """
-    Represents a configuration of an experiment using the Multiagent IRL via Theory-of-Mind (MIRL-ToM) approach.
-    """
-
-    def save(self, file_path: str):
-        """
-        Saves the experiment configuration to a Json format file.
-        :param str file_path: the path to the file in which to save the task model.
-        """
-        with open(file_path, 'w') as fp:
-            json.dump(self, fp, indent=4)
-
-    @classmethod
-    def load(cls, file_path: str):
-        """
-        Loads an experiment from a file in the Json format.
-        :param str file_path: the path to the file from which to load the experiment.
-        :return: the loaded experiment.
-        """
-        with open(file_path, 'r') as fp:
-            return ExperimentConfig(json.load(fp))
-
-    def check_profiles(self, profiles: AgentProfiles):
-        """
-        Verifies that all agent profiles referred to by this experiment configuration exist in the given profile set.
-        Raises an assertion error whenever a profile is not defined for a role.
-        :param AgentProfiles profiles: the set of existing agent profiles for each role.
-        """
-        for role, mental_models in self.items():
-            assert role in profiles, f'No profiles found for role: {role}'
-            for other, models in mental_models.items():
-                assert other in profiles, f'No profiles found for role: {role}'
-                for model in models.keys():
-                    assert model in profiles[other], f'No profile found with model {model} for role {other}'

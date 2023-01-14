@@ -1,6 +1,6 @@
 import os
 import logging
-from model_learning.inference import track_reward_model_inference
+from model_learning.inference import model_inference
 from model_learning.util.plot import plot_evolution
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     env.plot_trajectories([trajectory], agent, os.path.join(OUTPUT_DIR, 'trajectory.png'), 'Agent Path')
 
     # gets evolution of inference over reward models of the agent
-    probs = track_reward_model_inference(trajectory, model_names, agent, observer, [x, y])
+    probs = model_inference(trajectory, model_names, agent, observer, [x, y])
 
     # create and save inference evolution plot
     plot_evolution(probs.T, [_get_fancy_name(name) for name in model_names],

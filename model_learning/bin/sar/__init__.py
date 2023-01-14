@@ -1,14 +1,16 @@
 import argparse
-import itertools as it
 import logging
 import os
 import tqdm
 from typing import List, Tuple, Dict
 
+from model_learning import ModelsDistributions
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentProfile
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model
 from model_learning.features.search_rescue import SearchRescueRewardVector
+from model_learning.inference import MODEL_SELECTION, MODEL_RATIONALITY, MODEL_HORIZON, create_inference_observers, \
+    get_model_distributions
 from model_learning.util.cmd_line import str2bool, str2log_level
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
@@ -32,18 +34,12 @@ ACT_SELECTION = 'softmax'  # 'random'
 RATIONALITY = 1 / 0.1
 
 # default model params (make models less rational to get smoother (more cautious) inference over models)
-MODEL_SELECTION = 'distribution'  # 'softmax'
-MODEL_RATIONALITY = 1
-MODEL_HORIZON = 1  # TODO HORIZON
-OBSERVER_MODEL_NAME = 'OBSERVER'
 
 # default common params
-PRUNE_THRESHOLD = 1e-3  # 1e-2
+PRUNE_THRESHOLD = 1e-4  # 1e-2
 PROCESSES = -1
 CLEAR = False  # True  # False
 PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
-
-OBSERVER_NAME = 'Observer'
 
 
 def add_common_arguments(parser: argparse.ArgumentParser):
@@ -160,7 +156,6 @@ def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, pro
 
 def create_agent_model(agent: Agent, agent_lrv: SearchRescueRewardVector, model: str, profile: AgentProfile):
     rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
-    model = f'{agent.name}_{model}'
     add_linear_reward_model(agent, rwd_function, model=model, parent=None,
                             rationality=MODEL_RATIONALITY,
                             selection=MODEL_SELECTION,
@@ -238,44 +233,14 @@ def create_observers(env: SearchRescueGridWorld,
     # creates agents' models
     create_agent_models(env, team_config, profiles)
 
-    logging.info('Creating observers...')
-    world = env.world
-    observers: Dict[str, Agent] = {}
-    for role, ag_conf in tqdm.tqdm(team_config.items()):
-        # create observer agent
-        observer = world.addAgent(f'{OBSERVER_NAME}_{role}')
-        observers[role] = observer
-        observer.belief_threshold = PRUNE_THRESHOLD
+    logging.info('Creating observers and setting mental models...')
+    init_models_dists = team_config.get_models_distributions()  # creates initial distributions over models
+    observers = create_inference_observers(env.world, init_models_dists, belief_threshold=PRUNE_THRESHOLD)
 
-    # make observers ignore each other
-    for obs1, obs2 in it.combinations(list(observers.keys()), 2):
-        observers[obs1].ignore(observers[obs2].name)
-        observers[obs2].ignore(observers[obs1].name)
-
-    logging.info('Setting observers\' mental models...')
-    for role, ag_conf in tqdm.tqdm(team_config.items()):
-        observer = observers[role]
-        observer.set_observations()  # observer does not observe other agents' true models
-
-        # set distribution over other agents' models for this observer
-        if ag_conf.mental_models is not None:
-            for other_ag, models_probs in ag_conf.mental_models.items():
-                dist = Distribution({f'{other_ag}_{model}': prob for model, prob in models_probs.items()})
-                dist.normalize()
-                world.setMentalModel(observer.name, other_ag, dist, model=None)
-                logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
-
-        # create agent model just for observer (needs to have special action selection)
-        if ag_conf.profile is not None:
-            agent = world.agents[role]
-            create_agent_model(agent, SearchRescueRewardVector(env, agent), OBSERVER_MODEL_NAME,
-                               profiles[role][ag_conf.profile])
-            world.setMentalModel(observer.name, role, f'{role}_{OBSERVER_MODEL_NAME}', model=None)
-
-        # make all agents and their models ignore this observer
-        for _role in team_config.keys():
-            agent = world.agents[_role]
-            for model in agent.models.keys():
-                agent.ignore(observer.name, model=model)
+    # logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
+    models_dists = get_model_distributions(observers, init_models_dists)
+    for agent, observer in observers.items():
+        for other, models in models_dists[agent].items():
+            logging.info(f'Set mental models of agent {other} to {observer.name}:\n{models}')
 
     return observers
