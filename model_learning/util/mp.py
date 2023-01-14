@@ -1,8 +1,10 @@
 import multiprocessing as mp
 import os
+from typing import Callable, Optional, List, Any
+
 import tqdm
-from typing import Callable, Optional, List
 from joblib import Parallel, delayed, parallel_backend
+
 from .logging import MultiProcessLogger, create_mp_log_handler
 
 __author__ = 'Pedro Sequeira'
@@ -68,7 +70,7 @@ def run_parallel(func: Callable,
             delayed(func)(*(arg if star else [arg])) for arg in args)
 
 
-def _log_processor(func: Callable, args, queue: mp.Queue):
+def _log_processor(func: Callable, args, queue: mp.Queue) -> Any:
     # set root logger of this process to redirect to queue
     create_mp_log_handler(queue)
 
@@ -77,4 +79,4 @@ def _log_processor(func: Callable, args, queue: mp.Queue):
 
     # execute function
     star = isinstance(args, tuple)  # star if function is multi-argument
-    func(*(args if star else [args]))
+    return func(*(args if star else [args]))
