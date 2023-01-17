@@ -753,7 +753,7 @@ class SearchRescueGridWorld(GridWorld):
 
             # plots trajectories
             l_traj = len(team_traj)
-            t_colors = distinct_colors(len(self.team))
+            t_colors = distinct_colors(len(self.team), array=True)
             team_xs, team_ys, team_as, world_ps = {}, {}, {}, {}
             for loci, loc in enumerate(self.victim_locs):
                 world_ps[loc] = [None] * l_traj
