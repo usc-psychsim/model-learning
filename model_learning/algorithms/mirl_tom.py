@@ -8,7 +8,7 @@ from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms import ModelLearningResult
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, LEARNING_DECAY, FEATURE_COUNT_DIFF_STR, \
     REWARD_WEIGHTS_STR, THETA_STR, TIME_STR, LEARN_RATE_STR
-from model_learning.features import empirical_feature_counts, estimate_feature_counts_with_inference
+from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
 from psychsim.agent import Agent
 

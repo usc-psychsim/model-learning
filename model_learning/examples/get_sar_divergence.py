@@ -6,7 +6,8 @@ from model_learning.environments.search_rescue_gridworld import SearchRescueGrid
 from model_learning.util.io import create_clear_dir
 from model_learning import StateActionPair
 from psychsim.world import World
-from model_learning.features import expected_feature_counts, estimate_feature_counts, LinearRewardVector
+from model_learning.features import LinearRewardVector
+from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts
 from psychsim.pwl import Distribution
 from model_learning.trajectory import copy_world
 from model_learning.evaluation.metrics import policy_divergence
@@ -175,7 +176,7 @@ if __name__ == '__main__':
                 team_trajs.append(agent_trajs)
 
                 feature_func = lambda s: team_rwd[ag_i].get_values(s)
-                empirical_fc = expected_feature_counts(agent_trajs, feature_func)
+                empirical_fc = empirical_feature_counts(agent_trajs, feature_func)
                 print(empirical_fc)
 
     if EVALUATE_BY == 'FEATURES':
@@ -198,7 +199,7 @@ if __name__ == '__main__':
                 team_trajs.append(agent_trajs)
 
                 feature_func = lambda s: team_rwd[ag_i].get_values(s)
-                empirical_fc = expected_feature_counts(agent_trajs, feature_func)
+                empirical_fc = empirical_feature_counts(agent_trajs, feature_func)
                 print('Empirical:', empirical_fc)
 
                 initial_states = [t[0].world.state for t in agent_trajs]  # initial states for fc estimation

@@ -2,7 +2,7 @@ import logging
 import os
 import numpy as np
 from psychsim.world import World
-from model_learning.features import estimate_feature_counts
+from model_learning.features.counting import estimate_feature_counts
 from model_learning.features.objectworld import ObjectsRewardVector
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.util.io import create_clear_dir

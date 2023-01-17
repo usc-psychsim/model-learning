@@ -8,7 +8,7 @@ from typing import Optional, List
 
 from model_learning import Trajectory
 from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
-from model_learning.features import empirical_feature_counts, estimate_feature_counts
+from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts
 from model_learning.features.linear import LinearRewardVector
 from model_learning.util.plot import plot_timeseries, plot_bar
 from psychsim.agent import Agent
