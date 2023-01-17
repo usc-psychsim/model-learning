@@ -1,5 +1,5 @@
 import json
-from typing import NamedTuple, Optional, Dict
+from typing import NamedTuple, Optional, Dict, List
 
 from model_learning import TeamModelsDistributions
 from model_learning.environments.search_rescue_gridworld import AgentProfile
@@ -65,6 +65,18 @@ class TeamConfig(Dict[str, AgentConfig]):
                     for model in models.keys():
                         assert model in profiles[other], f'No profile found with name {model} for role {other}'
 
+    def get_all_modeled_roles(self) -> List[str]:
+        """
+        Gets all agent roles that are referenced as mental models of other agents.
+        :rtype: list[str]
+        :return: a list with the names of the referenced agent roles.
+        """
+        roles = set()
+        for ag_conf in self.values():
+            if ag_conf.mental_models is not None:
+                roles.update(ag_conf.mental_models.keys())
+        return list(roles)
+
     def get_all_model_profiles(self, role: str, profiles: AgentProfiles) -> Dict[str, AgentProfile]:
         """
         Gets all model profiles for a given agent by searching in the mental model definition of all other agents.
@@ -72,8 +84,6 @@ class TeamConfig(Dict[str, AgentConfig]):
         :param AgentProfiles profiles: the set of existing agent profiles for each role.
         :return: a dictionary containing an agent profile for each model.
         """
-        assert role in self, f'Could not find role {role}'
-
         ag_models: Dict[str, AgentProfile] = {}
         for ag_conf in self.values():
             if ag_conf.mental_models is not None:
