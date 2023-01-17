@@ -880,12 +880,16 @@ def dummy_plotly(sleep: float = 0.5):
         time.sleep(sleep)
 
 
-def distinct_colors(n: int) -> List[str]:
+def distinct_colors(n: int, array: bool = False) -> Union[List[str], np.ndarray]:
     """
     Generates N visually-distinct colors.
     :param int n: the number of colors to generate.
-    :rtype: list[str]
+    :param bool array: whether to return a normalized array instead of a plotly string.
+    :rtype: list[str] or np.ndarray
     :return: a list of plotly colors in the rgb(R, G, B) format.
     """
-    return ['rgb(' + ','.join([str(int(255 * x)) for x in colorsys.hls_to_rgb(i / n, .65, .9)]) + ')'
-            for i in range(n)]
+    colors = [colorsys.hls_to_rgb(i / n, .65, .9) for i in range(n)]
+    if array:
+        return np.array(colors)
+    
+    return ['rgb(' + ','.join([str(int(255 * c)) for c in color]) + ')' for color in colors]
