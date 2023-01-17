@@ -3,7 +3,6 @@ from typing import Union, List, Dict, Literal, NamedTuple
 from psychsim.action import ActionSet
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
-from psychsim.world import World
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -18,7 +17,7 @@ class StateActionPair(NamedTuple):
     """
     Represents a state-action pair for a single agent, with associated a probability.
     """
-    world: World
+    state: State
     action: Distribution
     prob: float = 1.
 

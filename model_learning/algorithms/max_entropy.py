@@ -118,7 +118,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         empirical_fc = empirical_feature_counts(trajectories, feature_func)
 
         # gets parameters from given trajectories (considered consistent)
-        initial_states = [t[0].world.state for t in trajectories]  # initial states for fc estimation
+        initial_states = [t[0].state for t in trajectories]  # initial states for fc estimation
         old_rationality = self.agent.getAttribute('rationality', model=self.agent.get_true_model())
         self.agent.setAttribute('rationality', 1.)  # MaxEnt IRL modeling criterion
         traj_len = len(trajectories[0])

@@ -111,7 +111,7 @@ def generate_trajectory(agent: Agent,
         # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
         action = world.getAction(agent.name)
-        trajectory.append(StateActionPair(prev_world, action, prev_prob))
+        trajectory.append(StateActionPair(prev_world.state, action, prev_prob))
 
         step_time = timer() - start
         total += step_time
@@ -528,7 +528,7 @@ def generate_trajectory_with_inference(learner_agent: Agent,
     if learner_model is not None:
         _world.setFeature(modelKey(learner_agent.name), learner_model)
 
-    # learner_agent.set_observations()
+    # learner.set_observations()
     _world.setOrder([{_agent.name for _agent in _team}])
     _world.dependency.getEvaluation()
 
