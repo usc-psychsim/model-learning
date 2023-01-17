@@ -2,43 +2,31 @@ from timeit import default_timer as timer
 
 import logging
 import numpy as np
-import os
-import pandas as pd
 from typing import Optional, List
 
-from model_learning import Trajectory
-from model_learning.algorithms import ModelLearningAlgorithm, ModelLearningResult
-from model_learning.features import empirical_feature_counts, estimate_feature_counts
+from model_learning import TeamModelDistTrajectory
+from model_learning.algorithms import ModelLearningResult
+from model_learning.algorithms.max_entropy import MaxEntRewardLearning, LEARNING_DECAY, FEATURE_COUNT_DIFF_STR, \
+    REWARD_WEIGHTS_STR, THETA_STR, TIME_STR, LEARN_RATE_STR
+from model_learning.features import empirical_feature_counts, estimate_feature_counts_with_inference
 from model_learning.features.linear import LinearRewardVector
-from model_learning.util.plot import plot_timeseries, plot_bar
 from psychsim.agent import Agent
 
-__author__ = 'Pedro Sequeira'
-__email__ = 'pedrodbs@gmail.com'
-
-# stats names
-REWARD_WEIGHTS_STR = 'Weights'
-FEATURE_COUNT_DIFF_STR = 'Feature Count Diff.'
-THETA_STR = 'Optimal Weight Vector'
-TIME_STR = 'Time'
-LEARN_RATE_STR = 'Learning Rate'
-LEARNING_DECAY = 0.9
+__author__ = 'Pedro Sequeira, Haochen Wu'
+__email__ = 'pedrodbs@gmail.com, hcaawu@gmail.com'
 
 
-class MaxEntRewardLearning(ModelLearningAlgorithm):
+class MIRLToM(MaxEntRewardLearning):
     """
-    An implementation of the maximal causal entropy (MaxEnt) algorithm for IRL in [1].
-    It assumes the expert's reward function is a linear combination (weighted sum) of the state features.
-    Optimizes the linear parametrization of the rewards (weights) as follows:
-    1. Initialize weights at random
-    2. Perform gradient descent iteratively:
-        i. Computes MaxEnt stochastic policy given current reward function (backward pass)
-        ii. Compute expected state visitation frequencies from policy and trajectories
-        iii. Compute loss as difference between empirical (from trajectories) and expected feature counts
-        iv. Update weights given loss
-    3. Learner's reward is given by the best fit between expert's (via trajectories) and learner's expected svf.
+    An extension of the maximal causal entropy (MaxEnt) IRL algorithm in [1] to multiagent scenarios.
+    It implements the Multiagent IRL with Theory-of-Mind (MIRL-ToM) algorithm defined in [2], corresponding to a
+    decentralized MIRL algorithm by applying the concept of ToM where reward model inference is performed over the
+    demonstrated trajectories to estimate the evolving distribution over models of the other agents in a team.
+    The rest of the process follows the MaxEnt IRL algorithm defined in the base class.
     [1] - Ziebart, B. D., Maas, A. L., Bagnell, J. A., & Dey, A. K. (2008). Maximum entropy inverse reinforcement
     learning. In AAAI (Vol. 8, pp. 1433-1438).
+    [2] - Wu, H., Sequeira, P., Pynadath, D. (2023). Multiagent Inverse Reinforcement Learning via Theory of Mind
+    Reasoning. In AAMAS.
     """
 
     def __init__(self,
@@ -50,8 +38,7 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
                  decrease_rate: bool = False,
                  max_epochs: int = 200,
                  diff_threshold: float = 1e-2,
-                 exact: bool = False,
-                 num_mc_trajectories=1000,
+                 exact: bool = False, num_mc_trajectories=1000,
                  prune_threshold: float = 1e-2,
                  horizon: int = 2,
                  processes: Optional[int] = -1,
@@ -68,46 +55,26 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         :param int max_epochs: the maximum number of gradient descent steps.
         :param float diff_threshold: the termination threshold for the weight vector difference.
         :param bool decrease_rate: whether to exponentially decrease the learning rate over time.
-        :param bool exact: whether the computation of the distribution over paths should be exact (expand stochastic
-        branches) or not, in which case Monte Carlo sample trajectories will be generated to estimate the feature counts.
+        :param bool exact: whether the computation of the distribution over paths should be exact (expand all stochastic
+        branches) or not. If `False`, Monte Carlo sample trajectories will be generated to estimate the feature counts.
         :param int num_mc_trajectories: the number of Monte Carlo trajectories to be samples. Works with `exact=False`.
         :param float prune_threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
         :param int horizon: the planning horizon used to compute feature counts.
         :param int seed: the seed to initialize the random number generator.
         """
-        super().__init__(label, agent)
 
-        self.reward_vector: LinearRewardVector = reward_vector
-        self.processes: int = processes
-        self.normalize_weights: bool = normalize_weights
-        self.learning_rate: float = learning_rate
-        self.max_epochs: int = max_epochs
-        self.diff_threshold: float = diff_threshold
-        self.decrease_rate: bool = decrease_rate
-        self.exact: bool = exact
-        self.num_mc_trajectories: int = num_mc_trajectories
-        self.prune_threshold: float = prune_threshold
-        self.horizon: int = horizon
-        self.seed: int = seed
-
-        self.num_features: int = len(reward_vector)
-        self.theta: np.ndarray = np.ones(self.num_features) / self.num_features
-
-    @staticmethod
-    def log_progress(e: int, theta: np.ndarray, diff: float, learning_rate: float, step_time: float):
-        with np.printoptions(precision=4, suppress=True):
-            print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
-            logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
+        super().__init__(label, agent, reward_vector, normalize_weights, learning_rate, decrease_rate, max_epochs,
+                         diff_threshold, exact, num_mc_trajectories, prune_threshold, horizon, processes, seed)
 
     def learn(self,
-              trajectories: List[Trajectory],
+              trajectories: List[TeamModelDistTrajectory],
               data_id: Optional[str] = None,
               verbose: bool = False) -> ModelLearningResult:
         """
         Performs max. entropy model learning by retrieving a PsychSim model containing the reward function approximating
         an expert's behavior as demonstrated through the given trajectories.
-        :param list[Trajectory] trajectories: a list of trajectories, each
-        containing a list (sequence) of state-action pairs demonstrated by an "expert" in the task.
+        :param list[TeamModelDistTrajectory] trajectories: a list of team trajectories, each
+        containing a list (sequence) of state-team_action-model_dist tuples demonstrated by an "expert" in the task.
         :param str data_id: an (optional) identifier for the data for which model learning was performed.
         :param bool verbose: whether to show information at each timestep during learning.
         :rtype: ModelLearningResult
@@ -116,12 +83,13 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         # get empirical feature counts (mean feature path) from trajectories
         feature_func = lambda s: self.reward_vector.get_values(s)
         empirical_fc = empirical_feature_counts(trajectories, feature_func)
+        if verbose:
+            with np.printoptions(precision=2, suppress=True):
+                logging.info(f'Empirical feature counts: {empirical_fc}')
 
         # gets parameters from given trajectories (considered consistent)
-        initial_states = [t[0].world.state for t in trajectories]  # initial states for fc estimation
         old_rationality = self.agent.getAttribute('rationality', model=self.agent.get_true_model())
         self.agent.setAttribute('rationality', 1.)  # MaxEnt IRL modeling criterion
-        traj_len = len(trajectories[0])
 
         # 1 - initiates reward weights (uniform)
         self.theta = np.ones(self.num_features) / self.num_features
@@ -152,17 +120,21 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             # gets expected feature counts (mean feature path) of using the new reward function
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses a rational agent and we need the distribution over actions if exact
-            expected_fc = estimate_feature_counts(
-                self.agent, initial_states,
-                trajectory_length=traj_len,
+            expected_fc = estimate_feature_counts_with_inference(
+                self.agent, trajectories,
+                n_trajectories=self.num_mc_trajectories,
                 feature_func=feature_func,
-                exact=self.exact,
-                num_mc_trajectories=self.num_mc_trajectories,
+                select=True,
                 horizon=self.horizon,
+                selection='distribution',
                 threshold=self.prune_threshold,
                 processes=self.processes,
                 seed=self.seed,
-                verbose=False, use_tqdm=True)
+                verbose=False,
+                use_tqdm=True)
+
+            if verbose:
+                logging.info(f'Estimated Feature Counts {expected_fc}')
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
@@ -195,36 +167,3 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             TIME_STR: np.array([times]),
             LEARN_RATE_STR: np.array([rates])
         })
-
-    def save_results(self, result: ModelLearningResult, output_dir: str, img_format: str):
-        """
-        Saves the several results of a run of the algorithm to the given directory.
-        :param ModelLearningResult result: the results of the algorithm run.
-        :param str output_dir: the path to the directory in which to save the results.
-        :param str img_format: the format of the images to be saved.
-        :return:
-        """
-        stats = result.stats
-
-        plot_bar(pd.DataFrame(stats[THETA_STR], columns=self.reward_vector.names),
-                 'Optimal Weight Vector',
-                 os.path.join(output_dir, f'learner-theta.{img_format}'),
-                 x_label='Reward Features', y_label='Weight')
-
-        plot_timeseries(pd.DataFrame(stats[FEATURE_COUNT_DIFF_STR], columns=['diff']),
-                        'Reward Param. Diff. Evolution',
-                        os.path.join(output_dir, f'evo-rwd-weights-diff.{img_format}'),
-                        x_label='Epoch', y_label='$\Delta \\theta$')
-
-        plot_timeseries(pd.DataFrame(stats[REWARD_WEIGHTS_STR], columns=self.reward_vector.names),
-                        'Reward Parameters Evolution',
-                        os.path.join(output_dir, f'evo-rwd-weights.{img_format}'),
-                        x_label='Epoch', y_label='Weight')
-
-        plot_timeseries(pd.DataFrame(stats[TIME_STR], columns=['time']), 'Step Time Evolution',
-                        os.path.join(output_dir, f'evo-time.{img_format}'),
-                        x_label='Epoch', y_label='Time (secs.)')
-
-        plot_timeseries(pd.DataFrame(stats[LEARN_RATE_STR], columns=['learning rate']), 'Learning Rate Evolution',
-                        os.path.join(output_dir, f'learning-rate.{img_format}'),
-                        x_label='Epoch', y_label='α')

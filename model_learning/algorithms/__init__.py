@@ -1,9 +1,11 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Union
+
+from model_learning import Trajectory, TeamModelDistTrajectory
+from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.pwl import VectorDistributionSet
-from model_learning import Trajectory, TeamModelDistTrajectory
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -38,14 +40,14 @@ class ModelLearningAlgorithm(ABC):
     while others are set as free parameters to be optimized by the algorithm.
     """
 
-    def __init__(self, label: str, agent_name: str, ):
+    def __init__(self, label: str, agent: Agent, ):
         """
         Creates a new algorithm.
         :param str label: the label associated with this algorithm (might be useful for testing purposes).
-        :param str agent_name: the name of the agent whose behavior that we want to model (the "expert").
+        :param Agent agent: the agent whose behavior we want to model (the "expert").
         """
         self.label = label
-        self.agent_name = agent_name
+        self.agent = agent
 
     @abstractmethod
     def learn(self,

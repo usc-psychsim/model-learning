@@ -4,7 +4,7 @@ import os
 from typing import Optional, List
 
 from model_learning import TeamModelDistTrajectory
-from model_learning.algorithms.multiagent_ToM_max_entropy import MultiagentToMMaxEntRewardLearning
+from model_learning.algorithms.multiagent_ToM_max_entropy import MIRLToM
 from model_learning.bin.sar import add_common_arguments, create_sar_world, create_mental_models
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import save_args, str2bool
@@ -75,7 +75,7 @@ def main():
 
     learner_ag = env.world.agents[learner_ag]
     learner_rwd_vector = SearchRescueRewardVector(env, learner_ag)
-    alg = MultiagentToMMaxEntRewardLearning(
+    alg = MIRLToM(
         'max-ent', learner_ag, learner_rwd_vector,
         normalize_weights=args.normalize,
         learning_rate=args.learning_rate,

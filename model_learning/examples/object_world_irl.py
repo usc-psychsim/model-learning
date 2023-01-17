@@ -105,19 +105,10 @@ if __name__ == '__main__':
     logging.info('Starting MaxEnt IRL optimization...')
     feat_matrix = env.get_location_feature_matrix(OUTER_COLORS, INNER_COLORS)
     rwd_vector = ObjectsRewardVector(env, agent, feat_matrix, OUTER_COLORS, INNER_COLORS)
-    alg = MaxEntRewardLearning(
-        'max-ent', agent.name, rwd_vector,
-        processes=PROCESSES,
-        normalize_weights=NORM_THETA,
-        learning_rate=LEARNING_RATE,
-        max_epochs=MAX_EPOCHS,
-        diff_threshold=THRESHOLD,
-        decrease_rate=DECREASE_RATE,
-        prune_threshold=PRUNE_THRESHOLD,
-        exact=EXACT,
-        num_mc_trajectories=NUM_MC_TRAJECTORIES,
-        horizon=HORIZON,
-        seed=LEARNING_SEED)
+    alg = MaxEntRewardLearning('max-ent', agent, rwd_vector, normalize_weights=NORM_THETA, learning_rate=LEARNING_RATE,
+                               decrease_rate=DECREASE_RATE, max_epochs=MAX_EPOCHS, diff_threshold=THRESHOLD,
+                               exact=EXACT, num_mc_trajectories=NUM_MC_TRAJECTORIES, prune_threshold=PRUNE_THRESHOLD,
+                               horizon=HORIZON, processes=PROCESSES, seed=LEARNING_SEED)
     # trajectories = [[(w.state, a) for w, a in t] for t in trajectories]
     result = alg.learn(trajectories, verbose=True)
 
