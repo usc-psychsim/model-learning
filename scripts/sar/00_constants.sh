@@ -19,7 +19,7 @@ ROOT_DIR="${ROOT_DIR}/gen_${TMP1%.*}_inf_${TMP2%.*}_s${ENV_SIZE}_v${NUM_VICTIMS}
 
 # common params
 PROCESSES=-1 # num processes (usually = available cpus)
-VERBOSITY=1
+VERBOSITY="info"
 IMG_FORMAT="pdf"
 CLEAR=true # whether to clear output/results directory
 SEED=17
@@ -43,3 +43,9 @@ TRAJ_FILE="${TRAJ_DIR}/trajectories.pkl.gz" # hardcoded, do not remove!
 # 2. MODEL INFERENCE OPTIONS ====================
 # ===============================================
 MODEL_INF_DIR="${ROOT_DIR}/model_inference"
+INF_TRAJ_FILE="${MODEL_INF_DIR}/trajectories.pkl.gz" # hardcoded, do not remove!
+
+# ===============================================
+# 3. MIRL-TOM OPTIONS ===========================
+# ===============================================
+#TEAM_LEARNING_RATE = [5e-2, 2e-1] # 0.05

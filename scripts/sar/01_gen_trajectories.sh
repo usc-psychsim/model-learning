@@ -9,7 +9,7 @@ cd "$DIR/../../.." || exit
 clear
 
 echo "========================================"
-echo "Processing '${GEN_TEAM_CONFIG}', saving results in ${EXP_DIR}..."
+echo "Processing '${GEN_TEAM_CONFIG}', saving results in ${TRAJ_DIR}..."
 
 python -m model_learning.bin.sar.gen_trajectories \
   --team-config=$GEN_TEAM_CONFIG \
@@ -27,6 +27,7 @@ python -m model_learning.bin.sar.gen_trajectories \
   --img-format=$IMG_FORMAT \
   --processes=$PROCESSES \
   --seed=$SEED \
+  --verbosity=$VERBOSITY \
   --clear=$CLEAR
 
 echo "========================================"

@@ -9,7 +9,7 @@ cd "$DIR/../../.." || exit
 clear
 
 echo "========================================"
-echo "Processing '${TEAM_CONFIG}', saving results in ${EXP_DIR}..."
+echo "Performing modl inference Using '${INF_TEAM_CONFIG}', saving results in ${MODEL_INF_DIR}..."
 
 python -m model_learning.bin.sar.model_inference \
   --team-config=$INF_TEAM_CONFIG \
@@ -22,6 +22,7 @@ python -m model_learning.bin.sar.model_inference \
   --img-format=$IMG_FORMAT \
   --processes=$PROCESSES \
   --seed=$SEED \
+  --verbosity=$VERBOSITY \
   --clear=$CLEAR
 
 echo "========================================"

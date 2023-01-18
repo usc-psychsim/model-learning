@@ -5,7 +5,7 @@ __email__ = 'pedrodbs@gmail.com'
 
 setup(name='model-learning',
       version='1.0',
-      description='Framework for learning PsychSim models from observation',
+      description='Framework for learning PsychSim agent models from observation',
       author='Pedro Sequeira',
       author_email='pedrodbs@gmail.com',
       url='https://github.com/usc-psychsim/model-learning',
