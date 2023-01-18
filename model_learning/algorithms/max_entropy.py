@@ -1,3 +1,4 @@
+import copy
 from timeit import default_timer as timer
 
 import logging
@@ -93,11 +94,10 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         self.num_features: int = len(reward_vector)
         self.theta: np.ndarray = np.ones(self.num_features) / self.num_features
 
-    @staticmethod
-    def log_progress(e: int, theta: np.ndarray, diff: float, learning_rate: float, step_time: float):
-        with np.printoptions(precision=4, suppress=True):
-            print(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
-            logging.info(f'Step {e}: diff={diff:.3f}, θ={theta}, α={learning_rate:.2f}, time={step_time:.2f}s')
+    def log_progress(self, e: int, diff: float, learning_rate: float, step_time: float, efc: np.ndarray):
+        with np.printoptions(precision=2, suppress=True):
+            logging.info(f'Step {e}: diff={diff:.3f}, θ={self.theta}, α={learning_rate:.2f}, '
+                         f'efc: {efc}, time={step_time:.2f}s')
 
     def learn(self,
               trajectories: List[Trajectory],
@@ -116,18 +116,24 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         # get empirical feature counts (mean feature path) from trajectories
         feature_func = lambda s: self.reward_vector.get_values(s)
         empirical_fc = empirical_feature_counts(trajectories, feature_func)
+        if verbose:
+            with np.printoptions(precision=2, suppress=True):
+                logging.info(f'Empirical feature counts: {empirical_fc}')
 
-        # gets parameters from given trajectories (considered consistent)
-        initial_states = [t[0].state for t in trajectories]  # initial states for fc estimation
+        # gets initial states for fc estimation from given trajectories (considered consistent)
+        initial_states = [t[0].state for t in trajectories]
+        traj_len = len(trajectories[0])
+
+        # change and memorize old agent params
         old_rationality = self.agent.getAttribute('rationality', model=self.agent.get_true_model())
         self.agent.setAttribute('rationality', 1.)  # MaxEnt IRL modeling criterion
-        traj_len = len(trajectories[0])
+        old_reward = copy.copy(self.agent.getAttribute('R', model=self.agent.get_true_model()))
 
         # 1 - initiates reward weights (uniform)
         self.theta = np.ones(self.num_features) / self.num_features
 
         # 2 - perform gradient descent to optimize reward weights
-        diff = np.float('inf')
+        diff = np.inf
         e = 0
         step_time = 0
         learning_rate = self.learning_rate
@@ -136,9 +142,10 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         times = []
         rates = []
 
+        expected_fc = np.full_like(empirical_fc, np.nan)
         while diff > self.diff_threshold and e < self.max_epochs:
             if verbose:
-                self.log_progress(e, self.theta, diff, learning_rate, step_time)
+                self.log_progress(e, diff, learning_rate, step_time, expected_fc)
 
             start = timer()
 
@@ -182,18 +189,19 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
             e += 1
 
         if verbose:
-            self.log_progress(e, self.theta, diff, learning_rate, step_time)
+            self.log_progress(e, diff, learning_rate, step_time, expected_fc)
             logging.info(f'Finished, total time: {sum(times):.2f} secs.')
 
         self.agent.setAttribute('rationality', old_rationality)
+        self.agent.setAttribute('R', old_reward)
 
         # returns stats dictionary
         return ModelLearningResult(data_id, trajectories, {
-            FEATURE_COUNT_DIFF_STR: np.array([diffs]),
-            REWARD_WEIGHTS_STR: np.array(thetas).T,
-            THETA_STR: self.theta,
-            TIME_STR: np.array([times]),
-            LEARN_RATE_STR: np.array([rates])
+            FEATURE_COUNT_DIFF_STR: np.array(diffs),  # shape (timesteps, )
+            REWARD_WEIGHTS_STR: np.array(thetas),  # shape (timesteps, n_features)
+            THETA_STR: self.theta,  # shape (n_features, )
+            TIME_STR: np.array(times),  # shape (timesteps, )
+            LEARN_RATE_STR: np.array(rates)  # shape (timesteps, )
         })
 
     def save_results(self, result: ModelLearningResult, output_dir: str, img_format: str):
@@ -206,25 +214,27 @@ class MaxEntRewardLearning(ModelLearningAlgorithm):
         """
         stats = result.stats
 
-        plot_bar(pd.DataFrame(stats[THETA_STR], columns=self.reward_vector.names),
+        plot_bar(pd.DataFrame(stats[THETA_STR].reshape(1, -1), columns=self.reward_vector.names),
                  'Optimal Weight Vector',
                  os.path.join(output_dir, f'learner-theta.{img_format}'),
                  x_label='Reward Features', y_label='Weight')
 
-        plot_timeseries(pd.DataFrame(stats[FEATURE_COUNT_DIFF_STR], columns=['diff']),
-                        'Reward Param. Diff. Evolution',
+        plot_timeseries(pd.DataFrame(stats[FEATURE_COUNT_DIFF_STR].reshape(-1, 1), columns=['diff']),
+                        'Evolution of Reward Parameters Difference',
                         os.path.join(output_dir, f'evo-rwd-weights-diff.{img_format}'),
-                        x_label='Epoch', y_label='$\Delta \\theta$')
+                        x_label='Epoch', y_label='Abs. Weight Diff.', show_legend=False)
 
         plot_timeseries(pd.DataFrame(stats[REWARD_WEIGHTS_STR], columns=self.reward_vector.names),
-                        'Reward Parameters Evolution',
+                        'Evolution of Reward Parameters',
                         os.path.join(output_dir, f'evo-rwd-weights.{img_format}'),
-                        x_label='Epoch', y_label='Weight')
+                        x_label='Epoch', y_label='Weight', var_label='Reward Feature')
 
-        plot_timeseries(pd.DataFrame(stats[TIME_STR], columns=['time']), 'Step Time Evolution',
+        plot_timeseries(pd.DataFrame(stats[TIME_STR].reshape(-1, 1), columns=['time']),
+                        'Evolution of Epoch Time',
                         os.path.join(output_dir, f'evo-time.{img_format}'),
-                        x_label='Epoch', y_label='Time (secs.)')
+                        x_label='Epoch', y_label='Time (secs.)', show_legend=False)
 
-        plot_timeseries(pd.DataFrame(stats[LEARN_RATE_STR], columns=['learning rate']), 'Learning Rate Evolution',
+        plot_timeseries(pd.DataFrame(stats[LEARN_RATE_STR].reshape(-1, 1), columns=['learning rate']),
+                        'Evolution of Learning Rate',
                         os.path.join(output_dir, f'learning-rate.{img_format}'),
-                        x_label='Epoch', y_label='α')
+                        x_label='Epoch', y_label='Learning Rate', show_legend=False)

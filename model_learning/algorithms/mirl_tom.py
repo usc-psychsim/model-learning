@@ -1,3 +1,4 @@
+import copy
 from timeit import default_timer as timer
 
 import logging
@@ -8,7 +9,7 @@ from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms import ModelLearningResult
 from model_learning.algorithms.max_entropy import MaxEntRewardLearning, LEARNING_DECAY, FEATURE_COUNT_DIFF_STR, \
     REWARD_WEIGHTS_STR, THETA_STR, TIME_STR, LEARN_RATE_STR
-from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts_with_inference
+from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts_tom
 from model_learning.features.linear import LinearRewardVector
 from psychsim.agent import Agent
 
@@ -87,15 +88,16 @@ class MIRLToM(MaxEntRewardLearning):
             with np.printoptions(precision=2, suppress=True):
                 logging.info(f'Empirical feature counts: {empirical_fc}')
 
-        # gets parameters from given trajectories (considered consistent)
+        # change and memorize old agent params
         old_rationality = self.agent.getAttribute('rationality', model=self.agent.get_true_model())
         self.agent.setAttribute('rationality', 1.)  # MaxEnt IRL modeling criterion
+        old_reward = copy.copy(self.agent.getAttribute('R', model=self.agent.get_true_model()))
 
         # 1 - initiates reward weights (uniform)
         self.theta = np.ones(self.num_features) / self.num_features
 
         # 2 - perform gradient descent to optimize reward weights
-        diff = np.float('inf')
+        diff = np.inf
         e = 0
         step_time = 0
         learning_rate = self.learning_rate
@@ -104,9 +106,10 @@ class MIRLToM(MaxEntRewardLearning):
         times = []
         rates = []
 
+        expected_fc = np.full_like(empirical_fc, np.nan)
         while diff > self.diff_threshold and e < self.max_epochs:
             if verbose:
-                self.log_progress(e, self.theta, diff, learning_rate, step_time)
+                self.log_progress(e, diff, learning_rate, step_time, expected_fc)
 
             start = timer()
 
@@ -120,21 +123,16 @@ class MIRLToM(MaxEntRewardLearning):
             # gets expected feature counts (mean feature path) of using the new reward function
             # by computing the efc using a MaxEnt stochastic policy given the current reward
             # MaxEnt uses a rational agent and we need the distribution over actions if exact
-            expected_fc = estimate_feature_counts_with_inference(
+            expected_fc = estimate_feature_counts_tom(
                 self.agent, trajectories,
-                n_trajectories=self.num_mc_trajectories,
                 feature_func=feature_func,
-                select=True,
+                num_mc_trajectories=self.num_mc_trajectories,
                 horizon=self.horizon,
-                selection='distribution',
                 threshold=self.prune_threshold,
                 processes=self.processes,
                 seed=self.seed,
                 verbose=False,
                 use_tqdm=True)
-
-            if verbose:
-                logging.info(f'Estimated Feature Counts {expected_fc}')
 
             # gradient descent step, update reward weights
             grad = empirical_fc - expected_fc
@@ -154,16 +152,17 @@ class MIRLToM(MaxEntRewardLearning):
             e += 1
 
         if verbose:
-            self.log_progress(e, self.theta, diff, learning_rate, step_time)
+            self.log_progress(e, diff, learning_rate, step_time, expected_fc)
             logging.info(f'Finished, total time: {sum(times):.2f} secs.')
 
         self.agent.setAttribute('rationality', old_rationality)
+        self.agent.setAttribute('R', old_reward)
 
         # returns stats dictionary
         return ModelLearningResult(data_id, trajectories, {
-            FEATURE_COUNT_DIFF_STR: np.array([diffs]),
-            REWARD_WEIGHTS_STR: np.array(thetas).T,
-            THETA_STR: self.theta,
-            TIME_STR: np.array([times]),
-            LEARN_RATE_STR: np.array([rates])
+            FEATURE_COUNT_DIFF_STR: np.array(diffs),  # shape (timesteps, )
+            REWARD_WEIGHTS_STR: np.array(thetas),  # shape (timesteps, n_features)
+            THETA_STR: self.theta,  # shape (n_features, )
+            TIME_STR: np.array(times),  # shape (timesteps, )
+            LEARN_RATE_STR: np.array(rates)  # shape (timesteps, )
         })
