@@ -4,7 +4,7 @@ import os
 import tqdm
 from typing import List, Optional
 
-from model_learning import TeamTrajectory, TeamModelDistTrajectory
+from model_learning import TeamTrajectory
 from model_learning.bin.sar import add_common_arguments, create_sar_world, create_observers
 from model_learning.inference import plot_team_model_inference, team_trajectories_model_inference
 from model_learning.util.cmd_line import save_args
@@ -20,6 +20,8 @@ __description__ = 'Performs reward model inference in the search-and-rescue doma
                   'An observer agent then maintains beliefs (a probability distribution over reward models) about ' \
                   'each other agent, which are updated via PsychSim inference according to the agents\' actions' \
                   'in the given trajectories. Trajectories with model inference are saved into a .pkl file.'
+
+TRAJECTORIES_FILE = 'trajectories.pkl.gz'
 
 
 def main():
@@ -60,16 +62,13 @@ def main():
         seed=args.seed,
         verbose=logging.NOTSET < args.verbosity <= logging.INFO)
 
-    output_dir = args.output
+    logging.info('========================================')
+    logging.info(f'Saving results to {output_dir}...')
 
     # save all trajectories to pickle file
-    file_path = os.path.join(output_dir, 'trajectories.pkl.gz')
+    file_path = os.path.join(output_dir, TRAJECTORIES_FILE)
     logging.info(f'Saving trajectories to {file_path}...')
     save_object(team_model_dist_trajs, file_path, compress_gzip=True)
-
-    # TODO
-    file_path = os.path.join(output_dir, 'trajectories.pkl.gz')
-    trajectories: List[TeamModelDistTrajectory] = load_object(file_path)
 
     dummy_plotly()  # to clear plotly import message
 
@@ -79,7 +78,7 @@ def main():
     for role, ag_conf in tqdm.tqdm(team_config.items()):
         for other_role, models in ag_conf.mental_models.items():
             output_img = os.path.join(plots_dir, f'{role.lower()}_{other_role.lower()}_inference.{args.img_format}')
-            plot_team_model_inference(trajectories, role, other_role, output_img)
+            plot_team_model_inference(team_model_dist_trajs, role, other_role, output_img)
 
     logging.info('Done!')
 

@@ -1,10 +1,11 @@
+import copy
+
 import argparse
 import logging
 import os
 import tqdm
 from typing import List, Tuple, Dict
 
-from model_learning import TeamModelsDistributions
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentProfile
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model
@@ -36,7 +37,8 @@ RATIONALITY = 1 / 0.1
 # default model params (make models less rational to get smoother (more cautious) inference over models)
 
 # default common params
-PRUNE_THRESHOLD = 1e-4  # 1e-2
+BELIEF_THRESHOLD = 1e-5
+PRUNE_THRESHOLD = 1e-2
 PROCESSES = -1
 CLEAR = False  # True  # False
 PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
@@ -131,7 +133,7 @@ def create_sar_world(args: argparse.Namespace) -> \
         agent.setAttribute('horizon', args.get('horizon', HORIZON))
         agent.setAttribute('rationality', args.get('rationality', RATIONALITY))
         agent.setAttribute('discount', args.get('discount', DISCOUNT))
-        agent.belief_threshold = args.get('prune', PRUNE_THRESHOLD)
+        agent.belief_threshold = BELIEF_THRESHOLD
 
     return env, team, team_config, profiles
 
@@ -144,7 +146,7 @@ def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, pro
     :param AgentProfiles profiles: the set of agent profiles.
     """
     logging.info('Creating agent models...')
-    for role, ag_conf in tqdm.tqdm(team_config.items()):
+    for role in tqdm.tqdm(team_config.get_all_modeled_roles()):
         agent = env.world.agents[role]
         agent_lrv = SearchRescueRewardVector(env, agent)
 
@@ -192,25 +194,30 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
                 dist = Distribution({f'{other}_{model}': prob for model, prob in models_probs.items()})
                 dist.normalize()
                 world.setMentalModel(agent.name, other, dist, model=None)
-                logging.info(f'Set mental models to agent {role} of agent {other}:\n{dist}')
+                logging.info(f'Set agent {role}\'s mental models of agent {other}:\n{dist}')
 
-            zero_level = agent.zero_level(static=True, sample=True)
+            # zero_level = agent.get_true_model()
+            # zero_level = agent.zero_level(static=False, sample=True)
+            # zero_level = f'{agent.name}_zero'
+            # agent.addModel(zero_level, parent=agent.get_true_model())
+            # agent.setAttribute('R', copy.copy(agent.getAttribute('R', model=agent.get_true_model())), model=zero_level)
 
             # also, set mental model of other agents' models to a zero-level model
             # (exact same behavior as true agent) to avoid infinite recursion
             for other, models_probs in ag_conf.mental_models.items():
                 for model in models_probs.keys():
-                    # zero_level = f'{agent.name}_zero_{other_ag}_{model}'
-                    # agent.addModel(zero_level, parent=agent.get_true_model())
+                    model = f'{other}_{model}'
+
+                    zero_level = f'{agent.name}_zero_{other}_{model}'
+                    agent.addModel(zero_level, parent=agent.get_true_model())
                     # agent.setAttribute('level', 0, model=zero_level)
                     # agent.setAttribute('beliefs', True, model=zero_level)
-                    # world.setMentalModel(agent.name, other_ag, f'{other_ag}_{model}', model=zero_level)
+                    world.setMentalModel(agent.name, other, model, model=zero_level)
 
                     # if world.agents[other_ag].getAttribute('beliefs', model= f'{other_ag}_{model}') is True:
                     #     world.agents[other_ag].create_belief_state(model=f'{other_ag}_{model}')
 
-                    model = f'{other}_{model}'
-                    world.agents[other].create_belief_state(model=model)
+                    # world.agents[other].create_belief_state(model=model)
                     world.setMentalModel(other, agent.name, zero_level, model=model)
 
 
@@ -235,7 +242,7 @@ def create_observers(env: SearchRescueGridWorld,
 
     logging.info('Creating observers and setting mental models...')
     init_models_dists = team_config.get_models_distributions()  # creates initial distributions over models
-    observers = create_inference_observers(env.world, init_models_dists, belief_threshold=PRUNE_THRESHOLD)
+    observers = create_inference_observers(env.world, init_models_dists, belief_threshold=BELIEF_THRESHOLD)
 
     # logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
     models_dists = get_model_distributions(observers, init_models_dists)

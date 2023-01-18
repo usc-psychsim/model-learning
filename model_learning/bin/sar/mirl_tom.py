@@ -5,11 +5,14 @@ from typing import Optional, List
 
 from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms.mirl_tom import MIRLToM
-from model_learning.bin.sar import add_common_arguments, create_sar_world, create_mental_models
+from model_learning.bin.sar import add_common_arguments, create_sar_world, create_agent_models
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import save_args, str2bool
-from model_learning.util.io import create_clear_dir, load_object
+from model_learning.util.io import create_clear_dir, load_object, save_object
 from model_learning.util.logging import change_log_handler, MultiProcessLogger
+from model_learning.util.plot import dummy_plotly
+from psychsim.agent import Agent
+from psychsim.world import World
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
 __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
@@ -26,6 +29,8 @@ DECREASE_RATE = True
 EXACT = False
 NUM_MC_TRAJECTORIES = 16  # 10
 HORIZON = 2
+
+RESULTS_FILE = 'results.pkl.gz'
 
 
 def main():
@@ -45,7 +50,19 @@ def main():
     # create world and agents
     env, team, team_config, profiles = create_sar_world(args)
 
-    learner_ag = args.agent
+    # load trajectories
+    logging.info('========================================')
+    logging.info(f'Loading team trajectories from {args.traj_file}...')
+    trajectories: List[TeamModelDistTrajectory] = load_object(args.traj_file)
+    logging.info(f'Loaded {len(trajectories)} team trajectories of length {len(trajectories[0])}')
+
+    # checks trajectories against team config
+    assert all(role in team_config for role in trajectories[0][0].models_dists.keys()), \
+        f'Mismatch encountered between agents in the trajectories and the ones defined ' \
+        f'in the configuration: {list(team_config.keys())}'
+
+    # checks agent
+    learner_ag: str = args.agent
     assert learner_ag in team_config, \
         f'The provided agent role: {learner_ag} is not defined in the configuration:  {list(team_config.keys())}'
 
@@ -55,25 +72,34 @@ def main():
         if role != learner_ag:
             del team_config[role]
 
-    # creates mental models of the other agents
-    create_mental_models(env, team_config, profiles)
+    # checks model distributions in trajectories (considered consistent)
+    models_dists = trajectories[0][0].models_dists
+    for other, models in team_config[learner_ag].mental_models.items():
+        assert other in models_dists[learner_ag], \
+            f'Agent {other} not present in trajectories\' mental model distribution ' \
+            f'of agent {learner_ag}: {list(models_dists.keys())}'
+        for model in models.keys():
+            assert f'{other}_{model}' in models_dists[learner_ag][other], \
+                f'Model {model} of agent {other} not present in trajectories\' mental model distribution ' \
+                f'of agent {learner_ag}: {list(models_dists[other].keys())}'
+
+    # creates models of the other agents and create new models of learner agent to avoid cycles
+    create_agent_models(env, team_config, profiles)
+    learner_ag: Agent = env.world.agents[learner_ag]
+    world: World = learner_ag.world
+    for other, models in team_config[learner_ag.name].mental_models.items():
+        for model in models.keys():
+            model = f'{other}_{model}'
+            learner_model = f'{model}_zero_{learner_ag.name}'
+            learner_ag.addModel(learner_model, parent=learner_ag.get_true_model())
+            world.setMentalModel(learner_ag.name, other, model, model=learner_model)
+            world.setMentalModel(other, learner_ag.name, learner_model, model=model)
 
     env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
-
-    # load trajectories
-    logging.info('========================================')
-    logging.info(f'Loading team trajectories from {args.traj_file}...')
-    trajectories: List[TeamModelDistTrajectory] = load_object(args.traj_file)
-    logging.info(f'Loaded {len(trajectories)} team trajectories of length {len(trajectories[0])}')
-
-    assert all(role in team_config for role in trajectories[0][0].models_dists.keys()), \
-        f'Mismatch encountered between agents in the trajectories and the ones defined ' \
-        f'in the configuration: {list(team_config.keys())}'
 
     logging.info('========================================')
     logging.info(f'Performing decentralized IRL for agent: {learner_ag}...')
 
-    learner_ag = env.world.agents[learner_ag]
     learner_rwd_vector = SearchRescueRewardVector(env, learner_ag)
     alg = MIRLToM(
         'max-ent', learner_ag, learner_rwd_vector,
@@ -88,13 +114,24 @@ def main():
         horizon=args.horizon,
         processes=args.processes,
         seed=args.seed)
-    result = alg.learn(trajectories, verbose=args.verbosity <= logging.INFO)
+
+    results = alg.learn(trajectories, verbose=args.verbosity <= logging.INFO)
 
     logging.info('========================================')
     logging.info(f'Saving results to {output_dir}...')
-    alg.save_results(result, output_dir, img_format=args.img_format)
 
-    # TODO save resulting vector
+    dummy_plotly()  # to clear plotly import message
+
+    # creates and saves plots with IRL stats
+    results_dir = os.path.join(output_dir, 'results')
+    create_clear_dir(results_dir, clear=False)
+    logging.info(f'Saving IRL stats to {results_dir}...')
+    alg.save_results(results, results_dir, img_format=args.img_format)
+
+    # save results to pickle file
+    file_path = os.path.join(output_dir, RESULTS_FILE)
+    logging.info(f'Saving results to {file_path}...')
+    save_object(results, file_path, compress_gzip=True)
 
     logging.info('Done!')
 
