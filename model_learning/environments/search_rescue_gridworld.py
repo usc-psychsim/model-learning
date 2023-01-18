@@ -733,8 +733,8 @@ class SearchRescueGridWorld(GridWorld):
         victim_icon = plt.imread(VICTIM_ICON)
 
         for traj_i, team_traj in tqdm.tqdm(enumerate(team_trajectories), total=len(team_trajectories)):
-            fig, axes = plt.subplots(len(self.team))
-            fig.set_tight_layout(True)
+            fig, axes = plt.subplots(len(self.team), figsize=(3, 3 * len(self.team)))  # , layout='constrained')
+
             # plot base environment
             # plots grid with cell numbers
             grid = np.zeros((self.height, self.width))

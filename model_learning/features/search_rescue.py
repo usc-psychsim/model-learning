@@ -5,8 +5,8 @@ from model_learning.environments.gridworld import NOOP_ACTION
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, DIST_TO_VIC_FEATURE, \
     VICS_CLEARED_FEATURE, SEARCH_ACTION, TRIAGE_ACTION, EVACUATE_ACTION, CALL_ACTION, DIST_TO_HELP_FEATURE, \
     NUM_EMPTY_FEATURE
-from model_learning.features import LinearRewardVector
-from model_learning.features.linear import LinearRewardFeature, NumericLinearRewardFeature, ActionLinearRewardFeature
+from model_learning.features.linear import LinearRewardFeature, NumericLinearRewardFeature, ActionLinearRewardFeature, \
+    LinearRewardVector
 from psychsim.agent import Agent
 
 __author__ = 'Pedro Sequeira, Haochen Wu'
