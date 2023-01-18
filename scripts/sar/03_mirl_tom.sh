@@ -9,15 +9,24 @@ cd "$DIR/../../.." || exit
 clear
 
 echo "========================================"
-echo "Performing model inference Using '${INF_TEAM_CONFIG}', saving results in ${MODEL_INF_DIR}..."
+echo "Performing MIRL-ToM using '${INF_TEAM_CONFIG}', saving results in ${MIRL_DIR}..."
 
-python -m model_learning.bin.sar.model_inference \
+python -m model_learning.bin.sar.mirl_tom \
   --team-config=$INF_TEAM_CONFIG \
-  --traj-file=$TRAJ_FILE \
-  --output=$MODEL_INF_DIR \
+  --traj-file=$INF_TRAJ_FILE \
+  --agent="Medic" \
+  --output=$MIRL_DIR \
   --size=$ENV_SIZE \
   --victims=$NUM_VICTIMS \
   --vics-cleared-feature=$VICS_CLEARED_FEAT \
+  --learning-rate=0.05 \
+  --decrease-rate=$DECREASE_RATE \
+  --normalize=$NORM_THETA \
+  --epochs=$MAX_EPOCHS \
+  --threshold=$DIFF_THRESHOLD \
+  --exact=$EXACT \
+  --monte-carlo=$NUM_MC_TRAJECTORIES \
+  --horizon=$HORIZON \
   --prune=$PRUNE_THRESH \
   --img-format=$IMG_FORMAT \
   --processes=$PROCESSES \
@@ -27,4 +36,4 @@ python -m model_learning.bin.sar.model_inference \
 
 echo "========================================"
 echo "Saving pip packages..."
-pip freeze >"${MODEL_INF_DIR}/packages.txt"
+pip freeze >"${MIRL_DIR}/packages.txt"
