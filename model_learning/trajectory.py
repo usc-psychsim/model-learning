@@ -7,12 +7,13 @@ import random
 from typing import List, Dict, Any, Optional
 
 from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
-    TeamStateActionModelDist, TeamModelDistTrajectory, SelectionType
+    TeamStateActionModelDist, TeamModelDistTrajectory, SelectionType, State, TeamModelsDistributions
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_random_value
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, turnKey, actionKey, setToConstantMatrix, makeTree
+from psychsim.pwl import modelKey, turnKey, actionKey, setToConstantMatrix, makeTree, VectorDistributionSet, \
+    isSpecialKey
 from psychsim.world import World
 
 __author__ = 'Pedro Sequeira'
@@ -43,6 +44,19 @@ def copy_world(world: World) -> World:
         new_agent.world = new_world  # assigns cloned world to cloned agent
         agent.world = world  # puts original world back to old agent
     return new_world
+
+
+def update_state(state: VectorDistributionSet, new_state: VectorDistributionSet):
+    """
+    Updates a state based on the value sof another state (overrides values).
+    :param VectorDistributionSet state: the state to be updated.
+    :param VectorDistributionSet new_state: the state from which to get the values used to update the first state.
+    """
+    # TODO the update() method of PsychSim state appears not to be working
+    for key in new_state.keys():
+        if key in state and not isSpecialKey(key):
+            val = new_state.certain[key] if new_state.keyMap[key] is None else new_state[key]
+            state.join(key, val)
 
 
 def generate_trajectory(agent: Agent,
@@ -87,12 +101,13 @@ def generate_trajectory(agent: Agent,
 
     random.seed(seed)
 
+    if model is not None:
+        world.setFeature(modelKey(agent.name), model)
+
     # for each step, takes action and registers state-action pairs
     trajectory: Trajectory = []
     total = 0
     prob = 1.
-    if model is not None:
-        world.setFeature(modelKey(agent.name), model)
     for i in range(trajectory_length):
         start = timer()
 
@@ -102,7 +117,7 @@ def generate_trajectory(agent: Agent,
             world.step()
             turn = world.getFeature(turnKey(agent.name), unique=True)
 
-        prev_world = copy_world(world)  # keep (possibly stochastic) state and prob before selection
+        prev_state = copy.deepcopy(world.state)  # keep (possibly stochastic) state and prob before selection
         prev_prob = prob
         if select:
             # select if state is stochastic and update probability of reaching state
@@ -111,7 +126,7 @@ def generate_trajectory(agent: Agent,
         # steps the world (do not select), gets the agent's action
         world.step(select=False, horizon=horizon, tiebreak=selection, threshold=threshold)
         action = world.getAction(agent.name)
-        trajectory.append(StateActionPair(prev_world.state, action, prev_prob))
+        trajectory.append(StateActionPair(prev_state, action, prev_prob))
 
         step_time = timer() - start
         total += step_time
@@ -172,6 +187,284 @@ def generate_trajectories(agent: Agent,
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
+                     f'{timer() - start:.3f}s')
+
+    return trajectories
+
+
+def generate_trajectory_distribution(agent: Agent,
+                                     initial_state: Optional[State],
+                                     trajectory_length: int,
+                                     exact: bool,
+                                     num_mc_trajectories: int,
+                                     model: Optional[str],
+                                     horizon: Optional[int],
+                                     threshold: Optional[float],
+                                     processes: Optional[int],
+                                     seed: int,
+                                     verbose: bool) -> List[Trajectory]:
+    """
+    Generates a distribution over trajectories (paths) by sampling an agent's stochastic policy in the environment
+    starting from the given state. It can perform exact computation (via PsychSim planning without selection), or
+    sample Monte-Carlo trajectories to approximate the distribution.
+    :param Agent agent: the PsychSim agent whose stochastic policy we want to compute the distribution.
+    :param State initial_state: the optional initial state from which the agent should depart.
+    :param int trajectory_length: the length of the trajectory which distribution we want to compute.
+    :param bool exact: whether to perform an exact computation, resulting in a single trajectory being generated
+    by setting `select=False` while stepping the Psychsim agent.
+    :param int num_mc_trajectories: the number of (deterministic) Monte-Carlo trajectories to sample, if `exact=False`.
+    :param str model: the agent's model to use.
+    :param int horizon: the agent's planning horizon while producing the trajectories.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :rtype: list[Trajectory]
+    :return: a list containing the generated agent trajectories.
+    """
+
+    # make copy of world and set initial state
+    world = copy_world(agent.world)
+    _agent = world.agents[agent.name]
+    if initial_state is not None:
+        update_state(world.state, initial_state)
+
+    if exact:
+        # exact computation, generate a single stochastic trajectory (select=False) from initial state
+        trajectory_dist = generate_trajectory(_agent, trajectory_length, model=model, select=False,
+                                              horizon=horizon, selection='distribution', threshold=threshold,
+                                              seed=seed, verbose=verbose)
+        return [trajectory_dist]
+
+    # Monte Carlo approximation, generate N deterministic (single-path) trajectories (select=True) from initial state
+    trajectories_mc = generate_trajectories(_agent, num_mc_trajectories, trajectory_length,
+                                            model=model, select=True,
+                                            horizon=horizon, selection='distribution', threshold=threshold,
+                                            processes=processes, seed=seed, verbose=verbose,
+                                            use_tqdm=False)
+    return trajectories_mc
+
+
+def generate_trajectory_distribution_tom(agent: Agent,
+                                         initial_state: Optional[State],
+                                         models_dists: List[TeamModelsDistributions],
+                                         exact: bool,
+                                         num_mc_trajectories: int,
+                                         model: Optional[str],
+                                         horizon: Optional[int],
+                                         threshold: Optional[float],
+                                         processes: Optional[int],
+                                         seed: int,
+                                         verbose: bool) -> List[Trajectory]:
+    """
+    Generates a distribution over trajectories (paths) by sampling an agent's stochastic policy in the environment
+    starting from the given state. It can perform exact computation (via PsychSim planning without selection), or
+    sample Monte-Carlo trajectories to approximate the distribution.
+    This function is to be applied to multiagent scenarios, where an agent models other agents. A distribution over
+    models of others is used during trajectory generation to sample their actions.
+    :param Agent agent: the PsychSim agent whose stochastic policy we want to compute the distribution.
+    :param State initial_state: the optional initial state from which the agent should depart.
+    :param list[TeamModelsDistributions] models_dists: the sequence of distributions over other agents' models. The
+    length of this sequence is used to compute the trajectory distribution.
+    :param bool exact: whether to perform an exact computation, resulting in a single trajectory being generated
+    by setting `select=False` while stepping the Psychsim agent.
+    :param int num_mc_trajectories: the number of (deterministic) Monte-Carlo trajectories to sample, if `exact=False`.
+    :param str model: the agent's model to use.
+    :param int horizon: the agent's planning horizon while producing the trajectories.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :rtype: list[Trajectory]
+    :return: a list containing the generated agent trajectories.
+    """
+
+    # make copy of world and set initial state
+    world = copy_world(agent.world)
+    agent = world.agents[agent.name]
+    if initial_state is not None:
+        update_state(world.state, initial_state)
+
+    if exact:
+        # exact computation, generate a single stochastic trajectory (select=False) from initial state
+        trajectory_dist = generate_trajectory_tom(agent, models_dists, model=model, select=False,
+                                                  horizon=horizon, selection='distribution', threshold=threshold,
+                                                  seed=seed, verbose=verbose)
+        return [trajectory_dist]
+
+    # Monte Carlo approximation, generate N deterministic (single-path) trajectories (select=True) from initial state
+    trajectories_mc = generate_trajectories_tom(agent, num_mc_trajectories, models_dists,
+                                                model=model, select=True,
+                                                horizon=horizon, selection='distribution', threshold=threshold,
+                                                processes=processes, seed=seed, verbose=verbose,
+                                                use_tqdm=False)
+    return trajectories_mc
+
+
+def generate_trajectory_tom(agent: Agent,
+                            models_dists: List[TeamModelsDistributions],
+                            init_feats: Optional[Dict[str, Any]] = None,
+                            model: Optional[str] = None,
+                            select: Optional[bool] = None,
+                            horizon: Optional[int] = None,
+                            selection: Optional[SelectionType] = None,
+                            threshold: Optional[float] = None,
+                            seed: int = 0,
+                            verbose: bool = False) -> Trajectory:
+    """
+    Generates a number of fixed-length agent trajectories in multiagent settings where the agent simulates the
+    decisions of other agents using Theory-of-Mind. A distribution over others' models is used at each step to
+    compute their decisions.
+    :param Agent agent: the agent for which to record the actions
+    :param list[TeamModelsDistributions] models_dists: the sequence of distributions over other agents' models. The
+    length of this sequence is used to compute the trajectory distribution.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
+    :param str model: the agent model used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
+    :param int horizon: the agent's planning horizon.
+    :param str selection: the action selection criterion, to untie equal-valued actions.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :rtype: TeamModelDistTrajectory]
+    :return: the trajectory containing a list of state-action-model_distribution tuples.
+    """
+    # copy world and get agents
+    world = copy_world(agent.world)
+    agent: Agent = world.agents[agent.name]
+    other_agents: List[Agent] = [world.agents[other] for other in models_dists[0][agent.name].keys()]
+
+    # generate or select initial state features
+    if init_feats is not None:
+        rng = random.Random(seed)
+        for feature, init_value in init_feats.items():
+            if init_value is None:
+                init_value = get_random_value(world, feature, rng)
+            elif isinstance(init_value, List):
+                init_value = rng.choice(init_value)
+            world.setFeature(feature, init_value)
+
+    random.seed(seed)
+
+    if model is not None:
+        world.setFeature(modelKey(agent.name), model)
+
+    # for each step, agent takes action while
+    n_steps = len(models_dists)
+    trajectory: Trajectory = []
+    total = 0
+    prob = 1.
+    for i in range(n_steps):
+        start = timer()
+
+        # compute other agents' actions based on provided distribution over their models
+        other_actions = {}
+        for other in other_agents:
+            # get agent's mental model distribution over other agents at this step
+            dist = models_dists[i][agent.name][other.name]
+            if select:
+                # select only one model
+                model, model_prob = dist.sample()
+                dist = Distribution({model: 1.})
+                prob *= model_prob  # weight this path
+
+            # compute action for each of other's models, weight by prob
+            other_models = other.models.copy()
+            agent_models = agent.models.copy()
+            action_dist = {}
+            for model, model_prob in dist.items():
+                decision = other.decide(selection='random', model=model)
+                action = world.value2float(actionKey(other.name), decision['action'])
+                action_dist[setToConstantMatrix(actionKey(other.name), action)] = model_prob
+            other.models = other_models  # we don't need all the new models
+            agent.models = agent_models
+
+            other_actions[other.name] = makeTree(Distribution(action_dist))
+
+        # step the world until it's this agent's turn
+        turn = world.getFeature(turnKey(agent.name), unique=True)
+        while turn != 0:
+            world.step()
+            turn = world.getFeature(turnKey(agent.name), unique=True)
+
+        prev_state = copy.deepcopy(world.state)
+        prev_prob = prob
+        if select:
+            # select if state is stochastic and update probability of reaching state
+            prob *= world.state.select()
+
+        # step the world to compute agent's action conditioned on other agents' actions
+        world.step(actions=other_actions, select=False, horizon=horizon, tiebreak=selection,
+                   threshold=threshold, updateBeliefs=False)
+
+        action = world.getAction(agent.name)
+        trajectory.append(StateActionPair(prev_state, action, prev_prob))
+
+        step_time = timer() - start
+        total += step_time
+        if verbose:
+            logging.info(f'Step {i} took {step_time:.2f}')
+
+    if verbose:
+        logging.info(f'Total time: {total:.2f}s')
+
+    return trajectory
+
+
+def generate_trajectories_tom(agent: Agent,
+                              n_trajectories: int,
+                              models_dists: List[TeamModelsDistributions],
+                              init_feats: Optional[Dict[str, Any]] = None,
+                              model: Optional[str] = None,
+                              select: Optional[bool] = None,
+                              horizon: Optional[int] = None,
+                              selection: Optional[SelectionType] = None,
+                              threshold: Optional[float] = None,
+                              processes: int = -1,
+                              seed: int = 0,
+                              verbose: bool = False,
+                              use_tqdm: bool = True) -> List[Trajectory]:
+    """
+    Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
+    This function is to be applied to multiagent scenarios, where an agent models other agents. A distribution over
+    models of others is used during trajectory generation to sample their actions.
+    :param Agent agent: the agent for which to record the actions.
+    :param int n_trajectories: the number of trajectories to be generated.
+    :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
+    trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
+    values to choose from, a single value, or `None`, in which case a random value will be picked based on the
+    feature's domain.
+    :param list[TeamModelsDistributions] models_dists: the sequence of distributions over other agents' models. The
+    length of this sequence is used to compute the trajectory distribution.
+    :param str model: the agent model used to generate the trajectories.
+    :param bool select: whether to select from stochastic states after each world step.
+    :param int horizon: the agent's planning horizon.
+    :param str selection: the action selection criterion, to untie equal-valued actions.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+    :rtype: list[Trajectory]
+    :return: a list of trajectories, each containing a list of state-action pairs.
+    """
+    # initial checks
+    world = agent.world
+    if init_feats is not None:
+        for feature in init_feats:
+            assert feature in world.variables, f'World does not have feature \'{feature}\'!'
+
+    # generates each trajectory in parallel using a different random seed
+    start = timer()
+    args = [(agent, models_dists, init_feats, model, select, horizon, selection, threshold, seed + t, verbose)
+            for t in range(n_trajectories)]
+    trajectories: List[Trajectory] = run_parallel(generate_trajectory_tom, args, processes=processes, use_tqdm=use_tqdm)
+
+    if verbose:
+        logging.info(f'Total time for generating {n_trajectories} trajectories of length {len(models_dists)}: '
                      f'{timer() - start:.3f}s')
 
     return trajectories
@@ -481,179 +774,6 @@ def generate_expert_learner_trajectories(expert_team: List[Agent],
 
     if verbose:
         logging.info(f'Total time for generating {n_trajectories} trajectories of length {trajectory_length}: '
-                     f'{timer() - start:.3f}s')
-
-    return trajectories
-
-
-def generate_trajectory_with_inference(learner_agent: Agent,
-                                       team_trajs: List[TeamModelDistTrajectory],
-                                       traj_i: int,
-                                       learner_model: Optional[str] = None,
-                                       select: Optional[bool] = None,
-                                       horizon: Optional[int] = None,
-                                       selection: Optional[SelectionType] = None,
-                                       threshold: Optional[float] = None,
-                                       seed: int = 0,
-                                       verbose: bool = False) -> TeamModelDistTrajectory:
-    """
-    Generates a number of fixed-length agent trajectories with model inference of the other agents.
-    :param Agent learner_agent: the agent for which to record the actions
-    :param List[TeamModelDistTrajectory] team_trajs: the recorded trajectories of inference
-    :param int traj_i: the index of the recorded trajectory
-    :param str learner_model: the agent model used to generate the trajectories.
-    :param bool select: whether to select from stochastic states after each world step.
-    :param int horizon: the agent's planning horizon.
-    :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int seed: the seed used to initialize the random number generator.
-    :param bool verbose: whether to show information at each timestep during trajectory generation.
-    :rtype: TeamModelDistTrajectory]
-    :return: the trajectory containing a list of state-action-model_distribution tuples.
-    """
-    random.seed(seed)
-    n_step = len(team_trajs[traj_i])
-    init_state = team_trajs[traj_i][0].state
-
-    trajectory: TeamModelDistTrajectory = []
-    # reset to initial state and uniform dist of models
-    _world = copy_world(learner_agent.world)
-    init_state = copy.deepcopy(init_state)
-    del init_state[modelKey('observer')]
-    _world.state = init_state
-
-    team_agents = list(_world.agents.keys())
-    _team = [_world.agents[agent_name] for agent_name in team_agents]  # get new world's agents
-    learner_agent = _team[team_agents.index(learner_agent.name)]
-    if learner_model is not None:
-        _world.setFeature(modelKey(learner_agent.name), learner_model)
-
-    # learner.set_observations()
-    _world.setOrder([{_agent.name for _agent in _team}])
-    _world.dependency.getEvaluation()
-
-    total = 0
-    prob = 1
-    for step_i in range(n_step):
-        # print('====================')
-        # print(f'Step {step_i}:')
-        start = timer()
-
-        other_actions = {}
-        for ag_i, _agent in enumerate(_team):
-            if _agent.name != learner_agent.name:
-                true_model = _agent.get_true_model()
-                model_names = [name for name in _agent.models.keys() if name != true_model]
-
-                included_features = set(learner_agent.getBelief(model=learner_agent.get_true_model()).keys())
-                learner_agent.resetBelief(include=included_features)  # override actual features in belief states
-
-                dist = Distribution({model: team_trajs[traj_i][step_i].model_dist[model] for model in model_names})
-                # dist = Distribution({f'{_agent.name}_GroundTruth': 1,
-                #                      f'{_agent.name}_Opposite': 0,
-                #                      f'{_agent.name}_Random': 0, })
-                # dist = Distribution({f'{_agent.name}_Random': 0,
-                #                      f'{_agent.name}_Task': 1,
-                #                      f'{_agent.name}_Social': 0,})
-                if select:
-                    dist, model_prob = dist.sample()
-                learner_agent.setBelief(modelKey(_agent.name), dist)
-
-                action_dist = []
-                model_names = _world.getFeature(modelKey(_agent.name),
-                                                state=learner_agent.getBelief(model=learner_agent.get_true_model()))
-
-                for model, model_prob in model_names.items():
-                    decision = _agent.decide(selection='random', model=model)
-                    action = decision['action']
-                    action = _world.value2float(actionKey(_agent.name), action)
-                    action_dist.append((setToConstantMatrix(actionKey(_agent.name), action), model_prob))
-                other_actions[_agent.name] = makeTree({'distribution': action_dist})
-
-        # step the world until it's this agent's turn
-        turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
-        while turn != 0:
-            _world.step()
-            turn = _world.getFeature(turnKey(learner_agent.name), unique=True)
-
-        prev_world = copy_world(_world)
-        prev_prob = prob
-        if select:
-            # select if state is stochastic and update probability of reaching state
-            prob *= _world.state.select()
-
-        _world.step(actions=other_actions, select=False, horizon=horizon, tiebreak=selection,
-                    threshold=threshold, updateBeliefs=False)
-
-        action = _world.getAction(learner_agent.name)
-        trajectory.append(TeamStateActionModelDist(prev_world.state,
-                                                   action,
-                                                   team_trajs[traj_i][step_i].model_dist,
-                                                   prev_prob))
-
-        step_time = timer() - start
-        total += step_time
-        if verbose:
-            logging.info(f'Step {step_i} took {step_time:.2f}')
-
-    if verbose:
-        logging.info(f'Total time: {total:.2f}s')
-
-    return trajectory
-
-
-def generate_trajectories_with_inference(learner_agent: Agent,
-                                         team_trajs: List[TeamModelDistTrajectory],
-                                         traj_i: int,
-                                         n_trajectories: int,
-                                         exact: bool = False,
-                                         learner_model: Optional[str] = None,
-                                         select: Optional[bool] = None,
-                                         horizon: Optional[int] = None,
-                                         selection: Optional[SelectionType] = None,
-                                         threshold: Optional[float] = None,
-                                         processes: int = -1,
-                                         seed: int = 0,
-                                         verbose: bool = False,
-                                         use_tqdm: bool = True
-                                         ) -> List[TeamModelDistTrajectory]:
-    """
-    Generates a number of fixed-length agent trajectories with model inference of the other agents.
-    :param Agent learner_agent: the agent for which to record the actions
-    :param List[TeamModelDistTrajectory] team_trajs: the recorded trajectories of inference
-    :param int traj_i: the index of the recorded trajectory
-    :param int n_trajectories: the number of trajectories to be generated.
-    :param bool exact: whether to perform exact step of the world
-    :param str learner_model: the agent model used to generate the trajectories.
-    :param bool select: whether to select from stochastic states after each world step.
-    :param int horizon: the agent's planning horizon.
-    :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-    :param int processes: number of processes to use. Follows `joblib` convention.
-    :param int seed: the seed used to initialize the random number generator.
-    :param bool verbose: whether to show information at each timestep during trajectory generation.
-    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
-    :rtype: list[TeamModelDistTrajectory]
-    :return: a list of trajectories, each containing a list of state-action-model_distribution tuples.
-    """
-    if exact:
-        # exact computation, generate single stochastic trajectory (select=False) from initial state
-        trajectory_dist = generate_trajectory_with_inference(learner_agent, team_trajs, traj_i,
-                                                             learner_model=learner_model, select=True,
-                                                             horizon=horizon, selection='distribution',
-                                                             threshold=threshold,
-                                                             seed=seed, verbose=verbose)
-        return [trajectory_dist]
-
-    start = timer()
-    args = [(learner_agent, team_trajs, traj_i, learner_model, select,
-             horizon, selection, threshold, seed + t, verbose)
-            for t in range(n_trajectories)]
-    trajectories: List[TeamModelDistTrajectory] = run_parallel(
-        generate_trajectory_with_inference, args, processes=processes, use_tqdm=False)
-
-    if verbose:
-        logging.info(f'Total time for generating {n_trajectories} trajectories: '
                      f'{timer() - start:.3f}s')
 
     return trajectories

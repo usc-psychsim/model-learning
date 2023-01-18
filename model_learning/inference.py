@@ -12,12 +12,12 @@ from typing import List, Optional, Dict
 
 from model_learning import Trajectory, TeamModelsDistributions, TeamModelDistTrajectory, TeamTrajectory, \
     TeamStateActionModelDist, ModelDistTrajectory, StateActionModelDist
-from model_learning.trajectory import copy_world
+from model_learning.trajectory import copy_world, update_state
 from model_learning.util.mp import run_parallel
 from model_learning.util.plot import plot_timeseries
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
-from psychsim.pwl import modelKey, VectorDistributionSet, isSpecialKey, makeTree, setToConstantMatrix, actionKey
+from psychsim.pwl import modelKey, makeTree, setToConstantMatrix, actionKey
 from psychsim.world import World
 
 __author__ = 'Pedro Sequeira, Haochen Wu'
@@ -121,19 +121,6 @@ def plot_model_inference(trajectories: List[ModelDistTrajectory], agent: str, ou
                            legend=dict(x=0.01, y=0.99, yanchor='top'))
 
 
-def update_state(state: VectorDistributionSet, new_state: VectorDistributionSet):
-    """
-    Updates a state based on the value sof another state (overrides values).
-    :param VectorDistributionSet state: the state to be updated.
-    :param VectorDistributionSet new_state: the state from which to get the values used to update the first state.
-    """
-    # TODO the update() method of PsychSim state appears not to be working
-    for key in new_state.keys():
-        if key in state and not isSpecialKey(key):
-            val = new_state.certain[key] if new_state.keyMap[key] is None else new_state[key]
-            state.join(key, val)
-
-
 def team_model_inference(world: World,
                          team: List[Agent],
                          trajectory: TeamTrajectory,
@@ -165,23 +152,23 @@ def team_model_inference(world: World,
     observers = {ag_name: world.agents[observer.name] for ag_name, observer in observers.items()}
 
     models_dists = get_model_distributions(observers, models_dists)  # gets initial observers' beliefs
-    n_step = len(trajectory)
+    n_steps = len(trajectory)
     team_trajectory: TeamModelDistTrajectory = []
     total = 0.
-    for i in range(n_step):
+    for i in range(n_steps):
         start = timer()
         # append state-action-models dists tuple
         state, team_action, prob = trajectory[i]
         team_trajectory.append(TeamStateActionModelDist(state, team_action, models_dists, prob))
+
+        if i == n_steps - 1:
+            break  # avoid last world step since it's not going to be included in the trajectory
 
         # synchronize all agents' beliefs with state in trajectory
         world.modelGC()
         for agent in team + list(observers.values()):
             for model in agent.models.values():
                 update_state(model['beliefs'], state)  # also reset agents' beliefs to match init state
-
-        # if i == n_step - 1:
-        #     break
 
         # get teams' actions as a (stochastic) dynamics tree
         team_action = {ag: makeTree(Distribution(
