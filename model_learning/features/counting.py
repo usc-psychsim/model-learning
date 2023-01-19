@@ -1,8 +1,8 @@
 import itertools as it
 import numpy as np
-from typing import Union, List, Callable, Optional
+from typing import List, Callable, Optional
 
-from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions
+from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, StateProbTrajectory
 from model_learning.trajectory import generate_trajectory_distribution, generate_trajectory_distribution_tom
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
@@ -11,7 +11,7 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def empirical_feature_counts(trajectories: Union[List[Trajectory], List[TeamModelDistTrajectory]],
+def empirical_feature_counts(trajectories: List[StateProbTrajectory],
                              feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
     """
     Computes the empirical (mean over paths) feature counts, i.e., the sum of the feature values for each state along
@@ -19,7 +19,7 @@ def empirical_feature_counts(trajectories: Union[List[Trajectory], List[TeamMode
     :param list[Trajectory] trajectories: a list of trajectories, each containing a sequence of state-action pairs.
     :param Callable feature_func: the function to extract the features out of each state.
     :rtype: np.ndarray
-    :return: the mean counts for each feature over all trajectories.
+    :return: an array of shape (num_features, ) containing the mean counts for each feature over all trajectories.
     """
     # gets feature counts for each timestep of each trajectory
     t_fcs = []
@@ -27,10 +27,10 @@ def empirical_feature_counts(trajectories: Union[List[Trajectory], List[TeamMode
     for trajectory in trajectories:
         fcs = []
         probs = []
-        for sap in trajectory:
+        for sp in trajectory:
             # gets feature values at this state weighted by its probability, shape: (num_features, )
-            fcs.append(feature_func(sap.state) * sap.prob)
-            probs.append(sap.prob)
+            fcs.append(feature_func(sp.state) * sp.prob)
+            probs.append(sp.prob)
         t_probs.append(probs)  # get probs during trajectory, shape: (timesteps, 1)
         t_fcs.append(fcs)  # shape: (timesteps, num_features)
 
@@ -99,7 +99,22 @@ def estimate_feature_counts_tom(agent: Agent,
                                 seed: int = 0,
                                 verbose: bool = False,
                                 use_tqdm: bool = True) -> np.ndarray:
+    """
 
+    :param agent:
+    :param trajectories:
+    :param feature_func:
+    :param exact:
+    :param num_mc_trajectories:
+    :param model:
+    :param horizon:
+    :param threshold:
+    :param processes:
+    :param seed:
+    :param verbose:
+    :param use_tqdm:
+    :return:
+    """
     args = []
     for t, trajectory in enumerate(trajectories):
         models_dists: List[TeamModelsDistributions] = [sadp.models_dists for sadp in trajectory]

@@ -15,7 +15,7 @@ State = VectorDistributionSet
 # types
 class StateActionPair(NamedTuple):
     """
-    Represents a state-action pair for a single agent, with associated a probability.
+    Represents a state-action pair for a single agent, with an associated likelihood.
     """
     state: State
     action: Distribution
@@ -24,7 +24,7 @@ class StateActionPair(NamedTuple):
 
 class StateActionModelDist(NamedTuple):
     """
-    Represents a state-action-model distribution tuple for a agents with an associated likelihood.
+    Represents a state-action-model distribution tuple for a single agent, with an associated likelihood.
     """
     state: State
     action: Distribution
@@ -61,3 +61,7 @@ class TeamStateActionModelDist(NamedTuple):
 
 TeamTrajectory = List[TeamStateActionPair]
 TeamModelDistTrajectory = List[TeamStateActionModelDist]
+
+StateProbTrajectory = Union[Trajectory, ModelDistTrajectory, TeamTrajectory, TeamModelDistTrajectory]
+SingleAgentTrajectory = Union[Trajectory, ModelDistTrajectory]
+MultiagentTrajectory = Union[TeamTrajectory, TeamModelDistTrajectory]

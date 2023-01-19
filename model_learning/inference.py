@@ -215,9 +215,9 @@ def team_trajectories_model_inference(world: World,
     """
     args = [(world, team, trajectories[t], observers, models_dists, threshold, seed + t, verbose)
             for t in range(len(trajectories))]
-    team_trajectories_with_model_dist: List[TeamModelDistTrajectory] = \
+    dist_trajectories: List[TeamModelDistTrajectory] = \
         run_parallel(team_model_inference, args, processes=processes, use_tqdm=True, mp_logging=verbose)
-    return team_trajectories_with_model_dist
+    return dist_trajectories
 
 
 def create_inference_observers(world: World,

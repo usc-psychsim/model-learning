@@ -4,7 +4,7 @@ import os
 import tqdm
 from typing import List, Optional
 
-from model_learning import TeamTrajectory
+from model_learning import TeamTrajectory, TeamModelDistTrajectory
 from model_learning.bin.sar import add_common_arguments, create_sar_world, create_observers
 from model_learning.inference import plot_team_model_inference, team_trajectories_model_inference
 from model_learning.util.cmd_line import save_args
@@ -54,13 +54,13 @@ def main():
 
     logging.info('========================================')
     logging.info(f'Performing model inference over {len(trajectories)} trajectories...')
-    team_model_dist_trajs = team_trajectories_model_inference(
+    team_model_dist_trajs: List[TeamModelDistTrajectory] = team_trajectories_model_inference(
         env.world, team, trajectories, observers,
         models_dists=team_config.get_models_distributions(),
         threshold=args.prune,
         processes=args.processes,
         seed=args.seed,
-        verbose=logging.NOTSET < args.verbosity <= logging.INFO)
+        verbose=args.verbosity <= logging.INFO)
 
     logging.info('========================================')
     logging.info(f'Saving results to {output_dir}...')
