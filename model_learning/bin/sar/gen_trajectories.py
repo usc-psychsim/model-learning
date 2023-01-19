@@ -1,14 +1,20 @@
 import argparse
 import logging
 import os
-from typing import get_args
+import pandas as pd
+from typing import get_args, List, Dict
 
-from model_learning import SelectionType
+from model_learning import SelectionType, TeamTrajectory
 from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models, DISCOUNT, HORIZON, \
     ACT_SELECTION, RATIONALITY
+from model_learning.features.counting import empirical_feature_counts
+from model_learning.features.search_rescue import SearchRescueRewardVector
+from model_learning.trajectory import get_trajectory_action_counts
 from model_learning.util.cmd_line import save_args
 from model_learning.util.io import create_clear_dir, save_object
 from model_learning.util.logging import change_log_handler
+from model_learning.util.plot import plot_bar, dummy_plotly
+from psychsim.action import Action
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
 __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
@@ -40,7 +46,7 @@ def main():
     logging.info(f'Generating {args.trajectories} trajectories of length {args.length}...')
 
     # generate trajectories using agents' policies and models
-    team_trajectories = env.generate_team_trajectories(
+    team_trajectories: List[TeamTrajectory] = env.generate_team_trajectories(
         team,
         trajectory_length=args.length,
         n_trajectories=args.trajectories,
@@ -65,6 +71,43 @@ def main():
     file_path = os.path.join(output_dir, TRAJECTORIES_FILE)
     logging.info(f'Saving trajectories to {file_path}...')
     save_object(team_trajectories, file_path, compress_gzip=True)
+
+    dummy_plotly()  # to clear plotly import message
+
+    # save trajectory statistics
+    stats_path = os.path.join(output_dir, 'stats')
+    create_clear_dir(stats_path, clear=False)
+    logging.info(f'Saving statistics of trajectories to {stats_path}...')
+
+    # gets weighted reward feature counts across all trajectories
+    for role in team_config.keys():
+        reward_vector = SearchRescueRewardVector(env, env.world.agents[role])
+        feature_func = lambda s: reward_vector.get_values(s)
+        efc = empirical_feature_counts(team_trajectories, feature_func)
+        plot_bar(pd.DataFrame(efc.reshape(1, -1), columns=reward_vector.names),
+                 'Empirical Feature Counts',
+                 os.path.join(stats_path, f'feature-counts-{role.lower()}.{args.img_format}'),
+                 x_label='Reward Features', y_label='Mean Count')
+
+    # gets actions counts for each agent
+    action_counts: Dict[str, Dict[str, List[int]]] = {}
+    for t, trajectory in enumerate(team_trajectories):
+        _action_counts = get_trajectory_action_counts(trajectory, env.world)
+        for agent in _action_counts.keys():
+            if agent not in action_counts:
+                action_counts[agent] = {}
+            for action, count in _action_counts[agent].items():
+                # filter action name
+                action = str(Action({k: v for k, v in dict(next(iter(action))).items()
+                                     if k not in ['subject', 'world']})).title()
+                if action not in action_counts[agent]:
+                    action_counts[agent][action] = []
+                action_counts[agent][action].append(count)
+
+    for agent, counts in action_counts.items():
+        plot_bar(pd.DataFrame(counts), f'Average Action Counts for {agent}',
+                 os.path.join(stats_path, f'action-counts-{agent.lower()}.{args.img_format}'),
+                 x_label='Action', y_label='Mean Count', plot_mean=True)
 
     logging.info('Done!')
 
