@@ -12,6 +12,7 @@ echo "========================================"
 echo "Processing '${GEN_TEAM_CONFIG}', saving results in ${TRAJ_DIR}..."
 
 python -m model_learning.bin.sar.gen_trajectories \
+  --profiles=$PROFILES \
   --team-config=$GEN_TEAM_CONFIG \
   --output=$TRAJ_DIR \
   --size=$ENV_SIZE \

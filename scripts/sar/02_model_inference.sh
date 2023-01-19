@@ -12,6 +12,7 @@ echo "========================================"
 echo "Performing model inference Using '${INF_TEAM_CONFIG}', saving results in ${MODEL_INF_DIR}..."
 
 python -m model_learning.bin.sar.model_inference \
+  --profiles=$PROFILES \
   --team-config=$INF_TEAM_CONFIG \
   --traj-file=$TRAJ_FILE \
   --output=$MODEL_INF_DIR \

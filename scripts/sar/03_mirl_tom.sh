@@ -12,6 +12,7 @@ echo "========================================"
 echo "Performing MIRL-ToM using '${INF_TEAM_CONFIG}', saving results in ${MIRL_DIR}..."
 
 python -m model_learning.bin.sar.mirl_tom \
+  --profiles=$PROFILES \
   --team-config=$INF_TEAM_CONFIG \
   --traj-file=$INF_TRAJ_FILE \
   --agent="Medic" \
@@ -19,7 +20,7 @@ python -m model_learning.bin.sar.mirl_tom \
   --size=$ENV_SIZE \
   --victims=$NUM_VICTIMS \
   --vics-cleared-feature=$VICS_CLEARED_FEAT \
-  --learning-rate=0.05 \
+  --learning-rate=0.01 \
   --decrease-rate=$DECREASE_RATE \
   --normalize=$NORM_THETA \
   --epochs=$MAX_EPOCHS \

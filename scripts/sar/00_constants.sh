@@ -5,6 +5,7 @@
 # ===============================================
 
 # experiment params
+PROFILES="model-learning/model_learning/res/sar/profiles.json"
 GEN_TEAM_CONFIG="model-learning/model_learning/res/sar/cond_known.json"             # config to generate GT trajectories
 INF_TEAM_CONFIG="model-learning/model_learning/res/sar/cond_unknown_gt_op_rnd.json" # config for model inference
 ENV_SIZE=3
@@ -29,8 +30,8 @@ SEED=17
 # ===============================================
 DISCOUNT=0.7
 HORIZON=2
-AG_SELECTION="softmax" # agents' action selection criterion, to untie equal-valued actions
-AG_RATIONALITY=20      # agents' rationality when selecting actions under a probabilistic criterion
+AG_SELECTION="random" #"softmax" # agents' action selection criterion, to untie equal-valued actions
+AG_RATIONALITY=20     # agents' rationality when selecting actions under a probabilistic criterion
 NUM_TRAJ=16
 TRAJ_LEN=25
 
