@@ -6,8 +6,8 @@ import numpy as np
 import random
 from typing import List, Dict, Any, Optional
 
-from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, \
-    TeamStateActionModelDist, TeamModelDistTrajectory, SelectionType, State, TeamModelsDistributions
+from model_learning import Trajectory, StateActionPair, TeamTrajectory, TeamStateActionPair, SelectionType, State, \
+    TeamModelsDistributions, StateActionProbTrajectory, SingleAgentTrajectory
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_random_value
@@ -609,6 +609,7 @@ def generate_team_trajectories(team: List[Agent],
     return trajectories
 
 
+# TODO REMOVE
 def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: List[Agent],
                                        trajectory_length: int,
                                        init_feats: Optional[Dict[str, Any]] = None,
@@ -721,6 +722,7 @@ def generate_expert_learner_trajectory(expert_team: List[Agent], learner_team: L
     return team_trajectory
 
 
+# TODO REMOVE
 def generate_expert_learner_trajectories(expert_team: List[Agent],
                                          learner_team: List[Agent],
                                          n_trajectories: int,
@@ -825,20 +827,62 @@ def sample_spread_sub_trajectories(trajectory: Trajectory,
     return [trajectory[idx:idx + trajectory_length] for idx in idxs]
 
 
-def log_trajectories(trajectories: List[Trajectory], features: List[str]):
+def log_trajectory(trajectory: StateActionProbTrajectory,
+                   world: World,
+                   features: List[str],
+                   log_actions: bool = True,
+                   log_prob: bool = True):
     """
     Prints the given trajectories to the log at the info level.
-    :param list[list[tuple[World, Distribution]]] trajectories: the set of trajectories to save, containing
-    several sequences of state-action pairs.
+    :param StateActionProbTrajectory trajectory: the trajectory to be logged, containing sequences of state-action-prob tuples.
+    :param World world: the PsychSim world from which to get the feature values.
     :param list[str] features: the state features to be printed at each step, representing the state of interest.
+    :param bool log_actions: whether to log the actions taken by the agent(s) in the trajectory.
+    :param bool log_prob: whether to log the probability associated with reaching each state in the trajectory.
     """
-    if len(trajectories) == 0 or len(trajectories[0]) == 0:
-        return
+    for t, sap in enumerate(trajectory):
+        feat_values = {feat: str(world.getFeature(feat, state=sap.state)) for feat in features}
+        logging.info('----------------------------------------')
+        logging.info(f'Timestep: {t}')
+        logging.info(f'State: {feat_values}')
+        if log_actions:
+            logging.info(f'Actions: {sap.action}')
+        if log_prob:
+            logging.info(f'P={sap.prob:.2f}')
 
-    for i, trajectory in enumerate(trajectories):
-        logging.info('-------------------------------------------')
-        logging.info(f'Trajectory {i}:')
-        for t, sa in enumerate(trajectory):
-            action = sa.action
-            feat_values = [str(sa.world.getFeature(feat)) for feat in features]
-            logging.info(f'{t}:\t({", ".join(feat_values)}) -> {action if len(action) > 1 else action.first()}')
+
+def get_trajectory_action_counts(trajectory: StateActionProbTrajectory, world: World) -> Dict[str, Dict[str, int]]:
+    """
+    Gets action counts for the given trajectory.
+    :param StateActionProbTrajectory trajectory: the trajectory from which to get the action counts.
+    :param World world: the PsychSim world from which to get all the agents' actions.
+    :rtype: dict[str, dict[str, int]]
+    :return: a dictionary containing, for each agent, a dictionary with the counts for each action.
+    """
+    # get agent names and their actions (assume consistent trajectory)
+    action_stats: Dict[str, Dict[str, int]] = {}
+    is_single_agent = isinstance(trajectory[0].action, Distribution)
+    if is_single_agent:
+        agent = dict(next(iter(trajectory[0].action)))['subject']
+        assert agent in world.agents, f'Agent {agent} referred to in the trajectory was not found in the given world'
+        action_stats[agent] = {}
+    else:
+        # assume multiagent trajectory
+        for agent in trajectory[0].action.keys():
+            action_stats[agent] = {}
+    for agent in action_stats.keys():
+        agent = world.agents[agent]
+        action_stats[agent.name] = {action: 0 for action in agent.actions}
+
+    # collects counts (weighted if stochastic actions) for each step in the trajectory (for each agent if multiagent)
+    for sap in trajectory:
+        if is_single_agent:
+            agent = dict(next(iter(sap.action)))['subject']
+            agents_actions = {agent: sap.action}
+        else:
+            agents_actions = sap.action
+        for agent, actions in agents_actions.items():
+            for action, prob in actions.items():
+                action_stats[agent][action] += prob
+
+    return action_stats

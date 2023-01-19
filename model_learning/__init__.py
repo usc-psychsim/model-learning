@@ -62,6 +62,6 @@ class TeamStateActionModelDist(NamedTuple):
 TeamTrajectory = List[TeamStateActionPair]
 TeamModelDistTrajectory = List[TeamStateActionModelDist]
 
-StateProbTrajectory = Union[Trajectory, ModelDistTrajectory, TeamTrajectory, TeamModelDistTrajectory]
+StateActionProbTrajectory = Union[Trajectory, ModelDistTrajectory, TeamTrajectory, TeamModelDistTrajectory]
 SingleAgentTrajectory = Union[Trajectory, ModelDistTrajectory]
 MultiagentTrajectory = Union[TeamTrajectory, TeamModelDistTrajectory]
