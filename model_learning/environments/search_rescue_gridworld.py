@@ -376,7 +376,7 @@ class SearchRescueGridWorld(GridWorld):
                     # set next vic comb idx
                     subtree_dict[j] = setToConstantMatrix(
                         self.clear_comb,
-                        self._get_next_vic_found_comb_idx(vic_comb_idx, loc_idx, next_clear_status=False))
+                        self._get_next_vic_clear_comb_idx(vic_comb_idx, loc_idx, next_clear_status=False))
                 tree_dict[i] = subtree_dict
             self.world.setDynamics(self.clear_comb, action, makeTree(tree_dict))
 
@@ -535,7 +535,7 @@ class SearchRescueGridWorld(GridWorld):
                         # set next vic comb idx
                         subtree_dict[v] = setToConstantMatrix(
                             self.clear_comb,
-                            self._get_next_vic_found_comb_idx(vic_comb_idx, loc_idx, next_clear_status=True))
+                            self._get_next_vic_clear_comb_idx(vic_comb_idx, loc_idx, next_clear_status=True))
                     tree_dict[k] = subtree_dict
                 ci_dict[True] = tree_dict
                 self.world.setDynamics(self.clear_comb, agent_actions[i], makeTree(ci_dict))
@@ -555,7 +555,7 @@ class SearchRescueGridWorld(GridWorld):
             # dynamics of distance to closest victim, updated once a victim is evacuated/cleared by both agents
             if self.agent_options[agent.name].dist_to_vic_feature:
                 d2v = self.get_dist_to_vic_feature(agents[i], key=True)
-                ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci, 0),
+                ci_dict = {'if': KeyedPlane(KeyedVector({makeFuture(self.clear_comb): 1}), n_ci - 1, 0),
                            True: setToConstantMatrix(d2v, 1)}  # no victims, so maximal distance
                 # checks vic clear combination against current agent location (distance pre-computed)
                 tree_dict = {
@@ -598,7 +598,7 @@ class SearchRescueGridWorld(GridWorld):
                 idxs.append(comb_idx)  # adds index of combination in which the location is (not)clear
         return idxs
 
-    def _get_next_vic_found_comb_idx(self, vic_comb_idx: int, loc_idx: int, next_clear_status: bool) -> int:
+    def _get_next_vic_clear_comb_idx(self, vic_comb_idx: int, loc_idx: int, next_clear_status: bool) -> int:
         # gets next index of vic clear combination when a victim is found at given location
         next_vic_clear_loc_comb = self.vic_clear_combs[vic_comb_idx].copy()
         next_vic_clear_loc_comb[loc_idx] = next_clear_status
