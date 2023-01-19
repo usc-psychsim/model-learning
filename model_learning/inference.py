@@ -25,7 +25,7 @@ __email__ = 'pedrodbs@gmail.com, hcaawu@gmail.com'
 
 MODEL_SELECTION = 'distribution'  # needed to include al possible actions and avoid impossible observations
 MODEL_RATIONALITY = 1  # for smoother modeling
-MODEL_HORIZON = 1  # TODO HORIZON
+MODEL_HORIZON = 2  # TODO HORIZON
 OBSERVER_NAME = 'Observer'
 OBSERVER_MODEL_NAME = 'OBSERVER'
 TRAJ_NUM_COL = 'Trajectory'
@@ -266,9 +266,10 @@ def create_inference_observers(world: World,
         agent.setAttribute('R', copy.copy(agent.getAttribute('R', model=agent.get_true_model())), model=model)
         world.setMentalModel(observer.name, ag, model, model=None)
 
-        # make all agents and their models ignore this observer
-        for _ag in init_models_dists.keys():
-            agent = world.agents[_ag]
+    # make all agents and their models ignore the observers
+    for observer in observers.values():
+        for ag in init_models_dists.keys():
+            agent = world.agents[ag]
             for model in agent.models.keys():
                 agent.ignore(observer.name, model=model)
 
