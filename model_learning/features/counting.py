@@ -72,7 +72,7 @@ def estimate_feature_counts(agent: Agent,
     :param bool verbose: whether to show information at each timestep during trajectory generation.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
     :rtype: np.ndarray
-    :return: the estimated expected feature counts.
+    :return: the estimated feature counts.
     """
 
     args = []
@@ -100,20 +100,27 @@ def estimate_feature_counts_tom(agent: Agent,
                                 verbose: bool = False,
                                 use_tqdm: bool = True) -> np.ndarray:
     """
-
-    :param agent:
-    :param trajectories:
-    :param feature_func:
-    :param exact:
-    :param num_mc_trajectories:
-    :param model:
-    :param horizon:
-    :param threshold:
-    :param processes:
-    :param seed:
-    :param verbose:
-    :param use_tqdm:
-    :return:
+    Estimates the expected feature counts by generating trajectories from the initial states in the given trajectories
+    and then computing the average feature counts per path.
+    This function is applicable to multiagent scenarios where an agent maintains beliefs (probability distributions)
+    over the models of other agents, as specified in the given trajectories. These beliefs are used to compute the
+    actions of other agents when generating the trajectories.
+    :param Agent agent: the agent for which to compute the expected feature counts.
+    :param list[TeamModelDistTrajectory] trajectories: a set of demonstrated trajectories specifying both the initial
+    states and the beliefs over others' models computed via model inference.
+    :param Callable feature_func: the function to extract the features out of each state.
+    :param bool exact: whether the computation of the distribution over paths should be exact (expand stochastic
+    branches) or not, in which case Monte Carlo sample trajectories will be generated to estimate the feature counts.
+    :param int num_mc_trajectories: the number of Monte Carlo trajectories to be samples. Works with `exact=False`.
+    :param str model: the agent model used to generate the trajectories.
+    :param int horizon: the agent's planning horizon.
+    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
+    :param bool verbose: whether to show information at each timestep during trajectory generation.
+    :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
+    :rtype: np.ndarray
+    :return: the estimated feature counts.
     """
     args = []
     for t, trajectory in enumerate(trajectories):
