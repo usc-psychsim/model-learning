@@ -282,7 +282,7 @@ class SearchRescueGridWorld(GridWorld):
 
         # noop/wait is allowed is allowed only when all victims are triaged
         if options.noop_action:
-            action = agent.find_action({'action': NOOP_ACTION})
+            action = agent.find_action({'verb': NOOP_ACTION})
             legal_dict = {'if': equalRow(self.clear_comb, len(self.dists_to_vic) - 1), True: True, False: False}
             agent.setLegal(action, makeTree(legal_dict))
 
@@ -312,8 +312,8 @@ class SearchRescueGridWorld(GridWorld):
             ci_dict[False] = tree_dict
 
             # set the dynamics to all movement actions
-            for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
-                action = agent.find_action({'action': move})
+            for direction in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
+                action = agent.find_action({'direction': direction})
                 self.world.setDynamics(d2v, action, makeTree(ci_dict))
 
         # ==================================================
@@ -336,14 +336,14 @@ class SearchRescueGridWorld(GridWorld):
                 tree_dict[vic_loc_idx] = sub_tree_dict
 
             # set the dynamics to all movement actions
-            for move in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
-                action = agent.find_action({'action': move})
+            for direction in {RIGHT_ACTION, LEFT_ACTION, UP_ACTION, DOWN_ACTION}:
+                action = agent.find_action({'direction': direction})
                 self.world.setDynamics(d2h, action, makeTree(tree_dict))
 
         # ==================================================
         # dynamics of victim search action
         if options.search_action:
-            action = agent.addAction({'verb': 'handle', 'action': SEARCH_ACTION})
+            action = agent.add_action({'world': self.name, 'verb': SEARCH_ACTION})
             self.agent_actions[agent.name].append(action)
 
             # search is valid only when victim status at current location is unknown
@@ -420,7 +420,7 @@ class SearchRescueGridWorld(GridWorld):
         # ==================================================
         # dynamics of victim triage action
         if options.triage_action:
-            action = agent.addAction({'verb': 'handle', 'action': TRIAGE_ACTION})
+            action = agent.add_action({'world': self.name, 'verb': TRIAGE_ACTION})
             self.agent_actions[agent.name].append(action)
 
             # triage is valid when victim is found
@@ -442,7 +442,7 @@ class SearchRescueGridWorld(GridWorld):
         # ==================================================
         # dynamics of victim call action
         if options.call_action:
-            action = agent.addAction({'verb': 'handle', 'action': CALL_ACTION})
+            action = agent.add_action({'world': self.name, 'verb': CALL_ACTION})
             self.agent_actions[agent.name].append(action)
 
             # call is valid when victim is ready
@@ -482,11 +482,11 @@ class SearchRescueGridWorld(GridWorld):
         all_locs = list(range(n_locs))
 
         # create evacuate action for both agents
-        evac_action = {'verb': 'handle', 'action': EVACUATE_ACTION}
+        evac_action = {'world': self.name, 'verb': EVACUATE_ACTION}
         agent_actions = []
         for i, agent in enumerate(agents):
             if evac_action not in self.agent_actions[agent.name]:
-                action = agent.addAction(evac_action)
+                action = agent.add_action(evac_action)
                 agent_actions.append(action)
                 self.agent_actions[agent.name].append(action)
 

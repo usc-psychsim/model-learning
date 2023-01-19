@@ -53,27 +53,27 @@ class SearchRescueRewardVector(LinearRewardVector):
 
         # action execution reward features
         if options.search_action:
-            search_action = agent.find_action({'action': SEARCH_ACTION})
+            search_action = agent.find_action({'verb': SEARCH_ACTION})
             r_search = ActionLinearRewardFeature(SEARCH_ACTION.title(), agent, search_action)
             reward_features.append(r_search)
 
         if options.triage_action:
-            triage_action = agent.find_action({'action': TRIAGE_ACTION})
+            triage_action = agent.find_action({'verb': TRIAGE_ACTION})
             r_triage = ActionLinearRewardFeature(TRIAGE_ACTION.title(), agent, triage_action)
             reward_features.append(r_triage)
 
         if options.evacuate_action:
-            evacuate_action = agent.find_action({'action': EVACUATE_ACTION})
+            evacuate_action = agent.find_action({'verb': EVACUATE_ACTION})
             r_evacuate = ActionLinearRewardFeature(EVACUATE_ACTION.title(), agent, evacuate_action)
             reward_features.append(r_evacuate)
 
         if options.noop_action:
-            wait_action = agent.find_action({'action': NOOP_ACTION})
+            wait_action = agent.find_action({'verb': NOOP_ACTION})
             r_wait = ActionLinearRewardFeature(NOOP_ACTION.title(), agent, wait_action)
             reward_features.append(r_wait)
 
         if options.call_action:
-            call_action = agent.find_action({'action': CALL_ACTION})
+            call_action = agent.find_action({'verb': CALL_ACTION})
             r_call = ActionLinearRewardFeature(CALL_ACTION.title(), agent, call_action)
             reward_features.append(r_call)
 

@@ -9,7 +9,7 @@ from matplotlib.markers import CARETLEFTBASE, CARETRIGHTBASE, CARETUPBASE, CARET
 from typing import Dict, List, Tuple, Literal, Optional, Any, NamedTuple
 
 from model_learning import Trajectory
-from model_learning.trajectory import generate_trajectories, log_trajectories
+from model_learning.trajectory import generate_trajectories, log_trajectory
 from model_learning.util.plot import distinct_colors
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
@@ -52,14 +52,6 @@ MARKERS_INC = {
     ACTION_LEFT_IDX: (.3, .5, CARETLEFTBASE),
     ACTION_DOWN_IDX: (.5, .3, CARETDOWNBASE),
     ACTION_NO_OP: (.5, .5, '.')  # stand still action
-}
-
-ACTION_NAMES = {
-    ACTION_RIGHT_IDX: 'right',
-    ACTION_UP_IDX: 'up',
-    ACTION_LEFT_IDX: 'left',
-    ACTION_DOWN_IDX: 'down',
-    ACTION_NO_OP: 'no-op',
 }
 
 TITLE_FONT_SIZE = 12
@@ -157,13 +149,13 @@ class GridWorld(object):
 
         # creates dynamics for the agent's movement (cardinal directions + no-op) with legality
         if noop_action:
-            action = agent.addAction({'verb': f'{self.name}_move', 'action': NOOP_ACTION})
+            action = agent.add_action({'world': self.name, 'verb': NOOP_ACTION})
             tree = makeTree(noChangeMatrix(x))
             self.world.setDynamics(x, action, tree)
             self.agent_actions[agent.name].append(action)
 
         # move right
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': RIGHT_ACTION})
+        action = agent.add_action({'world': self.name, 'verb': 'move', 'direction': RIGHT_ACTION})
         legal_dict = {'if': equalRow(x, self.width - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, 1))
@@ -178,7 +170,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move left
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': LEFT_ACTION})
+        action = agent.add_action({'world': self.name, 'verb': 'move', 'direction': LEFT_ACTION})
         legal_dict = {'if': equalRow(x, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(x, -1))
@@ -193,7 +185,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move up
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': UP_ACTION})
+        action = agent.add_action({'world': self.name, 'verb': 'move', 'direction': UP_ACTION})
         legal_dict = {'if': equalRow(y, self.height - 1), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, 1))
@@ -208,7 +200,7 @@ class GridWorld(object):
                 self.world.setDynamics(visits[loc_i], action, makeTree(visit_count_dict))
 
         # move down
-        action = agent.addAction({'verb': f'{self.name}_move', 'action': DOWN_ACTION})
+        action = agent.add_action({'world': self.name, 'verb': 'move', 'direction': DOWN_ACTION})
         legal_dict = {'if': equalRow(y, 0), True: False, False: True}
         agent.setLegal(action, makeTree(legal_dict))
         move_tree = makeTree(incrementMatrix(y, -1))
@@ -376,7 +368,8 @@ class GridWorld(object):
         assert x in self.world.variables, f'Agent \'{agent.name}\' does not have x location feature'
         assert y in self.world.variables, f'Agent \'{agent.name}\' does not have y location feature'
 
-        log_trajectories(trajectories, [x, y])
+        for trajectory in trajectories:
+            log_trajectory(trajectory, self.world, features=[x, y])
 
     def plot(self, file_name: str, title: str = 'Environment', show: bool = False):
         """

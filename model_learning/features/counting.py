@@ -2,7 +2,7 @@ import itertools as it
 import numpy as np
 from typing import List, Callable, Optional
 
-from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, StateProbTrajectory
+from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, StateActionProbTrajectory
 from model_learning.trajectory import generate_trajectory_distribution, generate_trajectory_distribution_tom
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
@@ -11,7 +11,7 @@ __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
-def empirical_feature_counts(trajectories: List[StateProbTrajectory],
+def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
                              feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
     """
     Computes the empirical (mean over paths) feature counts, i.e., the sum of the feature values for each state along
