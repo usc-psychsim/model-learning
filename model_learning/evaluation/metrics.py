@@ -33,8 +33,7 @@ def policy_mismatch_prob(policy1: List[Distribution], policy2: List[Distribution
     Compares the given policies by measuring the amount of discrepancy between them. This corresponds to the mean,
     over all states, of the probability that the policies will take different actions.
     Note: the policies are lists where elements are distributions over actions for each state considered. Policies
-    should have the same size and it is assumed that each pair of elements.
-    corresponds to the policy in the same state.
+    should have the same size and it is assumed that each pair of elements corresponds to the policy in the same state.
     :param list[Distribution] policy1: the first policy.
     :param list[Distribution] policy2: the second policy.
     :rtype float:
@@ -58,8 +57,7 @@ def policy_divergence(policy1: List[Distribution], policy2: List[Distribution]) 
     This is measured by the mean, over all states, of the Jensen-Shannon divergence (JSD) between the policies'
     probability distribution over actions.
     Note: the policies are lists where elements are distributions over actions for each state considered. Policies
-    should have the same size and it is assumed that each pair of elements.
-    corresponds to the policy in the same state.
+    should have the same size and it is assumed that each pair of elements corresponds to the policy in the same state.
     :param list[Distribution] policy1: the first policy.
     :param list[Distribution] policy2: the second policy.
     :rtype float:
