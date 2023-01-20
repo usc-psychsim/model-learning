@@ -11,7 +11,7 @@ from plotly import graph_objs as go
 from typing import List, Optional, Dict
 
 from model_learning import Trajectory, TeamModelsDistributions, TeamModelDistTrajectory, TeamTrajectory, \
-    TeamStateActionModelDist, ModelDistTrajectory, StateActionModelDist
+    TeamStateActionModelDist, ModelDistTrajectory, StateActionModelDist, SelectionType
 from model_learning.trajectory import copy_world, update_state
 from model_learning.util.mp import run_parallel
 from model_learning.util.plot import plot_timeseries
@@ -23,9 +23,11 @@ from psychsim.world import World
 __author__ = 'Pedro Sequeira, Haochen Wu'
 __email__ = 'pedrodbs@gmail.com, hcaawu@gmail.com'
 
+# default model params (make models less rational to get smoother (more cautious) inference over models)
 MODEL_SELECTION = 'distribution'  # needed to include al possible actions and avoid impossible observations
 MODEL_RATIONALITY = 1  # for smoother modeling
-MODEL_HORIZON = 2  # TODO HORIZON
+MODEL_HORIZON = 1  # empirically, we don't need the models to have a high planning horizon..
+
 OBSERVER_NAME = 'Observer'
 OBSERVER_MODEL_NAME = 'OBSERVER'
 TRAJ_NUM_COL = 'Trajectory'
@@ -222,7 +224,10 @@ def team_trajectories_model_inference(world: World,
 
 def create_inference_observers(world: World,
                                init_models_dists: TeamModelsDistributions,
-                               belief_threshold: float) -> Dict[str, Agent]:
+                               belief_threshold: float,
+                               rationality: Optional[float] = MODEL_RATIONALITY,
+                               horizon: Optional[int] = MODEL_HORIZON,
+                               selection: Optional[SelectionType] = MODEL_SELECTION) -> Dict[str, Agent]:
     """
     Creates model observers that will maintain a probability distribution over agent models (beliefs) as the agents
     act in the environment. One observer will be created per agent and the beliefs will be created and initialized
@@ -230,6 +235,9 @@ def create_inference_observers(world: World,
     :param World world: the PsychSim world in which to create the observer agents.
     :param TeamModelsDistributions init_models_dists: the initial distribution over other agents' models for each agent.
     :param float belief_threshold: beliefs with probability below this will be pruned.
+    :param float rationality: the agents' rationality when selecting actions, as modelled by the observers.
+    :param int horizon: the agents' planning horizon as modelled by the observers.
+    :param str selection: the agents' action selection criterion, as modelled by the observers.
     :rtype: dict[str, Agent]
     :return: a dictionary containing the observer agent created for each agent.
     """
@@ -260,9 +268,9 @@ def create_inference_observers(world: World,
         model = f'{agent.name}_{OBSERVER_MODEL_NAME}'
         agent.addModel(model,
                        parent=agent.get_true_model(),
-                       rationality=MODEL_RATIONALITY,
-                       selection=MODEL_SELECTION,
-                       horizon=MODEL_HORIZON)
+                       rationality=rationality,
+                       selection=selection,
+                       horizon=horizon)
         agent.setAttribute('R', copy.copy(agent.getAttribute('R', model=agent.get_true_model())), model=model)
         world.setMentalModel(observer.name, ag, model, model=None)
 

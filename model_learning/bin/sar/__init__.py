@@ -1,13 +1,12 @@
-import copy
-
 import argparse
 import logging
 import os
 import tqdm
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional, get_args
 
+from model_learning import SelectionType
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
-from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, AgentProfile
+from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.inference import MODEL_SELECTION, MODEL_RATIONALITY, MODEL_HORIZON, create_inference_observers, \
@@ -24,7 +23,7 @@ __maintainer__ = 'Pedro Sequeira'
 # default env params
 WORLD_NAME = 'SAR'
 ENV_SIZE = 3
-SEED = 48
+ENV_SEED = 48
 NUM_VICTIMS = 3
 VICS_CLEARED_FEATURE = False
 
@@ -34,14 +33,17 @@ HORIZON = 2  # 0 for random actions
 ACT_SELECTION = 'softmax'  # 'random'
 RATIONALITY = 1 / 0.1
 
-# default model params (make models less rational to get smoother (more cautious) inference over models)
-
 # default common params
-BELIEF_THRESHOLD = 1e-5
+SEED = 48
+BELIEF_THRESHOLD = 0  # 1e-5
 PRUNE_THRESHOLD = 1e-2
 PROCESSES = -1
 CLEAR = False  # True  # False
 PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
+
+# default trajectory generation params
+NUM_TRAJECTORIES = 16  # 5  # 10
+TRAJ_LENGTH = 25  # 30
 
 
 def add_common_arguments(parser: argparse.ArgumentParser):
@@ -53,11 +55,13 @@ def add_common_arguments(parser: argparse.ArgumentParser):
     parser.add_argument('--profiles', '-pf', type=str, default=PROFILES_FILE_PATH,
                         help='Path to agent profiles Json file.')
     parser.add_argument('--output', '-o', type=str, required=True, help='Directory in which to save results.')
+
     parser.add_argument('--size', '-sz', type=int, default=ENV_SIZE, help='Size of gridworld/environment.')
     parser.add_argument('--victims', '-nv', type=int, default=NUM_VICTIMS,
                         help='Number of victims in the environment.')
     parser.add_argument('--vics-cleared-feature', '-vcf', type=str2bool, default=VICS_CLEARED_FEATURE,
                         help='Whether to create a feature that counts the number of victims cleared.')
+    parser.add_argument('--discount', '-d', type=float, default=DISCOUNT, help='Agents\' planning discount factor.')
 
     parser.add_argument('--prune', '-pt', type=float, default=PRUNE_THRESHOLD,
                         help='Likelihood threshold for pruning outcomes during planning. `None` means no pruning.')
@@ -68,6 +72,28 @@ def add_common_arguments(parser: argparse.ArgumentParser):
                         help='The number of parallel processes to use. `-1` or `None` will use all available CPUs.')
     parser.add_argument('--clear', '-c', type=str2bool, help='Clear output directories before generating results.')
     parser.add_argument('--verbosity', '-v', type=str2log_level, default=logging.INFO, help='Logging verbosity level.')
+
+
+def add_agent_arguments(parser: argparse.ArgumentParser):
+    """
+    Adds the command-line arguments that allow parameterizing the PsychSim agents.
+    :param argparse.ArgumentParser parser: the argument parse to add the arguments to.
+    """
+    parser.add_argument('--selection', '-as', type=str, choices=get_args(SelectionType), default=ACT_SELECTION,
+                        help='Agents\' action selection criterion, to untie equal-valued actions.')
+    parser.add_argument('--horizon', '-hz', type=int, default=HORIZON, help='Agents\' planning horizon.')
+    parser.add_argument('--rationality', '-r', type=float, default=RATIONALITY,
+                        help='Agents\' rationality when selecting actions under a probabilistic criterion.')
+
+
+def add_trajectory_arguments(parser: argparse.ArgumentParser):
+    """
+    Adds the command-line arguments that allow parameterizing the PsychSim agents.
+    :param argparse.ArgumentParser parser: the argument parse to add the arguments to.
+    """
+    parser.add_argument('--trajectories', '-t', type=int, default=NUM_TRAJECTORIES,
+                        help='Number of trajectories to generate.')
+    parser.add_argument('--length', '-l', type=int, default=TRAJ_LENGTH, help='Length of the trajectories to generate.')
 
 
 def create_sar_world(args: argparse.Namespace) -> \
@@ -96,9 +122,9 @@ def create_sar_world(args: argparse.Namespace) -> \
     logging.info('========================================')
     logging.info('Creating world and agents...')
     world = World()
-    # world.setParallel()
     env = SearchRescueGridWorld(world, args.size, args.size, args.victims, WORLD_NAME,
-                                vics_cleared_feature=args.vics_cleared_feature, seed=args.seed)
+                                vics_cleared_feature=args.vics_cleared_feature,
+                                seed=ENV_SEED)  # environment uses fixed seed for now
     logging.info(f'Initialized World, w:{env.width}, h:{env.height}, v:{env.num_victims}')
 
     # team of two agents
@@ -138,12 +164,20 @@ def create_sar_world(args: argparse.Namespace) -> \
     return env, team, team_config, profiles
 
 
-def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
+def create_agent_models(env: SearchRescueGridWorld,
+                        team_config: TeamConfig,
+                        profiles: AgentProfiles,
+                        rationality: Optional[float] = MODEL_RATIONALITY,
+                        horizon: Optional[int] = MODEL_HORIZON,
+                        selection: Optional[SelectionType] = MODEL_SELECTION):
     """
     Creates reward-based agent models according to the given team configuration and profiles.
     :param SearchRescueGridWorld env: the search-and-rescue environment.
     :param TeamConfig team_config: the team's configuration.
     :param AgentProfiles profiles: the set of agent profiles.
+    :param float rationality: the agents' rationality when selecting actions, as modelled by the observers.
+    :param int horizon: the agents' planning horizon as modelled by the observers.
+    :param str selection: the agents' action selection criterion, as modelled by the observers.
     """
     logging.info('Creating agent models...')
     for role in tqdm.tqdm(team_config.get_all_modeled_roles()):
@@ -153,16 +187,12 @@ def create_agent_models(env: SearchRescueGridWorld, team_config: TeamConfig, pro
         # create new agent reward models
         models = team_config.get_all_model_profiles(role, profiles)
         for model, profile in models.items():
-            create_agent_model(agent, agent_lrv, model, profile)
-
-
-def create_agent_model(agent: Agent, agent_lrv: SearchRescueRewardVector, model: str, profile: AgentProfile):
-    rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
-    add_linear_reward_model(agent, rwd_function, model=model, parent=None,
-                            rationality=MODEL_RATIONALITY,
-                            selection=MODEL_SELECTION,
-                            horizon=MODEL_HORIZON)
-    logging.info(f'Set model {model} to agent {agent.name}')
+            rwd_function = LinearRewardFunction(agent_lrv, profile.to_array())
+            add_linear_reward_model(agent, rwd_function, model=model, parent=None,
+                                    rationality=rationality,
+                                    selection=selection,
+                                    horizon=horizon)
+            logging.info(f'Set model {model} to agent {agent.name}')
 
 
 def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, profiles: AgentProfiles):
@@ -244,7 +274,6 @@ def create_observers(env: SearchRescueGridWorld,
     init_models_dists = team_config.get_models_distributions()  # creates initial distributions over models
     observers = create_inference_observers(env.world, init_models_dists, belief_threshold=BELIEF_THRESHOLD)
 
-    # logging.info(f'Set mental models of agent {other_ag} to {observer.name}:\n{dist}')
     models_dists = get_model_distributions(observers, init_models_dists)
     for agent, observer in observers.items():
         for other, models in models_dists[agent].items():
