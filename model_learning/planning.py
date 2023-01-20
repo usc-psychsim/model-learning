@@ -1,13 +1,13 @@
-import copy
 import numpy as np
-from typing import Optional, Literal, List
+from typing import Optional, List
+
+from model_learning import State, SelectionType
+from model_learning.util.mp import run_parallel
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
 from psychsim.helper_functions import get_true_model_name
 from psychsim.probability import Distribution
 from psychsim.pwl import modelKey
-from model_learning import State
-from model_learning.util.mp import run_parallel
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -17,8 +17,7 @@ def get_state_policy(agent: Agent,
                      state: State,
                      model: Optional[str] = None,
                      horizon: Optional[int] = None,
-                     selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-                     threshold: Optional[float] = None) -> Distribution:
+                     selection: Optional[SelectionType] = None) -> Distribution:
     """
     Gets an agent's policy (action selection distribution) for the given state.
     :param Agent agent: the agent for which to calculate the policy.
@@ -26,29 +25,20 @@ def get_state_policy(agent: Agent,
     :param str model: the name of the agent's model used for decision-making. `None` corresponds to the true model.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :rtype: Distribution
     :return: an action distribution for the given state.
     """
-    # sets the agent model and performs a fake step to get the agent's decision
-    if model is not None:
-        state = copy.deepcopy(state)
-        agent.world.setFeature(modelKey(agent.name), model, state)
-    # p = agent.world.step(state=state, real=True, updateBeliefs=False,
-    #                      horizon=horizon, tiebreak=selection, threshold=threshold)
-    decision = agent.decide(state, horizon=horizon, selection=selection)
+    decision = agent.decide(state, horizon=horizon, selection=selection, model=model)
     return decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)]['action']
-    # return agent.world.getAction(agent.name, agent.world.state)
 
 
-def get_policy(agent: Agent,
-               states: List[State],
-               model: Optional[str] = None,
-               horizon: Optional[int] = None,
-               selection: Optional[Literal['distribution', 'random', 'uniform', 'consistent']] = None,
-               threshold: Optional[float] = None,
-               processes: int = -1,
-               use_tqdm: bool = True) -> List[Distribution]:
+def get_states_policy(agent: Agent,
+                      states: List[State],
+                      model: Optional[str] = None,
+                      horizon: Optional[int] = None,
+                      selection: Optional[SelectionType] = None,
+                      processes: int = -1,
+                      use_tqdm: bool = True) -> List[Distribution]:
     """
     Gets an agent's policy (action selection) for the given states.
     :param Agent agent: the agent for which to calculate the policy.
@@ -56,13 +46,12 @@ def get_policy(agent: Agent,
     :param str or None model: the name of the agent's model used for decision-making. `None` corresponds to the true model.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
-    :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
     :param int processes: number of processes to use. Follows `joblib` convention.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
     :rtype: list[Distribution]
     :return: a list containing an action (or distribution) for each given state.
     """
-    args = [(agent, s, model, horizon, selection, threshold) for s in states]
+    args = [(agent, s, model, horizon, selection) for s in states]
     return run_parallel(get_state_policy, args, processes=processes, use_tqdm=use_tqdm)
 
 
