@@ -2,17 +2,21 @@ import copy
 
 import argparse
 import logging
+import numpy as np
 import os
 import pandas as pd
+import tqdm
 from typing import List, Dict
 
-from model_learning import StateActionProbTrajectory, State
+from model_learning import StateActionProbTrajectory, State, TeamTrajectory
 from model_learning.algorithms import ModelLearningResult
 from model_learning.algorithms.max_entropy import THETA_STR
 from model_learning.bin.sar import create_sar_world, add_common_arguments, add_agent_arguments, add_trajectory_arguments
 from model_learning.evaluation.metrics import policy_divergence, policy_mismatch_prob
+from model_learning.features.counting import empirical_feature_counts, estimate_feature_counts
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.planning import get_states_policy
+from model_learning.trajectory import copy_world
 from model_learning.util.cmd_line import save_args
 from model_learning.util.io import create_clear_dir, load_object
 from model_learning.util.logging import change_log_handler
@@ -70,11 +74,11 @@ def main():
     # load trajectories
     logging.info('========================================')
     logging.info(f'Loading team trajectories from {args.traj_file}...')
-    trajectories: List[StateActionProbTrajectory] = load_object(args.traj_file)
-    logging.info(f'Loaded {len(trajectories)} trajectories of length {len(trajectories[0])}')
+    expert_trajectories: List[StateActionProbTrajectory] = load_object(args.traj_file)
+    logging.info(f'Loaded {len(expert_trajectories)} trajectories of length {len(expert_trajectories[0])}')
 
     # collect all states from the trajectories
-    states: List[State] = [sap.state for trajectory in trajectories for sap in trajectory]
+    states: List[State] = [sap.state for trajectory in expert_trajectories for sap in trajectory]
     logging.info(f'Collected a total of  {len(states)} states from the loaded trajectories')
 
     logging.info('========================================')
@@ -85,12 +89,12 @@ def main():
     expert_policy = _get_team_policy(states, team, 'experts / ground-truth')
 
     logging.info('----------------------------------------')
-    
+
     # modify agents' reward functions from IRL results
     for agent in learner_team:
         agent_lrv = SearchRescueRewardVector(env, agent)
         agent_lrv.set_rewards(agent, results[agent.name].stats[THETA_STR])
-    learner_policy = _get_team_policy(states, team, 'learners / IRL')
+    learner_policy = _get_team_policy(states, learner_team, 'learners / IRL')
 
     dummy_plotly()  # to clear plotly import message
     output_dir = args.output
@@ -111,6 +115,63 @@ def main():
              os.path.join(output_dir, f'policy-mismatch.{args.img_format}'),
              x_label='Agent', y_label='Mismatch Prob.', y_min=0, y_max=1)
 
+    np.set_printoptions(precision=2)
+
+    logging.info('========================================')
+    logging.info('Comparing feature counts between expert and learner teams policies...')
+
+    logging.info(f'Computing the empirical feature counts for the expert / ground-truth team '
+                 f'for {len(expert_trajectories)} trajectories...')
+    empirical_fcs: Dict[str, np.ndarray] = {}
+    for agent in tqdm.tqdm(team):
+        agent_lrv = SearchRescueRewardVector(env, agent)
+        feature_func = lambda s: agent_lrv.get_values(s)
+        empirical_fcs[agent.name] = empirical_feature_counts(expert_trajectories, feature_func)
+    logging.info(f'Empirical feature counts: {empirical_fcs}')
+
+    logging.info('----------------------------------------')
+
+    traj_len = len(expert_trajectories[0])
+    logging.info(f'Estimating feature counts for the learner/IRL team for {len(expert_trajectories)} trajectories using'
+                 f'{args.trajectories} Monte-Carlo trajectories of length {traj_len}...')
+
+    # set old world back and estimate feature counts for each agent
+    init_states: List[State] = [trajectory[0].state for trajectory in expert_trajectories]
+    estimated_fcs: Dict[str, np.ndarray] = {}
+    for agent in tqdm.tqdm(learner_team):
+        agent_lrv = SearchRescueRewardVector(env, agent)
+        feature_func = lambda s: agent_lrv.get_values(s)
+        estimated_fcs[agent.name] = estimate_feature_counts(
+            agent, init_states, traj_len,
+            feature_func=feature_func,
+            num_mc_trajectories=args.monte_carlo,
+            horizon=args.horizon,
+            threshold=args.prune_threshold,
+            processes=args.processes,
+            seed=args.seed,
+            verbose=False,
+            use_tqdm=True)
+    logging.info(f'Estimated feature counts: {estimated_fcs}')
+
+    logging.info('----------------------------------------')
+
+    # compute and plot difference between empirical (GT) and estimated (IRL) feature counts
+    fc_diffs: Dict[str, float] = {}
+    for agent in empirical_fcs.keys():
+        diff = np.abs(empirical_fcs[agent] - estimated_fcs[agent])
+        norm_diff = np.sum(diff).item()
+        agent_lrv = SearchRescueRewardVector(env, team[agent])
+        plot_bar(pd.DataFrame(diff.reshape(1, -1), columns=agent_lrv.names),
+                 'Feature Count Difference',
+                 os.path.join(output_dir, f'fc-diff-{agent}.{args.img_format}'),
+                 x_label='Reward Features', y_label='Abs. Difference')
+        logging.info(f'Feature count difference for agent {agent}: {diff} (norm: {norm_diff:.2f})')
+        fc_diffs[agent] = norm_diff
+
+    plot_bar(pd.DataFrame(fc_diffs, index=[0]), 'Feature Count Differences',
+             os.path.join(output_dir, f'fc-diffs.{args.img_format}'),
+             x_label='Agent', y_label='FC Diff.')
+
     logging.info('Done!')
 
 
@@ -122,7 +183,7 @@ if __name__ == '__main__':
     add_trajectory_arguments(parser)
 
     parser.add_argument('--traj-file', '-tf', type=str, required=True,
-                        help='Path to the .pkl.gz file containing the trajectories used to compute the metrics.')
+                        help='Path to the .pkl.gz file containing the expert trajectories used to compute the metrics.')
     parser.add_argument('--results-files', '-rf', nargs='+', type=str, required=True,
                         help='List of paths to the .pkl.gz files containing the model learning via MIRL-ToM results '
                              'for each agent.')
