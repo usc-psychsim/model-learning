@@ -4,7 +4,7 @@ from psychsim.probability import Distribution
 from psychsim.world import World
 from model_learning.evaluation.metrics import evaluate_internal
 from model_learning.features.linear import LinearRewardVector
-from model_learning.planning import get_policy
+from model_learning.planning import get_states_policy
 from model_learning.trajectory import sample_random_sub_trajectories
 
 __author__ = 'Pedro Sequeira'
@@ -57,7 +57,7 @@ def cross_evaluation(trajectories, agent_names, rwd_vectors, rwd_weights,
             with np.printoptions(precision=2, suppress=True):
                 logging.info('Computing policy for agent {} with reward {} for {} states...'.format(
                     agent.name, rwd_weights[j], len(expert_states)))
-            agent_pi = get_policy(agent, expert_states, None, horizon, 'distribution', threshold, processes)
+            agent_pi = get_states_policy(agent, expert_states, None, horizon, 'distribution', threshold, processes)
 
             # gets internal performance metrics between policies and stores in matrix
             metrics = evaluate_internal(expert_pi, agent_pi)

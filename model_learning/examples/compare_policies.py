@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from model_learning.planning import get_policy
+from model_learning.planning import get_states_policy
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.evaluation.metrics import policy_mismatch_prob, policy_divergence
 from psychsim.world import World
@@ -44,7 +44,7 @@ def get_agent_policy(rwd_weights: np.ndarray):
     random.seed(SEED)
 
     print('Computing policy...')
-    return get_policy(agent, env.get_all_states(agent), threshold=PRUNE_THRESHOLD, processes=PROCESSES)
+    return get_states_policy(agent, env.get_all_states(agent), threshold=PRUNE_THRESHOLD, processes=PROCESSES)
 
 
 if __name__ == '__main__':

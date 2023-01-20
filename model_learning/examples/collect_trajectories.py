@@ -3,7 +3,7 @@ import os
 import numpy as np
 from psychsim.reward import maximizeFeature
 from psychsim.world import World
-from model_learning.planning import get_policy, get_action_values
+from model_learning.planning import get_states_policy, get_action_values
 from model_learning.environments.gridworld import GridWorld
 from model_learning.util.io import create_clear_dir
 from model_learning.util.logging import change_log_handler
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # gets policy and value
     logging.info('Computing policy...')
     states = env.get_all_states(agent)
-    pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD)
+    pi = get_states_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD)
     pi = np.array([[dist[a] if a in dist.domain() else 0. for a in env.agent_actions[agent.name]] for dist in pi])
 
     logging.info('Computing value function...')

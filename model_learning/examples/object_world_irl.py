@@ -6,7 +6,7 @@ from model_learning.algorithms.max_entropy import MaxEntRewardLearning, THETA_ST
 from model_learning.features.objectworld import ObjectsRewardVector
 from model_learning.environments.objects_gridworld import ObjectsGridWorld
 from model_learning.evaluation.metrics import policy_mismatch_prob, policy_divergence
-from model_learning.planning import get_policy, get_action_values
+from model_learning.planning import get_states_policy, get_action_values
 from model_learning.util.logging import change_log_handler
 from model_learning.util.io import create_clear_dir
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     # gets policy and value
     logging.info('=================================')
     logging.info('Computing expert policy & value function...')
-    expert_pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
+    expert_pi = get_states_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
     pi = np.array([[dist[a] if a in dist.domain() else 0. for a in env.agent_actions[agent.name]]
                    for dist in expert_pi])
     expert_q = get_action_values(agent, states, env.agent_actions[agent.name], horizon=HORIZON, processes=PROCESSES)
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # gets policy and value
     logging.info('=================================')
     logging.info('Computing learner policy & value function...')
-    learner_pi = get_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
+    learner_pi = get_states_policy(agent, states, selection='distribution', threshold=PRUNE_THRESHOLD, processes=PROCESSES)
     pi = np.array([[dist[a] if a in dist.domain() else 0. for a in env.agent_actions[agent.name]]
                    for dist in learner_pi])
     learner_q = get_action_values(agent, states, env.agent_actions[agent.name], horizon=HORIZON, processes=PROCESSES)
