@@ -16,14 +16,18 @@ class ModelLearningResult(object):
     Represents a result of PsychSim model learning for some expert data.
     """
 
-    def __init__(self, data_id: str, trajectories: Union[List[Trajectory], List[TeamModelDistTrajectory]],
+    def __init__(self, agent: str,
+                 data_id: str,
+                 trajectories: Union[List[Trajectory], List[TeamModelDistTrajectory]],
                  stats: Dict[str, np.ndarray]):
         """
         Creates a new result.
         :param str data_id: an identifier for the data for which model learning was performed.
+        :param str agent: the name of the agent modelled.
         :param list[Trajectory] trajectories: a list of trajectories, each a sequence of state-action pairs.
         :param dict[str, np.ndarray] stats: a dictionary with relevant statistics regarding the algorithm's execution.
         """
+        self.agent = agent
         self.data_id = data_id
         self.trajectories = trajectories
         self.stats = stats

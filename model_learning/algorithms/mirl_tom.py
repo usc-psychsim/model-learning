@@ -159,7 +159,7 @@ class MIRLToM(MaxEntRewardLearning):
         self.agent.setAttribute('R', old_reward)
 
         # returns stats dictionary
-        return ModelLearningResult(data_id, trajectories, {
+        return ModelLearningResult(self.agent.name, data_id, trajectories, {
             FEATURE_COUNT_DIFF_STR: np.array(diffs),  # shape (timesteps, )
             REWARD_WEIGHTS_STR: np.array(thetas),  # shape (timesteps, n_features)
             THETA_STR: self.theta,  # shape (n_features, )
