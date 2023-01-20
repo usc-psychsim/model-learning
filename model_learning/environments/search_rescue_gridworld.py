@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, NamedTuple, List
 from model_learning import TeamTrajectory, SelectionType
 from model_learning.environments.gridworld import GridWorld, NOOP_ACTION, RIGHT_ACTION, LEFT_ACTION, UP_ACTION, \
     DOWN_ACTION
-from model_learning.trajectory import generate_team_trajectories, generate_expert_learner_trajectories
+from model_learning.trajectory import generate_team_trajectories
 from model_learning.util.plot import distinct_colors
 from psychsim.action import ActionSet
 from psychsim.agent import Agent
@@ -658,54 +658,6 @@ class SearchRescueGridWorld(GridWorld):
         return generate_team_trajectories(team, n_trajectories, trajectory_length,
                                           init_feats, models, select, horizon, selection, threshold,
                                           processes, seed, verbose, use_tqdm)
-
-    def generate_expert_learner_trajectories(self, expert_team: List[Agent], learner_team: List[Agent],
-                                             trajectory_length: int, n_trajectories: int = 1,
-                                             init_feats: Optional[Dict[str, Any]] = None,
-                                             model: Optional[str] = None, select: bool = True,
-                                             selection: Optional[SelectionType] = None,
-                                             horizon: Optional[int] = None, threshold: Optional[float] = None,
-                                             processes: Optional[int] = -1, seed: int = 0, verbose: bool = False,
-                                             use_tqdm: bool = True) -> List[TeamTrajectory]:
-        """
-        Generates a number of fixed-length agent trajectories (state-action pairs) by running the agent in the world.
-        :param List[Agent] expert_team: the team of agents that step the world.
-        :param List[Agent] learner_team: the team of agents for which to record the actions.
-        :param int trajectory_length: the length of the generated trajectories.
-        :param int n_trajectories: the number of trajectories to be generated.
-        :param dict[str, Any] init_feats: the initial feature states from which to randomly initialize the
-        trajectories. Each key is the name of the feature and the corresponding value is either a list with possible
-        values to choose from, a single value, or `None`, in which case a random value will be picked based on the
-        feature's domain.
-        :param str model: the agent model used to generate the trajectories.
-        :param bool select: whether to select from stochastic states after each world step.
-        :param str selection: the action selection criterion, to untie equal-valued actions.
-        :param int horizon: the agent's planning horizon.
-        :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
-        :param int processes: number of processes to use. Follows `joblib` convention.
-        :param int seed: the seed used to initialize the random number generator.
-        :param bool verbose: whether to show information at each timestep during trajectory generation.
-        :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
-        :rtype: list[TeamTrajectory]
-        :return: a list of trajectories, each containing a list of state-expert-learner-action pairs.
-        """
-        assert len(expert_team) > 0, 'No agent in the team'
-        assert len(learner_team) > 0, 'No agent in the team'
-
-        # if not specified, set random values for x, y pos
-        if init_feats is None:
-            init_feats = {}
-        for agent in expert_team:
-            x, y = self.get_location_features(agent)
-            if x not in init_feats:
-                init_feats[x] = None
-            if y not in init_feats:
-                init_feats[y] = None
-
-        # generate trajectories starting from random locations in the property gridworld
-        return generate_expert_learner_trajectories(expert_team, learner_team, n_trajectories, trajectory_length,
-                                                    init_feats, model, select, horizon, selection, threshold,
-                                                    processes, seed, verbose, use_tqdm)
 
     def play_team_trajectories(self,
                                team_trajectories: List[TeamTrajectory],
