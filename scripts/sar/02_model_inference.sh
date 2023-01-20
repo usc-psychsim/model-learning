@@ -19,6 +19,7 @@ python -m model_learning.bin.sar.model_inference \
   --size=$ENV_SIZE \
   --victims=$NUM_VICTIMS \
   --vics-cleared-feature=$VICS_CLEARED_FEAT \
+  --discount=$DISCOUNT \
   --prune=$PRUNE_THRESH \
   --img-format=$IMG_FORMAT \
   --processes=$PROCESSES \
