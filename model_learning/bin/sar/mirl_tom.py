@@ -40,7 +40,7 @@ def main():
     output_dir = args.output
     create_clear_dir(output_dir, clear=args.clear)
     save_args(args, os.path.join(output_dir, 'args.json'))
-    log_file = os.path.join(output_dir, 'model_inference.log')
+    log_file = os.path.join(output_dir, 'mirl_tom.log')
     mp_log: Optional[MultiProcessLogger] = None
     if args.processes > 1 or args.processes <= -1:
         mp_log = MultiProcessLogger(log_file, level=args.verbosity)

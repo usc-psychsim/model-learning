@@ -116,7 +116,6 @@ if __name__ == '__main__':
     add_common_arguments(parser)
     add_agent_arguments(parser)
     add_trajectory_arguments(parser)
-
     args = parser.parse_args()
 
     main()
