@@ -2,11 +2,11 @@ import argparse
 import logging
 import os
 import pandas as pd
-from typing import get_args, List, Dict
+from typing import List, Dict
 
-from model_learning import SelectionType, TeamTrajectory
-from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models, DISCOUNT, HORIZON, \
-    ACT_SELECTION, RATIONALITY
+from model_learning import TeamTrajectory
+from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models, add_agent_arguments, \
+    add_trajectory_arguments
 from model_learning.features.counting import empirical_feature_counts
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.trajectory import get_trajectory_action_counts
@@ -22,8 +22,6 @@ __maintainer__ = 'Pedro Sequeira'
 __description__ = 'Collects a set of fixed-length trajectories in the search-and-rescue domain. ' \
                   'Saves the trajectories to a gif animation and pickle file.'
 
-NUM_TRAJECTORIES = 1  # 5  # 10
-TRAJ_LENGTH = 25  # 30
 TRAJECTORIES_FILE = 'trajectories.pkl.gz'
 
 
@@ -116,17 +114,8 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser(description=__description__)
     add_common_arguments(parser)
-
-    parser.add_argument('--selection', '-as', type=str, choices=get_args(SelectionType), default=ACT_SELECTION,
-                        help='Agents\' action selection criterion, to untie equal-valued actions.')
-    parser.add_argument('--horizon', '-hz', type=int, default=HORIZON, help='Agents\' planning horizon.')
-    parser.add_argument('--rationality', '-r', type=float, default=RATIONALITY,
-                        help='Agents\' rationality when selecting actions under a probabilistic criterion.')
-    parser.add_argument('--discount', '-d', type=float, default=DISCOUNT, help='Agents\' planning discount factor.')
-
-    parser.add_argument('--trajectories', '-t', type=int, default=NUM_TRAJECTORIES,
-                        help='Number of trajectories to generate.')
-    parser.add_argument('--length', '-l', type=int, default=TRAJ_LENGTH, help='Length of the trajectories to generate.')
+    add_agent_arguments(parser)
+    add_trajectory_arguments(parser)
 
     args = parser.parse_args()
 

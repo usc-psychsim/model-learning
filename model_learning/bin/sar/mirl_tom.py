@@ -5,7 +5,7 @@ from typing import Optional, List
 
 from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms.mirl_tom import MIRLToM
-from model_learning.bin.sar import add_common_arguments, create_sar_world, create_agent_models
+from model_learning.bin.sar import add_common_arguments, create_sar_world, create_agent_models, add_agent_arguments
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import save_args, str2bool
 from model_learning.util.io import create_clear_dir, load_object, save_object
@@ -83,8 +83,14 @@ def main():
                 f'Model {model} of agent {other} not present in trajectories\' mental model distribution ' \
                 f'of agent {learner_ag}: {list(models_dists[other].keys())}'
 
-    # creates models of the other agents and create new models of learner agent to avoid cycles
-    create_agent_models(env, team_config, profiles)
+    # creates models of the other agents; set same agent params to model since models will be used to simulate the
+    # other agents' actions, on which the learner agent's actions are going to be then conditioned
+    create_agent_models(env, team_config, profiles,
+                        rationality=args.rationality,
+                        horizon=args.horizon,
+                        selection=args.selection)
+
+    # create new models of learner agent to avoid cycles
     learner_ag: Agent = env.world.agents[learner_ag]
     world: World = learner_ag.world
     for other, models in team_config[learner_ag.name].mental_models.items():
@@ -143,6 +149,7 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser(description=__description__)
     add_common_arguments(parser)
+    add_agent_arguments(parser)
 
     parser.add_argument('--traj-file', '-tf', type=str, required=True,
                         help='Path to the .pkl.gz file containing the team trajectories with mental model inference '
@@ -167,7 +174,7 @@ if __name__ == '__main__':
                              'will be generated to estimate the feature counts.')
     parser.add_argument('--monte-carlo', '-mc', type=int, default=NUM_MC_TRAJECTORIES,
                         help='Number of Monte Carlo trajectories to be sampled during IRL if `exact=False`.')
-    parser.add_argument('--horizon', '-hz', type=int, default=HORIZON, help='Agents\' planning horizon.')
+
     args = parser.parse_args()
 
     main()
