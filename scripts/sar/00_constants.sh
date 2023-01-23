@@ -31,7 +31,7 @@ SEED=17
 DISCOUNT=0.7
 HORIZON=2
 AG_SELECTION="random" #"softmax" # agents' action selection criterion, to untie equal-valued actions
-AG_RATIONALITY=10 #20     # agents' rationality when selecting actions under a probabilistic criterion
+AG_RATIONALITY=10     #20     # agents' rationality when selecting actions under a probabilistic criterion
 NUM_TRAJ=16
 TRAJ_LEN=25
 
@@ -49,11 +49,11 @@ INF_TRAJ_FILE="${MODEL_INF_DIR}/trajectories.pkl.gz" # hardcoded, do not edit!
 # 3. MIRL-TOM OPTIONS ===========================
 # ===============================================
 MIRL_DIR="${ROOT_DIR}/mirl-tom"
-AGENT="Medic"
-LEARNING_RATE=0.01 #TEAM_LEARNING_RATE = [5e-2, 2e-1] # 0.05
+declare -a AGENTS=("Explorer" "Medic")
+LEARNING_RATE=0.05 #0.01 #TEAM_LEARNING_RATE = [5e-2, 2e-1] # 0.05
 DECREASE_RATE=true
 NORM_THETA=true
-MAX_EPOCHS=30
-DIFF_THRESHOLD=0.005
+MAX_EPOCHS=50
+DIFF_THRESHOLD=0.005 # 0.005
 EXACT=false
-NUM_MC_TRAJECTORIES=16 # 10
+NUM_MC_TRAJECTORIES=16 #128 #32 #16 # 10

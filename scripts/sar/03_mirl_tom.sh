@@ -8,36 +8,37 @@ source "$DIR/00_constants.sh"
 cd "$DIR/../../.." || exit
 clear
 
-echo "========================================"
-echo "Performing MIRL-ToM using '${INF_TEAM_CONFIG}', saving results in ${MIRL_DIR}..."
-
-python -m model_learning.bin.sar.mirl_tom \
-  --profiles=$PROFILES \
-  --team-config=$INF_TEAM_CONFIG \
-  --traj-file=$INF_TRAJ_FILE \
-  --agent="Medic" \
-  --output=$MIRL_DIR \
-  --size=$ENV_SIZE \
-  --victims=$NUM_VICTIMS \
-  --vics-cleared-feature=$VICS_CLEARED_FEAT \
-  --learning-rate=$LEARNING_RATE \
-  --decrease-rate=$DECREASE_RATE \
-  --normalize=$NORM_THETA \
-  --epochs=$MAX_EPOCHS \
-  --threshold=$DIFF_THRESHOLD \
-  --exact=$EXACT \
-  --monte-carlo=$NUM_MC_TRAJECTORIES \
-  --discount=$DISCOUNT \
-  --horizon=$HORIZON \
-  --selection=$AG_SELECTION \
-  --rationality=$AG_RATIONALITY \
-  --prune=$PRUNE_THRESH \
-  --img-format=$IMG_FORMAT \
-  --processes=$PROCESSES \
-  --seed=$SEED \
-  --verbosity=$VERBOSITY \
-  --clear=$CLEAR
+for AGENT in "${AGENTS[@]}"; do
+  AGENT_DIR="${MIRL_DIR}/${AGENT}"
+  echo "========================================"
+  echo "Performing MIRL-ToM using '${INF_TEAM_CONFIG}' for agent ${AGENT}, saving results in ${AGENT_DIR}..."
+  python -m model_learning.bin.sar.mirl_tom \
+    --profiles=$PROFILES \
+    --team-config=$INF_TEAM_CONFIG \
+    --traj-file=$INF_TRAJ_FILE \
+    --agent=$AGENT \
+    --output=$AGENT_DIR \
+    --size=$ENV_SIZE \
+    --victims=$NUM_VICTIMS \
+    --vics-cleared-feature=$VICS_CLEARED_FEAT \
+    --learning-rate=$LEARNING_RATE \
+    --decrease-rate=$DECREASE_RATE \
+    --normalize=$NORM_THETA \
+    --epochs=$MAX_EPOCHS \
+    --threshold=$DIFF_THRESHOLD \
+    --exact=$EXACT \
+    --monte-carlo=$NUM_MC_TRAJECTORIES \
+    --discount=$DISCOUNT \
+    --horizon=$HORIZON \
+    --selection=$AG_SELECTION \
+    --rationality=$AG_RATIONALITY \
+    --prune=$PRUNE_THRESH \
+    --img-format=$IMG_FORMAT \
+    --processes=$PROCESSES \
+    --seed=$SEED \
+    --verbosity=$VERBOSITY \
+    --clear=$CLEAR
 
 echo "========================================"
 echo "Saving pip packages..."
-pip freeze >"${MIRL_DIR}/packages.txt"
+pip freeze >"${AGENT_DIR}/packages.txt"
