@@ -12,6 +12,7 @@ from model_learning.util.io import create_clear_dir, load_object, save_object
 from model_learning.util.logging import change_log_handler, MultiProcessLogger
 from model_learning.util.plot import dummy_plotly
 from psychsim.agent import Agent
+from psychsim.reward import null_reward
 from psychsim.world import World
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
@@ -90,8 +91,11 @@ def main():
                         horizon=args.horizon,
                         selection=args.selection)
 
-    # create new models of learner agent to avoid cycles
+    # set learner's reward to 0 to ensure no GT reward leakage from team config file
     learner_ag: Agent = env.world.agents[learner_ag]
+    learner_ag.setReward(null_reward(learner_ag.name))
+
+    # create new models of learner agent to avoid cycles
     world: World = learner_ag.world
     for other, models in team_config[learner_ag.name].mental_models.items():
         for model in models.keys():

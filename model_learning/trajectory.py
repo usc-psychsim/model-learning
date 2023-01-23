@@ -365,6 +365,9 @@ def generate_trajectory_tom(agent: Agent,
         for other in other_agents:
             # get agent's mental model distribution over other agents at this step
             dist = models_dists[i][agent.name][other.name]
+            included_features = set(agent.getBelief(model=agent.get_true_model()).keys())
+            agent.resetBelief(include=included_features)  # override actual features in belief states
+
             if select:
                 # select only one model
                 model, model_prob = dist.sample()
@@ -376,12 +379,13 @@ def generate_trajectory_tom(agent: Agent,
             agent_models = agent.models.copy()
             action_dist = {}
             for model, model_prob in dist.items():
-                decision = other.decide(selection='random', model=model)
+                decision = other.decide(selection='random', model=model,
+                                        )
+                                        # horizon=1)  # TODO
                 action = world.value2float(actionKey(other.name), decision['action'])
                 action_dist[setToConstantMatrix(actionKey(other.name), action)] = model_prob
             other.models = other_models  # we don't need all the new models
             agent.models = agent_models
-
             other_actions[other.name] = makeTree(Distribution(action_dist))
 
         # step the world until it's this agent's turn
