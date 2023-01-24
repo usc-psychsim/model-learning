@@ -38,6 +38,7 @@ for AGENT in "${AGENTS[@]}"; do
     --seed=$SEED \
     --verbosity=$VERBOSITY \
     --clear=$CLEAR
+done
 
 echo "========================================"
 echo "Saving pip packages..."

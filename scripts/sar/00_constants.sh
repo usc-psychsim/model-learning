@@ -49,7 +49,7 @@ INF_TRAJ_FILE="${MODEL_INF_DIR}/trajectories.pkl.gz" # hardcoded, do not edit!
 # 3. MIRL-TOM OPTIONS ===========================
 # ===============================================
 MIRL_DIR="${ROOT_DIR}/mirl-tom"
-declare -a AGENTS=("Explorer" "Medic")
+declare -a AGENTS=("Medic" "Explorer")
 LEARNING_RATE=0.05 #0.01 #TEAM_LEARNING_RATE = [5e-2, 2e-1] # 0.05
 DECREASE_RATE=true
 NORM_THETA=true
