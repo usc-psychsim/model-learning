@@ -1,7 +1,7 @@
-from typing import Tuple, Callable, Dict, Union, Optional, Literal, get_args
 import numpy as np
-import scipy.stats as stats
 import scipy.spatial.distance as distance
+import scipy.stats as stats
+from typing import Tuple, Callable, Dict, Union, Optional, Literal, get_args
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedro.sequeira@sri.com'
@@ -733,3 +733,82 @@ def stretch_array(a: np.ndarray, length: int = 1, axis: int = 0) -> np.ndarray:
 
     idxs = np.round(np.linspace(0, a.shape[axis] - 1, length)).astype(int)
     return a.take(indices=idxs, axis=axis)  # sub/re-sample at +- regular intervals
+
+
+def weighted_nanmean(a: np.ndarray,
+                     weights: Optional[np.ndarray] = None,
+                     axis: Optional[int] = None,
+                     keepdims: bool = False) -> np.ndarray:
+    """
+    Gets the weighted average of the given array along the given axis while ignoring `np.nan` values.
+    :param np.ndarray a: the array with the values from which to compute the mean.
+    :param np.ndarray weights: the array with the weights for each value in `a`. It can either have the same shape as
+    `a`, or have a compatible size, in which case the values will be evenly broadcasted to the other dimensions.
+    :param int axis: The axis along which to average `a`. `None` will average over all elements of the array.
+    :param bool keepdims: whether the output array should have the same number of dimensions of the input array `a`.
+    :rtype: np.ndarray
+    :return: an array with the weighted average of the input array along the given axis.
+    """
+    if weights is None:
+        return np.nanmean(a, axis=axis, keepdims=keepdims)
+
+    a = np.asarray(a)
+    shape = list(a.shape)
+
+    # perform weighted average but ignore nans
+    # based on numpy.lib.function_base.average and numpy.lib.nanfunctions.nanmean
+    weights = np.ones_like(a) * weights  # make sure weights has same dims as array
+    tot = a * weights
+    is_nan = np.isnan(tot)
+    weights[is_nan] = np.nan  # override nans in weights so that total is correctly "normalized"
+    scl = np.nansum(weights, axis=axis)
+    avg = np.nansum(tot, axis=axis) / scl
+
+    if keepdims:
+        if axis is None:
+            axis = np.arange(len(shape))
+        elif isinstance(axis, int):
+            axis = [axis]
+        for idx in axis:
+            shape[idx] = 1
+        avg = avg.reshape(tuple(shape))
+
+    return avg
+
+
+def weighted_nanvar(a: np.ndarray,
+                    weights: Optional[np.ndarray] = None,
+                    axis: Optional[int] = None,
+                    keepdims: bool = False):
+    """
+    Gets the variance of the weighted average of the given array along the given axis, while ignoring `np.nan` values.
+    Based on https://stackoverflow.com/a/2415343/16031961
+    :param np.ndarray a: the array with the values from which to compute the variance.
+    :param np.ndarray weights: the array with the weights for each value in `a`. It can either have the same shape as
+    `a`, or have a compatible size, in which case the values will be evenly broadcasted to the other dimensions.
+    :param int axis: The axis along which to average `a`. `None` will average over all elements of the array.
+    :param bool keepdims: whether the output array should have the same number of dimensions of the input array `a`.
+    :rtype: np.ndarray
+    :return: an array with the variance of the input array's weighted average along the given axis.
+    """
+    avg = weighted_nanmean(a, weights=weights, axis=axis, keepdims=True)
+    return weighted_nanmean((a - avg) ** 2, weights=weights, axis=axis, keepdims=keepdims)
+
+
+def weighted_nanstd(a: np.ndarray,
+                    weights: Optional[np.ndarray] = None,
+                    axis: Optional[int] = None,
+                    keepdims: bool = False):
+    """
+    Gets the standard deviation of the weighted average of the given array along the given axis, while ignoring
+    `np.nan` values.
+    Based on https://stackoverflow.com/a/2415343/16031961
+    :param np.ndarray a: the array with the values from which to compute the standard deviation.
+    :param np.ndarray weights: the array with the weights for each value in `a`. It can either have the same shape as
+    `a`, or have a compatible size, in which case the values will be evenly broadcasted to the other dimensions.
+    :param int axis: The axis along which to average `a`. `None` will average over all elements of the array.
+    :param bool keepdims: whether the output array should have the same number of dimensions of the input array `a`.
+    :rtype: np.ndarray
+    :return: an array with the standard deviation of the input array's weighted average along the given axis.
+    """
+    return np.sqrt(weighted_nanvar(a, weights=weights, axis=axis, keepdims=keepdims))
