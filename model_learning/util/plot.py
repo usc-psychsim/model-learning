@@ -10,10 +10,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 import scipy.stats as st
-from pandas.core.groupby import DataFrameGroupBy
 
 from .io import get_file_changed_extension
-from .math import stretch_array
+from .math import stretch_array, weighted_nanmean, weighted_nanstd
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
@@ -30,7 +29,6 @@ RADAR_ALPHA = 0.4
 ALL_FONT_SIZE = 16
 AXES_TITLE_FONT_SIZE = 18
 TITLE_FONT_SIZE = 24
-LEGEND_ALPHA = 0.7
 
 
 class ErrorStat(IntEnum):
@@ -43,29 +41,54 @@ class ErrorStat(IntEnum):
     CI99 = 3
 
 
-def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame, DataFrameGroupBy],
+def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame],
                          error_stat: ErrorStat,
+                         group_by: Optional[str] = None,
+                         weights: Optional[Union[np.ndarray, str]] = None,
+                         keepdims: bool = True,
                          axis: int = None) -> Union[Tuple[np.ndarray, np.ndarray],
                                                     Tuple[pd.DataFrame, pd.DataFrame],
                                                     Tuple[pd.Series, pd.Series]]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)  # avoid empty slice warnings
 
-        # gets mean std dev according to type
-        if isinstance(data, np.ndarray):
-            mean = np.nanmean(data, axis=axis)
-            std = np.nanstd(data, axis=axis)
+        # gets mean std dev according to data type
+        if isinstance(data, np.ndarray) and (weights is None or isinstance(weights, np.ndarray)):
+            mean = weighted_nanmean(data, weights=weights, axis=axis, keepdims=keepdims)
+            std = weighted_nanstd(data, weights=weights, axis=axis, keepdims=keepdims)
             n = data.shape[axis or 0]
-        elif isinstance(data, pd.DataFrame):
-            mean = data.mean(axis=axis, skipna=True)
-            std = data.std(axis=axis, skipna=True)
+        elif isinstance(data, pd.DataFrame) and (weights is None or isinstance(weights, str)):
+            if group_by is not None and group_by in data.columns:
+                mean_dfs: List[pd.DataFrame] = []
+                std_dfs: List[pd.DataFrame] = []
+                for g, _df in data.groupby(group_by):
+                    # compute mean and std for each group
+                    _df = _df.drop(group_by, axis=1)
+                    mean_df, std_df = _get_mean_error_stat(
+                        _df, error_stat=error_stat, weights=weights, keepdims=keepdims, axis=axis)
+                    mean_df[group_by] = g
+                    mean_df.set_index(group_by, inplace=True)  # group label is set as index
+                    std_df[group_by] = g
+                    std_df.set_index(group_by, inplace=True)  # group label is set as index
+                    mean_dfs.append(mean_df)
+                    std_dfs.append(std_df)
+                mean_df = pd.concat(mean_dfs, axis=0)
+                std_df = pd.concat(std_dfs, axis=0)
+                return mean_df, std_df
+
+            if weights is not None:
+                # get weights and drop weights column
+                _weights = data[weights].values.reshape(-1, 1)
+                data.drop(weights, axis=1, inplace=True)
+                weights = _weights
+
+            mean = pd.DataFrame(weighted_nanmean(data.values, weights=weights, keepdims=keepdims, axis=axis),
+                                columns=data.columns if axis == 0 else None)
+            std = pd.DataFrame(weighted_nanstd(data.values, weights=weights, keepdims=keepdims, axis=axis),
+                               columns=data.columns if axis == 0 else None)
             n = data.shape[axis or 0]
-        elif isinstance(data, DataFrameGroupBy):
-            mean = data.mean()
-            std = data.std()
-            n = data.ngroups
         else:
-            raise ValueError(f'Data type not supported: {data}')
+            raise ValueError(f'Data type not supported: {data}, or weights incompatible with data: {weights}')
 
         # gets error stat
         if error_stat == ErrorStat.StdDev:
@@ -102,6 +125,7 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
                     plot_avg_error: bool = True,
                     error_stat: ErrorStat = ErrorStat.CI95,
                     group_by: str = None,
+                    weights: Optional[Union[pd.DataFrame, Dict[str, np.ndarray]]] = None,
                     reverse_x_axis: bool = False,
                     y_min: Optional[float] = None,
                     y_max: Optional[float] = None,
@@ -146,6 +170,8 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     `N*M` new variables/series, one for each possible value of the `group_by` column, for each of the other variables/
     columns in the data. If `average` is `True`, then the average is performed by original variable across the grouped
     data and not over all variables.
+    :param str weights: a structure equivalent to `data` containing the weights for each step of each timeseries. If a
+    single row (a single value per timeseries) is provided, then all timesteps of each series are weighted equally.
     :param bool reverse_x_axis: whether to reverse the order of values in the x-axis.
     :param float y_min: the minimal value of the y-axis.
     :param float y_max: the maximal value of the y-axis.
@@ -163,35 +189,63 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     if isinstance(data, dict):
         data = pd.DataFrame.from_dict(data, orient='index').transpose()
 
+    if group_by is not None:
+        assert group_by in data.columns, f'Group by column {group_by} is not a valid column: {data.columns}'
+    if weights is not None:
+        if isinstance(weights, dict):
+            weights = pd.DataFrame.from_dict(weights, orient='index').transpose()
+        assert len(set(data.columns) - set(weights.columns)) == 0, \
+            f'Weights columns {weights.columns} are missing some data columns: {data.columns}'
+        assert weights.shape == data.shape or weights.shape[0] == 1, \
+            f'Weights should be the same size of data or have a single row, but {weights.shape} was provided'
+
     # group by given column
     var_groups = None
-    if group_by is not None and group_by in data.columns:
-        var_groups = {v: [] for v in data.columns if v != group_by}
-        dfs = []
+    if group_by is not None:
+        var_groups = {v: [] for v in data.columns if v != group_by}  # create index for each non-group_by column
+        dfs: List[pd.DataFrame] = []  # the dataframes for each group_by partition
+        weight_dfs: List[pd.DataFrame] = []
         for g, g_df in data.groupby(group_by):
             g_df = g_df.drop(group_by, axis=1)  # drop the group-by column
-            g_df = g_df.rename(columns={v: f'{group_by}-{g}-{v}' for v in g_df.columns})
-            for v in var_groups.keys():
-                var_groups[v].append(f'{group_by}-{g}-{v}')  # organizes new columns by variable
+            g_df = g_df.rename(columns={v: f'{group_by}-{g}-{v}'
+                                        for v in g_df.columns})  # renames columns for this group partition
+            g_df.reset_index(drop=True, inplace=True)
             dfs.append(g_df)
+
+            for v in var_groups.keys():
+                var_groups[v].append(f'{group_by}-{g}-{v}')  # store the new columns for this group partition
+
+            if weights is not None:
+                w_df = weights.iloc[g_df.index]
+                w_df = w_df.rename(columns={v: f'{group_by}-{g}-{v}'
+                                            for v in w_df.columns})  # renames columns for this group partition
+                w_df.reset_index(drop=True, inplace=True)
+                weight_dfs.append(w_df)
+
         data = pd.concat(dfs, axis=1)
+        if weights is not None:
+            weights = pd.concat(weight_dfs, axis=1)
 
     # get average and error data
-    err_data = None
+    err_data: Optional[pd.DataFrame] = None
     if average:
         if var_groups is not None:
             # average each variable group
-            avg_data = {}
-            err_data = {}
+            _avg_data: Dict[str, np.ndarray] = {}
+            _err_data: Dict[str, np.ndarray] = {}
             for v, cols in var_groups.items():
-                avg_data[v], err_data[v] = _get_mean_error_stat(data[cols].values, error_stat, axis=1)
-            err_data = pd.DataFrame(err_data, index=data.index)
-            data = pd.DataFrame(avg_data, index=data.index)
+                _weights = None if weights is None else weights[cols].values
+                _avg_data[v], _err_data[v] = _get_mean_error_stat(
+                    data[cols].values, error_stat, weights=_weights, axis=1, keepdims=False)
+            err_data = pd.DataFrame(_err_data, index=data.index)
+            data = pd.DataFrame(_avg_data, index=data.index)
         else:
+            # single timeseries (average of all timeseries)
             label = var_label or 'variable'
-            mean, err_data = _get_mean_error_stat(data.values, error_stat, axis=1)
-            err_data = pd.DataFrame({label: err_data}, index=data.index)
-            data = pd.DataFrame({label: mean}, index=data.index)
+            _weights = None if weights is None else weights.values
+            mean, err_data = _get_mean_error_stat(data.values, error_stat, weights=_weights, axis=1)
+            err_data = pd.DataFrame({label: err_data.flatten()}, index=data.index)
+            data = pd.DataFrame({label: mean.flatten()}, index=data.index)
 
     # smooth the curves
     if smooth_factor > 0:
@@ -203,23 +257,26 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     if normalize_samples is not None and normalize_samples >= 1:
         x_label = 'Normalized Index' if x_label is None else x_label + ' (normalized)'
         norm_data = {}
+        norm_err_data = {}
         for v in data.columns:
             non_nan = np.cumsum(~np.isnan(data[v].values))
             max_idx, = np.where(non_nan == non_nan[-1])
             max_idx = max_idx[0] + 1
             norm_data[v] = stretch_array(data[v].values[:max_idx], normalize_samples)
             if err_data is not None:
-                err_data[v] = stretch_array(err_data[v][:max_idx], normalize_samples)
+                norm_err_data[v] = stretch_array(err_data[v].values[:max_idx], normalize_samples)
         data = pd.DataFrame(norm_data, index=np.linspace(0, 1, normalize_samples))
+        err_data = pd.DataFrame(norm_err_data, index=np.linspace(0, 1, normalize_samples))
 
     # checks color palette, discretize if needed
     colors = palette
-    num_colors = len(data.columns) if isinstance(data, pd.DataFrame) else len(data)
+    num_colors = len(data.columns)
     if isinstance(colors, str) or (isinstance(colors, list) and num_colors > len(colors) > 1):
         colors = px.colors.sample_colorscale(colors, np.linspace(0, 1, num_colors))
 
-    # convert all colors to rgb format to allows playing with alpha
-    colors = px.colors.convert_colors_to_same_type(colors, colortype='rgb')[0]
+    # # convert all colors to rgb format to allow playing with alpha
+    # if colors is not None:
+    #     colors = px.colors.convert_colors_to_same_type(colors, colortype='rgb')[0]
 
     # plots data, see https://plotly.com/python/wide-form/#wideform-defaults
     fig = px.line(data, title=title,
@@ -231,7 +288,11 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     # plots average (std) error via shaded area
     if average and plot_avg_error:
         for shape in fig.data:
-            r, g, b = px.colors.unlabel_rgb(shape.line.color)
+            color = shape.line.color
+            if isinstance(color, str) and color.startswith('rgb('):
+                r, g, b = px.colors.unlabel_rgb(color)
+            else:
+                r, g, b = px.colors.hex_to_rgb(color)  # assume hex color
             color = f'rgba({int(r)},{int(g)},{int(b)},{ERROR_AREA_ALPHA})'
             non_nan = np.cumsum(~np.isnan(shape.y))
             max_idx, = np.where(non_nan == non_nan[-1])
@@ -302,6 +363,7 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
              error_stat: ErrorStat = ErrorStat.CI95,
              group_by: str = None,
              group_norm: bool = False,
+             weights: Optional[str] = None,
              y_min: Optional[float] = None,
              y_max: Optional[float] = None,
              log_y: bool = False,
@@ -338,6 +400,7 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
     :param bool group_norm: If `group_by` is not `None`, then this controls whether the quantities for the other
     variables should be normalized such that the sum for each `group_by` variable value equals to 1. This results in
     a stacked bars plot, each value representing a percentage.
+    :param str weights: the data column containing the rows' weights, in which case a weighted average is computed.
     :param float y_min: the minimal value of the y-axis.
     :param float y_max: the maximal value of the y-axis.
     :param bool log_y: whether the y-axis is log-scaled in cartesian coordinates.
@@ -353,13 +416,16 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
     if isinstance(data, dict):
         data = pd.DataFrame.from_dict(data, orient='index').transpose()
 
+    if group_by is not None:
+        assert group_by in data.columns, f'Group by column {group_by} is not a valid column: {data.columns}'
+    if weights is not None:
+        assert weights in data.columns, f'Weights column {weights} is not a valid column: {data.columns}'
+
     # group by given column
-    is_grouped = group_by is not None and group_by in data.columns
+    is_grouped = group_by is not None
     if is_grouped:
         # take the mean over groups for each variable
-        gb = data.groupby(group_by)
-        data, err_data = _get_mean_error_stat(gb, error_stat, axis=0)
-        data.index.names = err_data.index.names = [group_by]
+        data, err_data = _get_mean_error_stat(data, error_stat, group_by=group_by, weights=weights, axis=0)
 
         # checks normalization
         if group_norm:
@@ -369,30 +435,28 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
             y_label = 'Percentage' if y_label is None else y_label + ' (%)'
     else:
         # take the mean over variables
-        data, err_data = _get_mean_error_stat(data, error_stat, axis=0)
+        data, err_data = _get_mean_error_stat(data, error_stat, weights=weights, axis=0)
 
     # checks color palette, discretize if needed
     colors = palette
-    num_colors = len(data.columns) if is_grouped else len(data)
+    num_colors = len(data.columns)
     if isinstance(colors, str) or (isinstance(colors, list) and num_colors > len(colors) > 1):
         colors = px.colors.sample_colorscale(palette, np.linspace(0, 1, num_colors))
 
     # plots data
-    fig = px.bar(data, title=title, error_y=None if is_grouped else err_data,
+    fig = px.bar(data, title=title,
                  labels={'index': x_label or 'Index',
                          'value': y_label or 'Value',
                          'variable': x_label or 'Variable'},
-                 barmode='group' if is_grouped and not group_norm else 'relative',
-                 color=None if is_grouped else data.index,
+                 barmode='group' if not group_norm else 'relative',
                  orientation=orientation,
                  log_y=log_y, color_discrete_sequence=colors, template=template)
 
     # updates error bars
-    visible = bool(plot_error and pd.notna(err_data).sum().sum() > 0)
-    fig.update_traces(dict(error_y=dict(width=ERROR_BAR_WIDTH, thickness=ERROR_BAR_THICKNESS, visible=visible)))
-    if is_grouped:
-        for shape in fig.data:
-            shape.update(error_y=dict(array=err_data[shape.name], type='data', symmetric=True))
+    fig.update_traces(dict(error_y=dict(width=ERROR_BAR_WIDTH, thickness=ERROR_BAR_THICKNESS,
+                                        visible=bool(plot_error and pd.notna(err_data).sum().sum() > 0))))
+    for shape in fig.data:
+        shape.update(error_y=dict(array=err_data[shape.name], type='data', symmetric=True))
 
     # plots mean
     if plot_mean and len(data) > 1:
@@ -844,7 +908,7 @@ def format_and_save_plot(fig: go.Figure,
     axis_layout = dict(mirror=True, ticks='outside', showline=True, linecolor='black', title=dict(standoff=10))
     margin = margin if margin is not None else dict(l=0, r=0, b=0, t=title_font_size + 12 if title else 0)
     fig.update_layout(showlegend=show_legend, legend_itemclick='toggle',
-                      legend=dict(bordercolor='black', borderwidth=1, bgcolor=f'rgba(1.0,1.0,1.0,{LEGEND_ALPHA})'),
+                      legend=dict(bordercolor='black', borderwidth=1),
                       xaxis=axis_layout, yaxis=axis_layout, margin=margin,
                       width=width, height=height)
 
@@ -875,9 +939,11 @@ def dummy_plotly(sleep: float = 0.5):
     df = pd.DataFrame(np.random.random((100, 20)))
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, 'tmpfile.pdf')
-        plot_timeseries(df, average=True, output_img=path)
+        x = np.arange(10)
+        fig = go.Figure(data=go.Scatter(x=x, y=x ** 2))
+        fig.write_image(path)
         import time
-        time.sleep(sleep)
+        time.sleep(sleep)  # not sure why, but waiting helps the message be absent in subsequent plots..
 
 
 def distinct_colors(n: int, array: bool = False) -> Union[List[str], np.ndarray]:
@@ -891,5 +957,5 @@ def distinct_colors(n: int, array: bool = False) -> Union[List[str], np.ndarray]
     colors = [colorsys.hls_to_rgb(i / n, .65, .9) for i in range(n)]
     if array:
         return np.array(colors)
-    
+
     return ['rgb(' + ','.join([str(int(255 * c)) for c in color]) + ')' for color in colors]
