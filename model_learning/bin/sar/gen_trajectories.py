@@ -1,5 +1,6 @@
 import argparse
 import logging
+import numpy as np
 import os
 import pandas as pd
 from typing import List, Dict
@@ -81,9 +82,11 @@ def main():
     for role in team_config.keys():
         reward_vector = SearchRescueRewardVector(env, env.world.agents[role])
         feature_func = lambda s: reward_vector.get_values(s)
-        efc = empirical_feature_counts(team_trajectories, feature_func)
-        plot_bar(pd.DataFrame(efc.reshape(1, -1), columns=reward_vector.names),
-                 'Empirical Feature Counts',
+        fcs, probs = empirical_feature_counts(
+            team_trajectories, feature_func, unweighted=True)  # shape: (num_traj, timesteps, num_features)
+        efc = np.sum(fcs * probs, axis=1)  # shape: (num_traj, num_features)
+        plot_bar(pd.DataFrame(efc, columns=reward_vector.names),
+                 'Mean Empirical Feature Counts',
                  os.path.join(stats_path, f'feature-counts-{role.lower()}.{args.img_format}'),
                  x_label='Reward Features', y_label='Mean Count')
 
