@@ -444,13 +444,13 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
         colors = px.colors.sample_colorscale(palette, np.linspace(0, 1, num_colors))
 
     # plots data
-    fig = px.bar(data, title=title,
+    fig = px.bar(data if is_grouped else data.T, title=title,
                  labels={'index': x_label or 'Index',
                          'value': y_label or 'Value',
                          'variable': x_label or 'Variable'},
-                 barmode='group' if not group_norm else 'relative',
-                 orientation=orientation,
-                 log_y=log_y, color_discrete_sequence=colors, template=template)
+                 barmode='group' if is_grouped and not group_norm else 'relative',
+                 color=None if is_grouped else data.columns, color_discrete_sequence=colors,
+                 orientation=orientation, log_y=log_y, template=template)
 
     # updates error bars
     fig.update_traces(dict(error_y=dict(width=ERROR_BAR_WIDTH, thickness=ERROR_BAR_THICKNESS,
@@ -459,7 +459,7 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
         shape.update(error_y=dict(array=err_data[shape.name], type='data', symmetric=True))
 
     # plots mean
-    if plot_mean and len(data) > 1:
+    if plot_mean:
         y_mean = np.nanmean(data.values)  # add horizontal line with mean value
         if orientation == 'h':
             fig.add_vline(x=y_mean, line_width=2, line_dash='dash', line_color='grey',
