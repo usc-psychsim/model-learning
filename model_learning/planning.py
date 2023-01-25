@@ -1,4 +1,5 @@
 import numpy as np
+import random
 from typing import Optional, List
 
 from model_learning import State, SelectionType
@@ -17,7 +18,8 @@ def get_state_policy(agent: Agent,
                      state: State,
                      model: Optional[str] = None,
                      horizon: Optional[int] = None,
-                     selection: Optional[SelectionType] = None) -> Distribution:
+                     selection: Optional[SelectionType] = None,
+                     seed: int = 0) -> Distribution:
     """
     Gets an agent's policy (action selection distribution) for the given state.
     :param Agent agent: the agent for which to calculate the policy.
@@ -25,9 +27,11 @@ def get_state_policy(agent: Agent,
     :param str model: the name of the agent's model used for decision-making. `None` corresponds to the true model.
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
+    :param int seed: the seed used to initialize the random number generator.
     :rtype: Distribution
     :return: an action distribution for the given state.
     """
+    random.seed(seed)
     decision = agent.decide(state, horizon=horizon, selection=selection, model=model)
     return decision[agent.world.getFeature(modelKey(agent.name), state=state, unique=True)]['action']
 
@@ -38,6 +42,7 @@ def get_states_policy(agent: Agent,
                       horizon: Optional[int] = None,
                       selection: Optional[SelectionType] = None,
                       processes: int = -1,
+                      seed: int = 0,
                       use_tqdm: bool = True) -> List[Distribution]:
     """
     Gets an agent's policy (action selection) for the given states.
@@ -47,11 +52,12 @@ def get_states_policy(agent: Agent,
     :param int horizon: the agent's planning horizon.
     :param str selection: the action selection criterion, to untie equal-valued actions.
     :param int processes: number of processes to use. Follows `joblib` convention.
+    :param int seed: the seed used to initialize the random number generator.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
     :rtype: list[Distribution]
     :return: a list containing an action (or distribution) for each given state.
     """
-    args = [(agent, s, model, horizon, selection) for s in states]
+    args = [(agent, s, model, horizon, selection, seed) for s in states]
     return run_parallel(get_state_policy, args, processes=processes, use_tqdm=use_tqdm)
 
 
