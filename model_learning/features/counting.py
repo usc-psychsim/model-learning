@@ -1,25 +1,34 @@
 import itertools as it
 import numpy as np
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Union, Tuple
 
-from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, StateActionProbTrajectory
+from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, \
+    StateActionProbTrajectory
 from model_learning.trajectory import generate_trajectory_distribution, generate_trajectory_distribution_tom
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
+from model_learning.util.math import weighted_nanmean
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
 
 
 def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
-                             feature_func: Callable[[State], np.ndarray]) -> np.ndarray:
+                             feature_func: Callable[[State], np.ndarray],
+                             unweighted: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Computes the empirical (mean over paths) feature counts, i.e., the sum of the feature values for each state along
     a trajectory, averaged across all given trajectories and weighted according to the probability of each trajectory.
     :param list[Trajectory] trajectories: a list of trajectories, each containing a sequence of state-action pairs.
     :param Callable feature_func: the function to extract the features out of each state.
+    :param bool unweighted: whether to get the raw feature values for each timestep of each trajectory and associated
+    probabilities (weights), instead of the weighted feature count average.
     :rtype: np.ndarray
-    :return: an array of shape (num_features, ) containing the mean counts for each feature over all trajectories.
+    :return: If `unweighted=False`, returns an array of shape (num_features, ) containing the weighted mean counts for
+    each feature over all trajectories. If `unweighted=True`, returns a tuple with an array of shape
+    (num_trajectories, timesteps, num_features) containing the raw feature values for each timestep of each trajectory
+    and an array of shape (num_traj, timesteps, 1) containing the probabilities associated with each timestep of each
+    trajectory.
     """
     # gets feature counts for each timestep of each trajectory
     t_fcs = []
@@ -29,16 +38,20 @@ def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
         probs = []
         for sp in trajectory:
             # gets feature values at this state weighted by its probability, shape: (num_features, )
-            fcs.append(feature_func(sp.state) * sp.prob)
+            fcs.append(feature_func(sp.state))
             probs.append(sp.prob)
         t_probs.append(probs)  # get probs during trajectory, shape: (timesteps, 1)
         t_fcs.append(fcs)  # shape: (timesteps, num_features)
 
-    t_probs = np.array(t_probs)  # shape: (num_traj, timesteps)
-    prob_weights = np.sum(t_probs, axis=0)  # shape: (timesteps, )
+    t_probs = np.array(t_probs)[..., np.newaxis]  # shape: (num_traj, timesteps, 1)
     t_fcs = np.array(t_fcs)  # shape: (num_traj, timesteps, num_features)
-    fcs_weighted = np.sum(t_fcs, axis=0) / prob_weights.reshape(-1, 1)  # shape: (timesteps, num_features)
-    return np.sum(fcs_weighted, axis=0)  # get weighted average of feature counts/sums, shape: (num_features, )
+
+    if unweighted:
+        return t_fcs, t_probs
+
+    # get weighted average of feature counts/sums
+    weighted_fcs = weighted_nanmean(t_fcs, t_probs, axis=0)  # shape: (timesteps, num_features)
+    return np.sum(weighted_fcs, axis=0)  # shape: (num_features, )
 
 
 def estimate_feature_counts(agent: Agent,
@@ -50,10 +63,11 @@ def estimate_feature_counts(agent: Agent,
                             model: Optional[str] = None,
                             horizon: Optional[int] = None,
                             threshold: Optional[float] = None,
+                            unweighted: bool = False,
                             processes: Optional[int] = -1,
                             seed: int = 0,
                             verbose: bool = False,
-                            use_tqdm: bool = True) -> np.ndarray:
+                            use_tqdm: bool = True) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Estimates the expected feature counts by generating trajectories from the given initial states and then computing
     the average feature counts per path.
@@ -67,12 +81,18 @@ def estimate_feature_counts(agent: Agent,
     :param str model: the agent model used to generate the trajectories.
     :param int horizon: the agent's planning horizon.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param bool unweighted: whether to get the raw feature values for each timestep of each trajectory and associated
+    probabilities (weights), instead of the weighted feature count average.
     :param int processes: number of processes to use. Follows `joblib` convention.
     :param int seed: the seed used to initialize the random number generator.
     :param bool verbose: whether to show information at each timestep during trajectory generation.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
     :rtype: np.ndarray
-    :return: the estimated feature counts.
+    :return: If `unweighted=False`, returns an array of shape (num_features, ) containing the estimated weighted mean
+    counts for each feature over all generated trajectories. If `unweighted=True`, returns a tuple with an array of
+    shape (num_trajectories, timesteps, num_features) containing the raw feature values for each timestep of each
+    trajectory and an array of shape (num_traj, timesteps, 1) containing the probabilities associated with each
+    timestep of each trajectory.
     """
 
     args = []
@@ -84,7 +104,7 @@ def estimate_feature_counts(agent: Agent,
     trajectories: List[Trajectory] = list(it.chain(*trajectories))
 
     # return expected feature counts over all generated trajectories
-    return empirical_feature_counts(trajectories, feature_func)
+    return empirical_feature_counts(trajectories, feature_func, unweighted=unweighted)
 
 
 def estimate_feature_counts_tom(agent: Agent,
@@ -95,10 +115,11 @@ def estimate_feature_counts_tom(agent: Agent,
                                 model: Optional[str] = None,
                                 horizon: Optional[int] = None,
                                 threshold: Optional[float] = None,
+                                unweighted: bool = False,
                                 processes: int = -1,
                                 seed: int = 0,
                                 verbose: bool = False,
-                                use_tqdm: bool = True) -> np.ndarray:
+                                use_tqdm: bool = True) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Estimates the expected feature counts by generating trajectories from the initial states in the given trajectories
     and then computing the average feature counts per path.
@@ -115,12 +136,18 @@ def estimate_feature_counts_tom(agent: Agent,
     :param str model: the agent model used to generate the trajectories.
     :param int horizon: the agent's planning horizon.
     :param float threshold: outcomes with a likelihood below this threshold are pruned. `None` means no pruning.
+    :param bool unweighted: whether to get the raw feature values for each timestep of each trajectory and associated
+    probabilities (weights), instead of the weighted feature count average.
     :param int processes: number of processes to use. Follows `joblib` convention.
     :param int seed: the seed used to initialize the random number generator.
     :param bool verbose: whether to show information at each timestep during trajectory generation.
     :param bool use_tqdm: whether to use tqdm to show progress bar during trajectory generation.
     :rtype: np.ndarray
-    :return: the estimated feature counts.
+    :return: If `unweighted=False`, returns an array of shape (num_features, ) containing the estimated weighted mean
+    counts for each feature over all generated trajectories. If `unweighted=True`, returns a tuple with an array of
+    shape (num_trajectories, timesteps, num_features) containing the raw feature values for each timestep of each
+    trajectory and an array of shape (num_traj, timesteps, 1) containing the probabilities associated with each
+    timestep of each trajectory.
     """
     args = []
     for t, trajectory in enumerate(trajectories):
@@ -131,4 +158,4 @@ def estimate_feature_counts_tom(agent: Agent,
     trajectories = run_parallel(generate_trajectory_distribution_tom, args,
                                 processes=processes, use_tqdm=use_tqdm)
     trajectories: List[Trajectory] = list(it.chain(*trajectories))
-    return empirical_feature_counts(trajectories, feature_func)
+    return empirical_feature_counts(trajectories, feature_func, unweighted=unweighted)
