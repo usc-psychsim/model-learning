@@ -1,17 +1,21 @@
 import argparse
 import logging
+import numpy as np
 import os
+import pandas as pd
 import tqdm
 from typing import List, Tuple, Dict, Optional, get_args
 
-from model_learning import SelectionType
+from model_learning import SelectionType, MultiagentTrajectory, State
 from model_learning.bin.sar.config import AgentProfiles, TeamConfig
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld
+from model_learning.features.counting import estimate_feature_counts_tom, estimate_feature_counts, mean_feature_counts
 from model_learning.features.linear import LinearRewardFunction, add_linear_reward_model
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.inference import MODEL_SELECTION, MODEL_RATIONALITY, MODEL_HORIZON, create_inference_observers, \
     get_model_distributions
 from model_learning.util.cmd_line import str2bool, str2log_level
+from model_learning.util.plot import plot_bar
 from psychsim.agent import Agent
 from psychsim.probability import Distribution
 from psychsim.world import World
@@ -280,3 +284,154 @@ def create_observers(env: SearchRescueGridWorld,
             logging.info(f'Set mental models of agent {other} to {observer.name}:\n{models}')
 
     return observers
+
+
+def setup_modeling_agent(agent: str,
+                         env: SearchRescueGridWorld,
+                         team_config: TeamConfig,
+                         profiles: AgentProfiles,
+                         rationality: float = MODEL_RATIONALITY,
+                         horizon: int = MODEL_HORIZON,
+                         selection: SelectionType = MODEL_SELECTION):
+    """
+    Creates the (mental) models of other agents for a given agent according to the given configuration.
+    This is useful for decentralized MIRL and feature count estimation since we are only assessing an agent's behavior
+    against known models of other agents, i.e., the agent itself is not modeled by others.
+    :param SearchRescueGridWorld env: the search-and-rescue environment.
+    :param TeamConfig team_config: the team's configuration.
+    :param AgentProfiles profiles: the set of agent profiles.
+    :param str agent: the role for which to create the mental models.
+    :param float rationality: the other agent models' rationality when selecting actions, as modelled by the agent.
+    :param int horizon: the other agent models' planning horizon as modelled by the agent.
+    :param str selection: the other agent models' action selection criterion, as modelled by the agent.
+    """
+    # filters team_config to contain only the agent's config with mental models
+    team_config = TeamConfig({agent: team_config[agent]})
+
+    # creates models of the other agents
+    create_agent_models(env, team_config, profiles,
+                        rationality=rationality,
+                        horizon=horizon,
+                        selection=selection)
+
+    # create new models of learner agent to avoid cycles
+    agent: Agent = env.world.agents[agent]
+    world: World = agent.world
+    mental_models = team_config[agent.name].mental_models
+    if mental_models is not None:
+        for other, models in mental_models.items():
+            for model in models.keys():
+                model = f'{other}_{model}'
+                learner_model = f'{model}_zero_{agent.name}'
+                agent.addModel(learner_model, parent=agent.get_true_model())
+                world.setMentalModel(agent.name, other, model, model=learner_model)
+                world.setMentalModel(other, agent.name, learner_model, model=model)
+
+
+def plot_feature_counts(features: np.ndarray,
+                        probs: np.ndarray,
+                        title: str,
+                        labels: List[str],
+                        output_dir: str,
+                        img_format: str):
+    """
+    Plots a bar chart with the mean counts over trajectories for each feature.
+    :param np.ndarray features: the "raw" feature values for a set of trajectories, corresponding to an array of
+    shape (num_traj, timesteps, num_features).
+    :param np.ndarray probs: the probabilities associated with each timestep of each trajectory, corresponding to
+    an array of shape (num_traj, timesteps).
+    :param str title: the plot title.
+    :param list[str] labels: the names of the features.
+    :param str output_dir: the path to the directory in which to save the plot.
+    :param str img_format: the format of the image in which to plot the chart.
+    """
+    # transforms data to get fcs and weights by trajectory
+    features = np.sum(features, axis=1)  # shape (num_traj, num_features)
+    probs = probs[:, -1].reshape(-1, 1)  # shape (num_traj, 1)
+    df = pd.DataFrame(np.concatenate([features, probs], axis=1), columns=labels + ['Weights'])
+    plot_bar(df, title, os.path.join(output_dir, f'{title.lower().replace(" ", "-")}.{img_format}'),
+             weights='Weights', x_label='Reward Features', y_label='Mean Count')
+
+
+def _get_estimated_feature_counts(trajectories: List[MultiagentTrajectory],
+                                  env: SearchRescueGridWorld,
+                                  agent: Agent,
+                                  team_config: TeamConfig,
+                                  profiles: AgentProfiles,
+                                  output_dir: str,
+                                  args: argparse.Namespace) -> np.ndarray:
+    """
+    Gets estimated feature counts via Monte Carlo trajectory sampling (possibly using model distribution sequence)
+    :param list[MultiagentTrajectory] trajectories: the set of trajectories used to estimate feature counts.
+    :param SearchRescueGridWorld env: the search-and-rescue environment.
+    :param Agent agent: the PsychSim agent used to estimate the feature counts.
+    :param TeamConfig team_config: the team's configuration.
+    :param AgentProfiles profiles: the set of agent profiles.
+    :param str output_dir: the directory in which to save the feature count bar chart.
+    :param argparse.Namespace args: the command-line arguments.
+    :rtype: np.ndarray
+    :return: an array of shape (num_features, ) containing the mean feature counts.
+    """
+    # creates mental models for agent and set same agent params to models since they will only be used to simulate the
+    # other agents' actions, on which the learner agent's actions will then be conditioned
+    logging.info(f'Setting up agent  {agent.name} for FC estimation...')
+    setup_modeling_agent(agent.name, env, team_config, profiles,
+                         rationality=args.rationality,
+                         horizon=args.horizon,
+                         selection=args.selection)
+    env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
+
+    logging.info(f'Estimating feature counts for agent {agent.name} '
+                 f'using {args.trajectories} Monte-Carlo trajectories...')
+    agent_lrv = SearchRescueRewardVector(env, agent)
+
+    if hasattr(trajectories[0][0], 'models_dists'):
+        logging.info('Generating trajectories *with* model distribution sequence')
+
+        # checks model distributions in trajectories (considered consistent)
+        models_dists = trajectories[0][0].models_dists
+        for other, models in team_config[agent.name].mental_models.items():
+            assert other in models_dists[agent.name], \
+                f'Agent {other} not present in trajectories\' mental model distribution ' \
+                f'of agent {agent.name}: {list(models_dists.keys())}'
+            for model in models.keys():
+                assert f'{other}_{model}' in models_dists[agent.name][other], \
+                    f'Model {model} of agent {other} not present in trajectories\' mental model distribution ' \
+                    f'of agent {agent.name}: {list(models_dists[other].keys())}'
+
+        feature_func = lambda s: agent_lrv.get_values(s)
+        features, probs = estimate_feature_counts_tom(
+            agent, trajectories,
+            feature_func=feature_func,
+            exact=False,
+            num_mc_trajectories=args.trajectories,
+            horizon=args.horizon,
+            threshold=args.prune,
+            unweighted=True,
+            processes=args.processes,
+            seed=args.seed,
+            verbose=False,
+            use_tqdm=True)
+    else:
+        logging.info('Generating trajectories *without* model distribution sequence')
+
+        init_states: List[State] = [trajectory[0].state for trajectory in trajectories]
+        feature_func = lambda s: agent_lrv.get_values(s)
+        features, probs = estimate_feature_counts(
+            agent, init_states,
+            trajectory_length=len(trajectories[0]),  # assume same-length trajectories
+            feature_func=feature_func,
+            exact=False,
+            num_mc_trajectories=args.trajectories,
+            horizon=args.horizon,
+            threshold=args.prune,
+            unweighted=True,
+            processes=args.processes,
+            seed=args.seed,
+            verbose=False,
+            use_tqdm=True)
+
+    plot_feature_counts(features, probs, title=f'Learner {agent.name} Estimated FCs',
+                        labels=agent_lrv.names, output_dir=output_dir, img_format=args.img_format)
+
+    return mean_feature_counts(features, probs)  # shape: (num_features, )
