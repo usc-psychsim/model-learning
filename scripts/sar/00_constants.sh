@@ -36,19 +36,25 @@ NUM_TRAJ=16
 TRAJ_LEN=25
 
 ROOT_DIR="${ROOT_DIR}_t${NUM_TRAJ}_l${TRAJ_LEN}"
-TRAJ_DIR="${ROOT_DIR}/trajectories"
+TRAJ_DIR="${ROOT_DIR}/1-trajectories"
 TRAJ_FILE="${TRAJ_DIR}/trajectories.pkl.gz" # hardcoded, do not edit!
 
 # ===============================================
-# 2. MODEL INFERENCE OPTIONS ====================
+# 2. FC ESTIMATION DIFF OPTIONS =================
 # ===============================================
-MODEL_INF_DIR="${ROOT_DIR}/model_inference"
+FC_EST_DIFF_DIR="${ROOT_DIR}/2-fc-est-diff"
+NUM_EFC_TRAJS=16 # 16 32 # num Monte-Carlo trajectories to estimate feature counts
+
+# ===============================================
+# 3. MODEL INFERENCE OPTIONS ====================
+# ===============================================
+MODEL_INF_DIR="${ROOT_DIR}/3-model-inference"
 INF_TRAJ_FILE="${MODEL_INF_DIR}/trajectories.pkl.gz" # hardcoded, do not edit!
 
 # ===============================================
-# 3. MIRL-TOM OPTIONS ===========================
+# 4. MIRL-TOM OPTIONS ===========================
 # ===============================================
-MIRL_DIR="${ROOT_DIR}/mirl-tom"
+MIRL_DIR="${ROOT_DIR}/4-mirl-tom"
 declare -a AGENTS=("Medic" "Explorer")
 LEARNING_RATE=0.05 #0.01 #TEAM_LEARNING_RATE = [5e-2, 2e-1] # 0.05
 DECREASE_RATE=true
@@ -56,4 +62,10 @@ NORM_THETA=true
 MAX_EPOCHS=50
 DIFF_THRESHOLD=0.005 # 0.005
 EXACT=false
-NUM_MC_TRAJECTORIES=16 #128 #32 #16 # 10
+NUM_MC_TRAJECTORIES=16        #128 #32 #16 # 10
+RESULTS_FILE="results.pkl.gz" # hardcoded, do not edit!
+
+# ===============================================
+# 5. EVALUATION OPTIONS =========================
+# ===============================================
+EVAL_DIR="${ROOT_DIR}/5-eval"
