@@ -5,12 +5,25 @@ from typing import List, Callable, Optional, Union, Tuple
 from model_learning import Trajectory, TeamModelDistTrajectory, State, TeamModelsDistributions, \
     StateActionProbTrajectory
 from model_learning.trajectory import generate_trajectory_distribution, generate_trajectory_distribution_tom
+from model_learning.util.math import weighted_nanmean
 from model_learning.util.mp import run_parallel
 from psychsim.agent import Agent
-from model_learning.util.math import weighted_nanmean
 
 __author__ = 'Pedro Sequeira'
 __email__ = 'pedrodbs@gmail.com'
+
+
+def mean_feature_counts(features: np.ndarray, probs: np.ndarray) -> np.ndarray:
+    """
+    Gets the mean feature counts/sums over trajectories, weighted by trajectory probability (prob. at last timestep).
+    :param np.ndarray features: the "raw" feature values for a set of trajectories, corresponding to an array of
+    shape (num_traj, timesteps, num_features).
+    :param np.ndarray probs: the probabilities associated with each timestep of each trajectory, corresponding to
+    an array of shape (num_traj, timesteps).
+    :rtype: np.ndarray
+    :return: an array of shape (num_features, ) containing the mean feature counts.
+    """
+    return weighted_nanmean(np.sum(features, axis=1), probs[:, -1, np.newaxis], axis=0)  # shape: (num_features, )
 
 
 def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
@@ -27,7 +40,7 @@ def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
     :return: If `unweighted=False`, returns an array of shape (num_features, ) containing the weighted mean counts for
     each feature over all trajectories. If `unweighted=True`, returns a tuple with an array of shape
     (num_trajectories, timesteps, num_features) containing the raw feature values for each timestep of each trajectory
-    and an array of shape (num_traj, timesteps, 1) containing the probabilities associated with each timestep of each
+    and an array of shape (num_traj, timesteps) containing the probabilities associated with each timestep of each
     trajectory.
     """
     # gets feature counts for each timestep of each trajectory
@@ -43,15 +56,14 @@ def empirical_feature_counts(trajectories: List[StateActionProbTrajectory],
         t_probs.append(probs)  # get probs during trajectory, shape: (timesteps, 1)
         t_fcs.append(fcs)  # shape: (timesteps, num_features)
 
-    t_probs = np.array(t_probs)[..., np.newaxis]  # shape: (num_traj, timesteps, 1)
+    t_probs = np.array(t_probs)  # shape: (num_traj, timesteps)
     t_fcs = np.array(t_fcs)  # shape: (num_traj, timesteps, num_features)
 
     if unweighted:
         return t_fcs, t_probs
 
-    # get weighted average of feature counts/sums
-    weighted_fcs = weighted_nanmean(t_fcs, t_probs, axis=0)  # shape: (timesteps, num_features)
-    return np.sum(weighted_fcs, axis=0)  # shape: (num_features, )
+    # gets average of feature counts/sums over trajectories, weighted by trajectory probability
+    return mean_feature_counts(t_fcs, t_probs)  # shape: (num_features, )
 
 
 def estimate_feature_counts(agent: Agent,
