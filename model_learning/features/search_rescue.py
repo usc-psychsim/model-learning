@@ -4,7 +4,7 @@ from typing import List, Optional
 from model_learning.environments.gridworld import NOOP_ACTION
 from model_learning.environments.search_rescue_gridworld import SearchRescueGridWorld, DIST_TO_VIC_FEATURE, \
     VICS_CLEARED_FEATURE, SEARCH_ACTION, TRIAGE_ACTION, EVACUATE_ACTION, CALL_ACTION, DIST_TO_HELP_FEATURE, \
-    NUM_EMPTY_FEATURE
+    NUM_EMPTY_FEATURE, AgentProfile
 from model_learning.features.linear import LinearRewardFeature, NumericLinearRewardFeature, ActionLinearRewardFeature, \
     LinearRewardVector
 from psychsim.agent import Agent
@@ -83,3 +83,26 @@ class SearchRescueRewardVector(LinearRewardVector):
         norm = np.linalg.norm(weights, 1)
         weights = weights / (norm if norm != 0 else 1.)  # normalize vector length
         super().set_rewards(agent, weights, model)
+
+    def get_profile(self, weights: np.ndarray) -> AgentProfile:
+        """
+        Gets an agent profile for this reward features with the given weights.
+        :param np.ndarray weights: the reward vectors to set to the agent profile.
+        :rtype: AgentProfile
+        :return: an agent profile for the same feature vector but with the given reward weights.
+        """
+        assert len(weights) == len(self.names), \
+            f'Length of reward weights: {len(weights)} does not match number of features: {len(self.names)}'
+
+        args = dict(zip(self.names, weights))
+        return AgentProfile(
+            dist_to_vic_feature=args.get(DIST_TO_VIC_FEATURE, None),
+            dist_to_help_feature=args.get(DIST_TO_HELP_FEATURE, None),
+            vics_cleared_feature=args.get(VICS_CLEARED_FEATURE, None),
+            num_empty_feature=args.get(NUM_EMPTY_FEATURE, None),
+            search_action=args.get(SEARCH_ACTION.title(), None),
+            triage_action=args.get(TRIAGE_ACTION.title(), None),
+            evacuate_action=args.get(EVACUATE_ACTION.title(), None),
+            noop_action=args.get(NOOP_ACTION.title(), None),
+            call_action=args.get(CALL_ACTION.title(), None)
+        )
