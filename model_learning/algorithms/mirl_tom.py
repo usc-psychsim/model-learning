@@ -126,6 +126,7 @@ class MIRLToM(MaxEntRewardLearning):
             expected_fc = estimate_feature_counts_tom(
                 self.agent, trajectories,
                 feature_func=feature_func,
+                exact=False,
                 num_mc_trajectories=self.num_mc_trajectories,
                 horizon=self.horizon,
                 threshold=self.prune_threshold,

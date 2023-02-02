@@ -5,7 +5,8 @@ from typing import Optional, List
 
 from model_learning import TeamModelDistTrajectory
 from model_learning.algorithms.mirl_tom import MIRLToM
-from model_learning.bin.sar import add_common_arguments, create_sar_world, create_agent_models, add_agent_arguments
+from model_learning.bin.sar import add_common_arguments, create_sar_world, add_agent_arguments, \
+    setup_modeling_agent
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.util.cmd_line import save_args, str2bool
 from model_learning.util.io import create_clear_dir, load_object, save_object
@@ -13,7 +14,6 @@ from model_learning.util.logging import change_log_handler, MultiProcessLogger
 from model_learning.util.plot import dummy_plotly
 from psychsim.agent import Agent
 from psychsim.reward import null_reward
-from psychsim.world import World
 
 __author__ = 'Haochen Wu, Pedro Sequeira'
 __email__ = 'hcaawu@gmail.com, pedrodbs@gmail.com'
@@ -67,12 +67,6 @@ def main():
     assert learner_ag in team_config, \
         f'The provided agent role: {learner_ag} is not defined in the configuration:  {list(team_config.keys())}'
 
-    # filters team_config only for the learner agent
-    logging.info(f'Selected agent for IRL: {learner_ag}')
-    for role in list(team_config.keys()):
-        if role != learner_ag:
-            del team_config[role]
-
     # checks model distributions in trajectories (considered consistent)
     models_dists = trajectories[0][0].models_dists
     for other, models in team_config[learner_ag].mental_models.items():
@@ -84,26 +78,17 @@ def main():
                 f'Model {model} of agent {other} not present in trajectories\' mental model distribution ' \
                 f'of agent {learner_ag}: {list(models_dists[other].keys())}'
 
-    # creates models of the other agents; set same agent params to model since models will be used to simulate the
-    # other agents' actions, on which the learner agent's actions are going to be then conditioned
-    create_agent_models(env, team_config, profiles,
-                        rationality=args.rationality,
-                        horizon=args.horizon,
-                        selection=args.selection)
+    # creates mental models for agent and set same agent params to models since they will only be used to simulate the
+    # other agents' actions, on which the learner agent's actions will be then conditioned
+    logging.info(f'Setting up agent for IRL: {learner_ag}')
+    setup_modeling_agent(learner_ag, env, team_config, profiles,
+                         rationality=args.rationality,
+                         horizon=args.horizon,
+                         selection=args.selection)
 
     # set learner's reward to 0 to ensure no GT reward leakage from team config file
     learner_ag: Agent = env.world.agents[learner_ag]
     learner_ag.setReward(null_reward(learner_ag.name))
-
-    # create new models of learner agent to avoid cycles
-    world: World = learner_ag.world
-    for other, models in team_config[learner_ag.name].mental_models.items():
-        for model in models.keys():
-            model = f'{other}_{model}'
-            learner_model = f'{model}_zero_{learner_ag.name}'
-            learner_ag.addModel(learner_model, parent=learner_ag.get_true_model())
-            world.setMentalModel(learner_ag.name, other, model, model=learner_model)
-            world.setMentalModel(other, learner_ag.name, learner_model, model=model)
 
     env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
