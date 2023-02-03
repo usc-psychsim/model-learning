@@ -8,7 +8,7 @@ from typing import List, Dict
 
 from model_learning import MultiagentTrajectory
 from model_learning.bin.sar import create_sar_world, add_common_arguments, add_agent_arguments, \
-    add_trajectory_arguments, plot_feature_counts, _get_estimated_feature_counts
+    add_trajectory_arguments, plot_feature_counts, get_estimated_feature_counts
 from model_learning.features.counting import empirical_feature_counts, mean_feature_counts
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.trajectory import copy_world
@@ -75,7 +75,7 @@ def main():
     orig_world = env.world
     for agent in team:
         env.world = copy_world(orig_world)  # replace world in env
-        efc = _get_estimated_feature_counts(
+        efc = get_estimated_feature_counts(
             trajectories, env, env.world.agents[agent.name], team_config, profiles, output_dir, args)
         estimated_fcs[agent.name] = efc  # stores mean, shape: (num_features, )
     env.world = orig_world

@@ -10,7 +10,7 @@ from model_learning import State, TeamModelDistTrajectory
 from model_learning.algorithms import ModelLearningResult
 from model_learning.algorithms.max_entropy import THETA_STR
 from model_learning.bin.sar import create_sar_world, add_common_arguments, add_agent_arguments, \
-    add_trajectory_arguments, TeamConfig, plot_feature_counts, _get_estimated_feature_counts
+    add_trajectory_arguments, TeamConfig, plot_feature_counts, get_estimated_feature_counts
 from model_learning.bin.sar.config import AgentConfig
 from model_learning.environments.search_rescue_gridworld import AgentProfile
 from model_learning.evaluation.metrics import policy_divergence, policy_mismatch_prob
@@ -38,7 +38,7 @@ def _get_team_policy(states: List[State], team: List[Agent], label: str) -> Dict
     logging.info(f'Computing the state policies for the {label} team...')
     team_policy: Dict[str, List[Distribution]] = {}
     for agent in team:
-        logging.info(f'\tComputing the state policies for agent {agent.name}...')
+        logging.info(f'Computing the state policies for agent {agent.name}...')
         team_policy[agent.name] = get_states_policy(
             agent, states, horizon=args.horizon, selection='distribution',
             processes=args.processes, seed=args.seed, use_tqdm=True)
@@ -118,17 +118,18 @@ def main():
     logging.info('Computing policies for expert and learner teams...')
 
     # compute expert and learner policies from the collected states
-    orig_world = copy_world(env.world)  # make copy of world for learner team
+    orig_world = copy_world(env.world)  # make copy of world for all computations
     expert_policy = _get_team_policy(states, team, 'experts / ground-truth')
 
     logging.info('----------------------------------------')
 
     # modify agents' reward functions from IRL results
-    learner_team = [orig_world.agents[agent.name] for agent in team]
-    orig_world = copy_world(orig_world)  # make copy of world for later
+    env.world = copy_world(orig_world)
+    learner_team = [env.world.agents[agent.name] for agent in team]
     for agent in learner_team:
         agent_lrv = SearchRescueRewardVector(env, agent)
         agent_lrv.set_rewards(agent, results[agent.name].stats[THETA_STR])
+    env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
     learner_policy = _get_team_policy(states, learner_team, 'learners / IRL')
 
     dummy_plotly()  # to clear plotly import message
@@ -170,7 +171,11 @@ def main():
     estimated_fcs: Dict[str, np.ndarray] = {}
     for agent in learner_team:
         env.world = copy_world(orig_world)  # replace world in env
-        efc = _get_estimated_feature_counts(trajectories, env, agent, team_config, profiles, output_dir, args)
+        agent = env.world.agents[agent.name]
+        agent_lrv = SearchRescueRewardVector(env, agent)
+        agent_lrv.set_rewards(agent, results[agent.name].stats[THETA_STR])
+        env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
+        efc = get_estimated_feature_counts(trajectories, env, agent, team_config, profiles, output_dir, args)
         estimated_fcs[agent.name] = efc  # stores mean, shape: (num_features, )
 
     logging.info(f'Estimated feature counts: {estimated_fcs}')

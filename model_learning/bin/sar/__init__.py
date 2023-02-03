@@ -353,13 +353,13 @@ def plot_feature_counts(features: np.ndarray,
              weights='Weights', x_label='Reward Features', y_label='Mean Count')
 
 
-def _get_estimated_feature_counts(trajectories: List[MultiagentTrajectory],
-                                  env: SearchRescueGridWorld,
-                                  agent: Agent,
-                                  team_config: TeamConfig,
-                                  profiles: AgentProfiles,
-                                  output_dir: str,
-                                  args: argparse.Namespace) -> np.ndarray:
+def get_estimated_feature_counts(trajectories: List[MultiagentTrajectory],
+                                 env: SearchRescueGridWorld,
+                                 agent: Agent,
+                                 team_config: TeamConfig,
+                                 profiles: AgentProfiles,
+                                 output_dir: str,
+                                 args: argparse.Namespace) -> np.ndarray:
     """
     Gets estimated feature counts via Monte Carlo trajectory sampling (possibly using model distribution sequence)
     :param list[MultiagentTrajectory] trajectories: the set of trajectories used to estimate feature counts.
