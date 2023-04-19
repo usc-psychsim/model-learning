@@ -1,10 +1,11 @@
+from typing import Tuple, Callable, Dict, Union, Optional, Literal, get_args, List, Any
+
 import numpy as np
 import scipy.spatial.distance as distance
 import scipy.stats as stats
-from typing import Tuple, Callable, Dict, Union, Optional, Literal, get_args
 
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedro.sequeira@sri.com'
+__email__ = 'pedrodbs@gmail.com'
 
 
 def variation_ratio(dist: np.ndarray) -> float:
@@ -346,7 +347,7 @@ def gaussian_diff_means(mean1: float, std1: int, n1: int, mean2: float, std2: fl
     """
     return \
         mean1 - mean2, \
-        np.sqrt((std1 * std1) / n1 + (std2 * std2) / n2).item(), \
+            np.sqrt((std1 * std1) / n1 + (std2 * std2) / n2).item(), \
         n1 - n2
 
 
@@ -733,6 +734,47 @@ def stretch_array(a: np.ndarray, length: int = 1, axis: int = 0) -> np.ndarray:
 
     idxs = np.round(np.linspace(0, a.shape[axis] - 1, length)).astype(int)
     return a.take(indices=idxs, axis=axis)  # sub/re-sample at +- regular intervals
+
+
+def array_from_nested_list(lst: List, def_val: Any = np.nan) -> np.ndarray:
+    """
+    Converts a nested list into a numpy array. The function supports lists of varying nesting depths and different
+    lengths.
+    :param list lst: the nested list to be converted into a numpy array.
+    :param def_val: the default value to fill in missing elements of shallower lists within the nested list.
+    :rtype: np.ndarray
+    :return: an array whose shape is determined by the deepest nested list and longer list within each fold (axis).
+    """
+
+    def _get_shape(l):
+        if isinstance(l, List):
+            shapes = [_get_shape(i) for i in l]
+            shapes = [s for s in shapes if isinstance(s, Tuple)]  # get children shapes
+            lens = np.array([len(s) for s in shapes])
+            if len(lens) == 0:
+                return len(l),  # no more nesting
+            max_len = np.max(lens)  # gets max shape among children
+            arr = np.zeros((len(shapes), max_len), int)
+            mask = np.arange(max_len) < np.array(lens)[:, None]
+            arr[mask] = np.concatenate(shapes)
+            shape = (len(l), *np.max(arr, axis=0).tolist())  # adds this list + children's shape
+            return shape
+        return None  # not a list, so leaf element
+
+    def _fill(a, l):
+        if isinstance(l, List):
+            if len(a.shape) == 1:
+                a[:len(l)] = l  # end of array, just copy list over
+            else:
+                for idx, i in enumerate(l):
+                    _fill(a[idx], i)
+        else:
+            a[tuple([0] * len(a.shape))] = l  # not a list, so no more nesting, fill first element of array only
+
+    shape = _get_shape(lst)
+    arr = np.full(shape, def_val)
+    _fill(arr, lst)
+    return arr
 
 
 def weighted_nanmean(a: np.ndarray,
