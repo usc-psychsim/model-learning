@@ -1,34 +1,37 @@
 import logging
 import logging.handlers
 import multiprocessing as mp
+from typing import Optional
 
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedro.sequeira@sri.com'
+__email__ = 'pedrodbs@gmail.com'
 
 
-def change_log_handler(log_file: str,
+def change_log_handler(log_file: Optional[str] = None,
                        level: int = logging.WARN,
                        append: bool = False,
                        fmt: str = '[%(asctime)s %(levelname)s] %(message)s'):
     """
     Changes root logger to log to given file and to the console.
-    :param str log_file: the path to the intended log file.
+    :param str log_file: the path to the log file. If `None`, only logging to the console will be set up.
     :param bool append: whether to append to the log file, if it exists already.
     :param int level: the level of the log messages below which will be saved to file.
     :param str fmt: the formatting string for the messages.
     :return:
     """
     root = logging.getLogger()
-    # for handler in log.handlers[:]:
-    #     log.removeHandler(handler)
-    file_handler = logging.FileHandler(log_file, 'a' if append else 'w')
     formatter = logging.Formatter(fmt)
-    file_handler.setFormatter(formatter)
-    root.addHandler(file_handler)
+
+    if log_file is not None:
+        file_handler = logging.FileHandler(log_file, 'a' if append else 'w')
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+        file_handler.level = level
+
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     root.addHandler(stream_handler)
-    root.level = file_handler.level = stream_handler.level = level
+    root.level = stream_handler.level = level
 
 
 class MultiProcessLogger(object):
