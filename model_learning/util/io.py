@@ -1,4 +1,5 @@
 import gzip
+import itertools as it
 import json
 import os
 import pickle
@@ -6,11 +7,12 @@ import re
 import shutil
 import tempfile
 import zipfile
-import numpy as np
 from typing import List, Dict
 
+import numpy as np
+
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedro.sequeira@sri.com'
+__email__ = 'pedrodbs@gmail.com'
 
 
 class _NpEncoder(json.JSONEncoder):
@@ -54,16 +56,21 @@ def get_file_name_without_extension(file_path: str) -> str:
     return os.path.basename(file_path).split('.')[0]
 
 
-def get_files_with_extension(dir_path: str, extension: str, sort: bool = True) -> List[str]:
+def get_files_with_extension(dir_path: str, extension: str, sort: bool = True, recursive: bool = False) -> List[str]:
     """
     Gets all files in the given directory with a given extension.
     :param str dir_path: the directory from which to retrieve the files.
     :param str extension: the extension of the files to be retrieved.
     :param bool sort: whether to sort list of files based on file name.
+    :param bool recursive: whether to recurse through subdirectories.
     :rtype: list[str]
     :return: the list of files in the given directory with the required extension.
     """
-    file_list = [os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith('.' + extension)]
+    if recursive:
+        file_list = list(it.chain(*[get_files_with_extension(subdir, extension, sort=False, recursive=False)
+                                    for subdir, *_ in os.walk(dir_path)]))
+    else:
+        file_list = [os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith('.' + extension)]
     if sort:
         file_list.sort()
     return file_list
