@@ -1,15 +1,14 @@
 import colorsys
-import os
-import tempfile
-import warnings
-from enum import IntEnum
-from typing import Union, List, Dict, Optional, Tuple
-
 import numpy as np
+import os
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 import scipy.stats as st
+import tempfile
+import warnings
+from enum import IntEnum
+from typing import Union, List, Dict, Optional, Tuple
 
 from .io import get_file_changed_extension
 from .math import stretch_array, weighted_nanmean, weighted_nanstd
@@ -46,9 +45,10 @@ def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame],
                          group_by: Optional[str] = None,
                          weights: Optional[Union[np.ndarray, str]] = None,
                          keepdims: bool = True,
-                         axis: int = None) -> Union[Tuple[np.ndarray, np.ndarray],
-                                                    Tuple[pd.DataFrame, pd.DataFrame],
-                                                    Tuple[pd.Series, pd.Series]]:
+                         axis: int = None) -> Union[
+    Tuple[np.ndarray, np.ndarray],
+    Tuple[pd.DataFrame, pd.DataFrame],
+    Tuple[pd.Series, pd.Series]]:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)  # avoid empty slice warnings
 
@@ -105,6 +105,14 @@ def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame],
                 ci = st.norm.interval(alpha=alpha, loc=mean, scale=std / np.sqrt(n))
             return mean, np.abs(mean - ci[0])
         raise ValueError(f'Unknown error statistic: {error_stat}')
+
+
+def _convert_data(data: Union[pd.DataFrame, pd.Series, Dict[str, np.ndarray]]) -> pd.DataFrame:
+    if isinstance(data, dict):
+        data = pd.DataFrame.from_dict(data, orient='index').transpose()
+    elif isinstance(data, pd.Series):
+        data = data.to_frame()
+    return data
 
 
 def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
@@ -185,9 +193,7 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     :rtype: go.Figure
     :return: the Plotly figure created with the given data.
     """
-    # transform to pandas dataframe first
-    if isinstance(data, dict):
-        data = pd.DataFrame.from_dict(data, orient='index').transpose()
+    data = _convert_data(data)  # transform to pandas dataframe first
 
     if group_by is not None:
         assert group_by in data.columns, f'Group by column {group_by} is not a valid column: {data.columns}'
@@ -412,9 +418,7 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
     :rtype: go.Figure
     :return: the Plotly figure created with the given data.
     """
-    # transform to pandas dataframe first
-    if isinstance(data, dict):
-        data = pd.DataFrame.from_dict(data, orient='index').transpose()
+    data = _convert_data(data)  # transform to pandas dataframe first
 
     if group_by is not None:
         assert group_by in data.columns, f'Group by column {group_by} is not a valid column: {data.columns}'
@@ -547,9 +551,7 @@ def plot_histogram(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
     :rtype: go.Figure
     :return: the Plotly figure created with the given data.
     """
-    # transform to pandas dataframe first
-    if isinstance(data, dict):
-        data = pd.DataFrame.from_dict(data, orient='index').transpose()
+    data = _convert_data(data)  # transform to pandas dataframe first
 
     # group by given column
     if group_by is not None and group_by in data.columns:
@@ -785,9 +787,7 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
     :rtype: go.Figure
     :return: the Plotly figure created with the given data.
     """
-    # transform to pandas dataframe first
-    if isinstance(data, dict):
-        data = pd.DataFrame.from_dict(data, orient='index').transpose()
+    data = _convert_data(data)  # transform to pandas dataframe first
 
     # group by given column
     is_grouped = group_by is not None and group_by in data.columns
