@@ -8,7 +8,7 @@ from joblib import Parallel, delayed, parallel_backend
 from .logging import MultiProcessLogger, create_mp_log_handler
 
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedro.sequeira@sri.com'
+__email__ = 'pedrodbs@gmail.com'
 
 
 class _ProgressParallel(Parallel):
