@@ -2,10 +2,11 @@ import argparse
 import logging
 from enum import IntEnum
 from typing import Optional
-from ..util.io import save_dict_json
+
+from .io import save_dict_json
 
 __author__ = 'Pedro Sequeira'
-__email__ = 'pedro.sequeira@sri.com'
+__email__ = 'pedrodbs@gmail.com'
 
 
 def save_args(args: argparse.Namespace, file_path: str):
