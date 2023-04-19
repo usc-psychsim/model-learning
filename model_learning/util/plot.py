@@ -455,6 +455,7 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
     # updates error bars
     fig.update_traces(dict(error_y=dict(width=ERROR_BAR_WIDTH, thickness=ERROR_BAR_THICKNESS,
                                         visible=bool(plot_error and pd.notna(err_data).sum().sum() > 0))))
+    err_data.columns = [str(col) for col in err_data.columns]
     for shape in fig.data:
         shape.update(error_y=dict(array=err_data[shape.name], type='data', symmetric=True))
 
