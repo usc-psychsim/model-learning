@@ -10,20 +10,29 @@ __email__ = 'pedrodbs@gmail.com'
 def change_log_handler(log_file: Optional[str] = None,
                        level: int = logging.WARN,
                        append: bool = False,
-                       fmt: str = '[%(asctime)s %(levelname)s] %(message)s'):
+                       fmt: str = '[%(asctime)s %(levelname)s] %(message)s',
+                       rotating: bool = False,
+                       max_bytes: int = 0):
     """
     Changes root logger to log to given file and to the console.
     :param str log_file: the path to the log file. If `None`, only logging to the console will be set up.
     :param bool append: whether to append to the log file, if it exists already.
     :param int level: the level of the log messages below which will be saved to file.
     :param str fmt: the formatting string for the messages.
-    :return:
+    :param bool rotating: whether to rotate the log file whenever a maximum file size (`max_bytes`) is reached. When
+    that occurs, a new log file with suffix extension `.1` is created containing the old log.
+    :param int max_bytes: the maximum log file size for rotation. Use with `rotating=True`.
     """
     root = logging.getLogger()
     formatter = logging.Formatter(fmt)
 
     if log_file is not None:
-        file_handler = logging.FileHandler(log_file, 'a' if append else 'w')
+        mode = 'a' if append else 'w'
+        if rotating:
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file, mode=mode, maxBytes=max_bytes, backupCount=1)
+        else:
+            file_handler = logging.FileHandler(log_file, mode=mode)
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
         file_handler.level = level
@@ -48,13 +57,18 @@ class MultiProcessLogger(object):
                  log_file: str,
                  level: int = logging.WARN,
                  append: bool = False,
-                 fmt: str = '[%(asctime)s %(levelname)s] %(message)s'):
+                 fmt: str = '[%(asctime)s %(levelname)s] %(message)s',
+                 rotating: bool = False,
+                 max_bytes: int = 0):
         """
         Creates a new multiprocess logger.
         :param str log_file: the path to the intended log file.
         :param bool append: whether to append to the log file, if it exists already.
         :param int level: the level of the log messages below which will be saved to file.
         :param str fmt: the formatting string for the messages.
+        :param bool rotating: whether to rotate the log file whenever a maximum file size (`max_bytes`) is reached. When
+        that occurs, a new log file with suffix extension `.1` is created containing the old log.
+        :param int max_bytes: the maximum log file size for rotation. Use with `rotating=True`.
         """
 
         assert self.queue is None, f'Another MultiProcessLogger has been created!'
@@ -62,14 +76,20 @@ class MultiProcessLogger(object):
         # creates queue and log listener process
         m = mp.Manager()
         queue = MultiProcessLogger.queue = m.Queue()
-        self.listener = mp.Process(target=self._listener, args=(queue, log_file, level, append, fmt))
+        self.listener = mp.Process(target=self._listener,
+                                   args=(queue, log_file, level, append, fmt, rotating, max_bytes))
         self.listener.start()
 
         # modifies the root logger
         create_mp_log_handler(MultiProcessLogger.queue)
 
-    def _listener(self, queue: mp.Queue, log_file: str, level: int, append: bool, fmt: str):
-        change_log_handler(log_file, level, append, fmt)
+    def _listener(self, queue: mp.Queue, log_file: str, level: int,
+                  append: bool, fmt: str, rotating: bool, max_bytes: int):
+        # create the central logger
+        change_log_handler(log_file=log_file, level=level, append=append,
+                           fmt=fmt, rotating=rotating, max_bytes=max_bytes)
+
+        # waits for new log messages and dispatches them to the logger
         while True:
             record = queue.get()
             if record is None:  # waits for None to exit log listener process
