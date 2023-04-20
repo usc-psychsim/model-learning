@@ -112,6 +112,8 @@ def _convert_data(data: Union[pd.DataFrame, pd.Series, Dict[str, np.ndarray]]) -
         data = pd.DataFrame.from_dict(data, orient='index').transpose()
     elif isinstance(data, pd.Series):
         data = data.to_frame()
+    elif not isinstance(data, pd.DataFrame):
+        raise ValueError(f'Unknown data type provided: {data}')
     return data
 
 
@@ -791,14 +793,9 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
 
     # group by given column
     is_grouped = group_by is not None and group_by in data.columns
-    if is_grouped:
-        # take the mean over groups for each variable
-        gb = data.groupby(group_by)
-        data, _ = _get_mean_error_stat(gb, ErrorStat.StdDev, axis=0)
-        data.index.names = [group_by]
-    else:
-        # take the mean over variables
-        data, err_data = _get_mean_error_stat(data, ErrorStat.StdDev, axis=0)
+
+    # take the mean over groups for each variable (is_grouped) or the mean over variables (not is_grouped)
+    data, _ = _get_mean_error_stat(data, ErrorStat.StdDev, group_by=group_by if is_grouped else None, axis=0)
 
     if isinstance(data, pd.Series):
         data = data.to_frame().T  # get dataframe
