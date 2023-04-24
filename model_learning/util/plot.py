@@ -24,6 +24,7 @@ ERROR_AREA_ALPHA = 0.3
 ERROR_AREA_LINE_WIDTH = 0
 ERROR_BAR_THICKNESS = 1
 ERROR_BAR_WIDTH = 6
+MARKER_SIZE = 10
 RADAR_ALPHA = 0.4
 ALL_FONT_SIZE = 16
 AXES_TITLE_FONT_SIZE = 18
@@ -754,6 +755,7 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
                group_by: str = None,
                min_val: Optional[float] = None,
                max_val: Optional[float] = None,
+               alpha: float = RADAR_ALPHA,
                show_legend: bool = False,
                show_plot: bool = False,
                **kwargs) -> go.Figure:
@@ -782,6 +784,7 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
     `N` new traces on the plot, one for each possible value of the `group_by` column.
     :param float min_val: the minimal value of the polar axes.
     :param float max_val: the maximal value of the polar axes.
+    :param float alpha: the transparency (alpha channel) value of radar shapes.
     :param bool show_legend: whether to show the plot's legend.
     :param bool show_plot: whether to show the plot, in which case a new browser tab would be opened displaying the
     interactive Plotly plot.
@@ -816,12 +819,14 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
     thetas = list(data.columns) + [data.columns[0]]  # add first point to close final segment
     for i, (idx, row) in enumerate(data.iterrows()):
         color = colors[i % len(colors)] if colors is not None else None
-        fill_color = None if color is None else f'rgba{color[3:-1]}, {RADAR_ALPHA})'  # add custom alpha
+        fill_color = None if color is None else f'rgba{color[3:-1]}, {alpha})'  # add custom alpha
         r = list(row.values) + [row.values[0]]  # add first point to close final segment
         hover_template = hover_template_base + (f'<br>{group_by}: {idx}' if is_grouped else '')
         fig.add_trace(go.Scatterpolar(
             theta=thetas, r=r, hovertemplate=hover_template,
-            line=dict(color=color), fillcolor=fill_color, fill='toself', name=str(idx),
+            line=dict(width=1, color=color),
+            marker=dict(symbol=i, size=MARKER_SIZE),
+            fillcolor=fill_color, fill='toself', name=str(idx),
         ))
 
     # plots mean
@@ -830,7 +835,8 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
         vals_mean += [vals_mean[0]]  # add first point to close final segment
         fig.add_trace(go.Scatterpolar(
             theta=thetas, r=vals_mean, hovertemplate=hover_template_base,
-            line=dict(width=2, dash='dash', color='grey'), name='Mean'
+            line=dict(width=2, dash='dash', color='grey'),
+            marker=dict(symbol=len(data), size=MARKER_SIZE), name='Mean'
         ))
 
     # format layout
@@ -842,9 +848,12 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
             radialaxis=dict(
                 visible=True,
                 showline=False,
+                tickfont_size=AXES_TITLE_FONT_SIZE - 2,
                 range=[min_val, max_val] if min_val is not None and max_val is not None else None
             ),
-            angularaxis=dict(gridcolor='darkgrey', linecolor='black')
+            angularaxis=dict(gridcolor='darkgrey',
+                             linecolor='black',
+                             tickfont_size=AXES_TITLE_FONT_SIZE)
         ),
     )
 
