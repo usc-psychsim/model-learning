@@ -71,11 +71,12 @@ def run_parallel(func: Callable,
 
 
 def _log_processor(func: Callable, args, queue: mp.Queue) -> Any:
-    # set root logger of this process to redirect to queue
-    create_mp_log_handler(queue)
+    if MultiProcessLogger.queue is None:
+        # if not already set, set root logger of this process to redirect to queue
+        create_mp_log_handler(queue)
 
-    # override singleton queue in this process to allow for nested calls to `run_parallel`
-    MultiProcessLogger.queue = queue
+        # override singleton queue in this process to allow for nested calls to `run_parallel`
+        MultiProcessLogger.queue = queue
 
     # execute function
     star = isinstance(args, tuple)  # star if function is multi-argument
