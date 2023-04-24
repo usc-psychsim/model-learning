@@ -70,8 +70,7 @@ class MultiProcessLogger(object):
         that occurs, a new log file with suffix extension `.1` is created containing the old log.
         :param int max_bytes: the maximum log file size for rotation. Use with `rotating=True`.
         """
-
-        assert self.queue is None, f'Another MultiProcessLogger has been created!'
+        assert MultiProcessLogger.queue is None, f'Another MultiProcessLogger has been created!'
 
         # creates queue and log listener process
         m = mp.Manager()
