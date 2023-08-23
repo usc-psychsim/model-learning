@@ -32,13 +32,15 @@ def copy_world(world: World) -> World:
     """
     new_world = copy.copy(world)
     new_world.state = copy.deepcopy(world.state)
-    new_world.agents = copy.copy(new_world.agents)
+    new_world.symbols = world.symbols.copy()
+    new_world.symbolList = world.symbolList.copy()
+    new_world.agents = copy.copy(world.agents)
     for name, agent in world.agents.items():
         # clones agent with exception of world
         agent.world = None
         # TODO tentative
         new_agent = copy.copy(agent)
-        new_agent.models = agent.models.copy()
+        new_agent.models = copy.deepcopy(agent.models)
         new_agent.modelList = agent.modelList.copy()
         new_world.agents[name] = new_agent
         new_agent.world = new_world  # assigns cloned world to cloned agent
