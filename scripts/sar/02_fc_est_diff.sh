@@ -8,11 +8,6 @@ source "$DIR/00_constants.sh"
 cd "$DIR/../../.." || exit
 clear
 
-RESULTS=""
-for AGENT in "${AGENTS[@]}"; do
-  RESULTS="${RESULTS} ${MIRL_DIR}/${AGENT}/${RESULTS_FILE}"
-done
-
 echo "========================================"
 echo "Comparing empirical vs. estimated feature counts, saving results in ${FC_EST_DIFF_DIR}..."
 
