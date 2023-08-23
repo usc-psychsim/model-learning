@@ -75,8 +75,9 @@ def main():
     orig_world = env.world
     for agent in team:
         env.world = copy_world(orig_world)  # replace world in env
+        agent = env.world.agents[agent.name]
         efc = get_estimated_feature_counts(
-            trajectories, env, env.world.agents[agent.name], team_config, profiles, output_dir, args)
+            trajectories, env, agent, team_config, profiles, output_dir, args)
         estimated_fcs[agent.name] = efc  # stores mean, shape: (num_features, )
     env.world = orig_world
 
@@ -92,7 +93,7 @@ def main():
         agent_lrv = SearchRescueRewardVector(env, agent)
         plot_bar(pd.DataFrame(diff.reshape(1, -1), columns=agent_lrv.names),
                  'Feature Count Difference',
-                 os.path.join(output_dir, f'fc-diff-{agent}.{args.img_format}'),
+                 os.path.join(output_dir, f'fc-diff-{agent.name}.{args.img_format}'),
                  x_label='Reward Features', y_label='Abs. Difference')
         logging.info(f'Feature count difference for agent {agent.name}: {diff} (norm: {norm_diff:.2f})')
         fc_diffs[agent.name] = norm_diff

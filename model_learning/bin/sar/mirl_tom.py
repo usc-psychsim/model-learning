@@ -93,7 +93,7 @@ def main():
     env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
     logging.info('========================================')
-    logging.info(f'Performing decentralized IRL for agent: {learner_ag}...')
+    logging.info(f'Performing decentralized IRL for agent: {learner_ag.name}...')
 
     learner_rwd_vector = SearchRescueRewardVector(env, learner_ag)
     alg = MIRLToM(

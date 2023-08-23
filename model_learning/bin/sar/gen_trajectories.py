@@ -1,20 +1,18 @@
 import argparse
 import logging
-import numpy as np
 import os
 import pandas as pd
 from typing import List, Dict
 
 from model_learning import TeamTrajectory
 from model_learning.bin.sar import create_sar_world, add_common_arguments, create_mental_models, add_agent_arguments, \
-    add_trajectory_arguments
-from model_learning.features.counting import empirical_feature_counts, feature_counts_by_trajectory
+    add_trajectory_arguments, plot_feature_counts
+from model_learning.features.counting import empirical_feature_counts
 from model_learning.features.search_rescue import SearchRescueRewardVector
 from model_learning.trajectory import get_trajectory_action_counts
 from model_learning.util.cmd_line import save_args
 from model_learning.util.io import create_clear_dir, save_object
 from model_learning.util.logging import change_log_handler
-from model_learning.util.math import weighted_nanmean
 from model_learning.util.plot import plot_bar, dummy_plotly
 from psychsim.action import Action
 
@@ -83,13 +81,10 @@ def main():
     for role in team_config.keys():
         reward_vector = SearchRescueRewardVector(env, env.world.agents[role])
         feature_func = lambda s: reward_vector.get_values(s)
-        fcs, probs = empirical_feature_counts(
+        features, probs = empirical_feature_counts(
             team_trajectories, feature_func, unweighted=True)  # shape: (num_traj, timesteps, num_features)
-        fcs, probs = feature_counts_by_trajectory(fcs, probs)
-        df = pd.DataFrame(np.concatenate([fcs, probs], axis=1), columns=reward_vector.names + ['Weights'])
-        plot_bar(df, 'Mean Empirical Feature Counts',
-                 os.path.join(stats_path, f'feature-counts-{role.lower()}.{args.img_format}'),
-                 weights='Weights', x_label='Reward Features', y_label='Mean Count')
+        plot_feature_counts(features, probs, title=f'{role} Mean Empirical Feature Counts',
+                            labels=reward_vector.names, output_dir=output_dir, img_format=args.img_format)
 
     # gets actions counts for each agent
     action_counts: Dict[str, Dict[str, List[int]]] = {}

@@ -379,6 +379,7 @@ def get_estimated_feature_counts(trajectories: List[MultiagentTrajectory],
                          rationality=args.rationality,
                          horizon=args.horizon,
                          selection=args.selection)
+
     env.world.dependency.getEvaluation()  # "compile" dynamics to speed up graph computation in parallel worlds
 
     logging.info(f'Estimating feature counts for agent {agent.name} '
