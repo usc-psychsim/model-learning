@@ -54,9 +54,9 @@ NOTES_FONT_SIZE = 6
 NOTES_FONT_COLOR = 'dimgrey'
 POLICY_MARKER_COLOR = 'dimgrey'
 
-TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/medic.png')
-NON_TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/explorer.png')
-VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '/../res/sar/victim.png')
+TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../data/sar/medic.png')
+NON_TRIAGE_ICON = os.path.abspath(os.path.dirname(__file__) + '/../data/sar/explorer.png')
+VICTIM_ICON = os.path.abspath(os.path.dirname(__file__) + '/../data/sar/victim.png')
 
 
 class AgentProfile(NamedTuple):

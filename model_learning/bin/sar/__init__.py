@@ -43,7 +43,7 @@ BELIEF_THRESHOLD = 0  # 1e-5
 PRUNE_THRESHOLD = 1e-2
 PROCESSES = -1
 CLEAR = False  # True  # False
-PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../res/sar/profiles.json')
+PROFILES_FILE_PATH = os.path.abspath(os.path.dirname(__file__) + '/../../data/sar/profiles.json')
 
 # default trajectory generation params
 NUM_TRAJECTORIES = 16  # 5  # 10
