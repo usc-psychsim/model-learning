@@ -230,12 +230,6 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
                 world.setMentalModel(agent.name, other, dist, model=None)
                 logging.info(f'Set agent {role}\'s mental models of agent {other}:\n{dist}')
 
-            # zero_level = agent.get_true_model()
-            # zero_level = agent.zero_level(static=False, sample=True)
-            # zero_level = f'{agent.name}_zero'
-            # agent.addModel(zero_level, parent=agent.get_true_model())
-            # agent.setAttribute('R', copy.copy(agent.getAttribute('R', model=agent.get_true_model())), model=zero_level)
-
             # also, set mental model of other agents' models to a zero-level model
             # (exact same behavior as true agent) to avoid infinite recursion
             for other, models_probs in ag_conf.mental_models.items():
@@ -244,14 +238,7 @@ def create_mental_models(env: SearchRescueGridWorld, team_config: TeamConfig, pr
 
                     zero_level = f'{agent.name}_zero_{other}_{model}'
                     agent.addModel(zero_level, parent=agent.get_true_model())
-                    # agent.setAttribute('level', 0, model=zero_level)
-                    # agent.setAttribute('beliefs', True, model=zero_level)
                     world.setMentalModel(agent.name, other, model, model=zero_level)
-
-                    # if world.agents[other_ag].getAttribute('beliefs', model= f'{other_ag}_{model}') is True:
-                    #     world.agents[other_ag].create_belief_state(model=f'{other_ag}_{model}')
-
-                    # world.agents[other].create_belief_state(model=model)
                     world.setMentalModel(other, agent.name, zero_level, model=model)
 
 
