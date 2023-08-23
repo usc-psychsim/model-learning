@@ -1,0 +1,18 @@
+{
+  "Medic": {
+    "profile": "GroundTruth",
+    "mental_models": {
+      "Explorer": {
+        "GroundTruth": 1
+      }
+    }
+  },
+  "Explorer": {
+    "profile": "GroundTruth",
+    "mental_models": {
+      "Medic": {
+        "GroundTruth": 1
+      }
+    }
+  }
+}
