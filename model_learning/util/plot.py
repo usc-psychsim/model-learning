@@ -1,14 +1,15 @@
 import colorsys
-import numpy as np
 import os
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objs as go
-import scipy.stats as st
 import tempfile
 import warnings
 from enum import IntEnum
 from typing import Union, List, Dict, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objs as go
+import scipy.stats as st
 
 from .io import get_file_changed_extension
 from .math import stretch_array, weighted_nanmean, weighted_nanstd
@@ -59,12 +60,13 @@ def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame],
             std = weighted_nanstd(data, weights=weights, axis=axis, keepdims=keepdims)
             n = data.shape[axis or 0]
         elif isinstance(data, pd.DataFrame) and (weights is None or isinstance(weights, str)):
-            if group_by is not None and group_by in data.columns:
+            if group_by is not None:
                 mean_dfs: List[pd.DataFrame] = []
                 std_dfs: List[pd.DataFrame] = []
-                for g, _df in data.groupby(group_by):
+                for g, _df in data.groupby(group_by, sort=False):
                     # compute mean and std for each group
-                    _df = _df.drop(group_by, axis=1)
+                    if group_by in _df.columns:
+                        _df = _df.drop(group_by, axis=1)
                     mean_df, std_df = _get_mean_error_stat(
                         _df, error_stat=error_stat, weights=weights, keepdims=keepdims, axis=axis)
                     mean_df[group_by] = g
@@ -101,9 +103,9 @@ def _get_mean_error_stat(data: Union[np.ndarray, pd.DataFrame],
             # see: https://vedexcel.com/how-to-calculate-confidence-intervals-in-python/
             alpha = 0.95 if error_stat == ErrorStat.CI95 else 0.99
             if n < 30:
-                ci = st.t.interval(alpha=alpha, df=n - 1, loc=mean, scale=std / np.sqrt(n))
+                ci = st.t.interval(confidence=alpha, df=n - 1, loc=mean, scale=std / np.sqrt(n))
             else:
-                ci = st.norm.interval(alpha=alpha, loc=mean, scale=std / np.sqrt(n))
+                ci = st.norm.interval(confidence=alpha, loc=mean, scale=std / np.sqrt(n))
             return mean, np.abs(mean - ci[0])
         raise ValueError(f'Unknown error statistic: {error_stat}')
 
@@ -128,8 +130,8 @@ def plot_timeseries(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
                     var_label: Optional[str] = None,
                     palette: Optional[Union[List[str], str]] = DEF_PALETTE,
                     template: str = DEF_TEMPLATE,
-                    width: Optional[int] = 800,
-                    height: Optional[int] = 600,
+                    width: Optional[int] = 600,
+                    height: Optional[int] = 450,
                     plot_mean: bool = False,
                     normalize_samples: Optional[int] = None,
                     average: bool = False,
@@ -365,8 +367,8 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
              y_label: Optional[str] = None,
              palette: Optional[Union[List[str], str]] = DEF_PALETTE,
              template: str = DEF_TEMPLATE,
-             width: Optional[int] = 800,
-             height: Optional[int] = 600,
+             width: Optional[int] = 600,
+             height: Optional[int] = 450,
              plot_mean: bool = False,
              plot_error: bool = True,
              error_stat: ErrorStat = ErrorStat.CI95,
@@ -423,8 +425,6 @@ def plot_bar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]],
     """
     data = _convert_data(data)  # transform to pandas dataframe first
 
-    if group_by is not None:
-        assert group_by in data.columns, f'Group by column {group_by} is not a valid column: {data.columns}'
     if weights is not None:
         assert weights in data.columns, f'Weights column {weights} is not a valid column: {data.columns}'
 
@@ -504,8 +504,8 @@ def plot_histogram(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
                    var_label: Optional[str] = None,
                    palette: Optional[Union[List[str], str]] = DEF_HIST_PALETTE,
                    template: str = DEF_TEMPLATE,
-                   width: Optional[int] = 800,
-                   height: Optional[int] = 600,
+                   width: Optional[int] = 600,
+                   height: Optional[int] = 450,
                    plot_mean: bool = False,
                    normalize: bool = False,
                    n_bins: Optional[int] = None,
@@ -598,7 +598,7 @@ def plot_histogram(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
             # checks color palette, discretize if needed
             colors = palette
             if (isinstance(colors, str) or
-                    (isinstance(colors, list) and len(x_vals) > len(colors) > 1)):
+                    (isinstance(colors, list) and len(x_vals) != len(colors))):
                 colors = px.colors.sample_colorscale(colors, np.linspace(0, 1, len(x_vals)))
 
             # create a bar plot by hand
@@ -644,8 +644,8 @@ def plot_matrix(data: Union[pd.DataFrame, np.ndarray],
                 var_label: Optional[str] = None,
                 palette: Optional[Union[List[str], str]] = DEF_MATRIX_PALETTE,
                 template: str = DEF_TEMPLATE,
-                width: Optional[int] = 800,
-                height: Optional[int] = 600,
+                width: Optional[int] = 600,
+                height: Optional[int] = 450,
                 normalize: bool = False,
                 show_scale: bool = True,
                 show_values: bool = True,
@@ -749,8 +749,8 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
                value_label: Optional[str] = None,
                palette: Optional[Union[List[str], str]] = DEF_PALETTE,
                template: str = DEF_TEMPLATE,
-               width: Optional[int] = 800,
-               height: Optional[int] = 600,
+               width: Optional[int] = 600,
+               height: Optional[int] = 450,
                plot_mean: bool = False,
                group_by: str = None,
                min_val: Optional[float] = None,
@@ -865,6 +865,92 @@ def plot_radar(data: Union[pd.DataFrame, Dict[str, np.ndarray], Dict[str, float]
     return fig
 
 
+def plot_embeddings(data: Union[pd.DataFrame, Dict[str, np.ndarray]],
+                    label_col: str,
+                    title: Optional[str] = None,
+                    output_img: Optional[str] = None,
+                    save_csv: bool = True,
+                    save_json: bool = True,
+                    palette: Optional[Union[List[str], str]] = DEF_PALETTE,
+                    template: str = DEF_TEMPLATE,
+                    width: Optional[int] = 600,
+                    height: Optional[int] = 450,
+                    dims: int = 2,
+                    seed: int = 17,
+                    show_legend: bool = True,
+                    show_plot: bool = False,
+                    **kwargs) -> go.Figure:
+    """
+    Performs dimensionality reduction over the given set of numeric feature vectors, considered as embeddings, and
+    plots a 2D or 3D scatter plot from the resulting projection colored by the corresponding class labels.
+    Note: requires the `scikit-learn` package to perform t-SNE dimensionality reduction.
+    :param pd.DataFrame data: the object containing the data to be plotted. If a `dict` is given, then each key
+    corresponds to the name of an embedding variable/feature, and values arrays of shape (n_embed, ) with the values
+    for each instance/datapoint.
+    :param str label_col: the name of the column containing the labels of each embedding/vector for color plotting.
+    :param str title: the title of the plot.
+    :param str output_img: the path to the image file in which to save the plot.
+    :param bool save_csv: whether to save the (possibly transformed) data in a CSV file.
+    :param bool save_json: whether to save the plot data to a Json file for later retrieval/loading.
+    :param str or list[str] palette: the name of the Plotly palette used to color each series line, or a list containing
+    a string representation for the colors to be used. See: https://plotly.com/python/builtin-colorscales/.
+    :param str template: the name of the Plotly layout template to be used. Defaults to "plotly_white".
+    See: https://plotly.com/python/templates/.
+    :param int width: the plot's width.
+    :param int height: the plot's height.
+    :param int dims: the number of dimensions of the resulting projection space (either 2 or 3).
+    :param int seed: the seed used by the t-SNE algorithm.
+    :param bool show_legend: whether to show the plot's legend.
+    :param bool show_plot: whether to show the plot, in which case a new browser tab would be opened displaying the
+    interactive Plotly plot.
+    :param kwargs: extra arguments passed to `format_and_save_plot`.
+    :rtype: go.Figure
+    :return: the Plotly figure created with the given data.
+    """
+    data = _convert_data(data)  # transform to pandas dataframe first
+
+    # perform dimensionality reduction on the features/embedding
+    from sklearn.manifold import TSNE
+    tsne = TSNE(n_components=dims, random_state=seed)
+    projections = tsne.fit_transform(data.drop(label_col, axis=1).values)
+
+    # map labels to colors (discretize if needed)
+    labels = sorted(data[label_col].unique())
+    colors = palette
+    if (isinstance(colors, str) or
+            (isinstance(colors, list) and len(labels) > len(colors) + 1 > 1)):
+        colors = px.colors.sample_colorscale(colors, np.linspace(0, 1, len(labels)))
+    colors = {label: colors[i] for i, label in enumerate(labels)}
+
+    if dims == 2:
+        fig = px.scatter(
+            projections, x=0, y=1,
+            title=title,
+            color=data[label_col].values, labels={'color': label_col},
+            color_discrete_map=colors,
+            template=template,
+        )
+        fig.update_layout(xaxis_title='Dim 0', yaxis_title='Dim 1')
+    elif dims == 3:
+        fig = px.scatter_3d(
+            projections, x=0, y=1, z=2,
+            title=title,
+            color=data[label_col], labels={'color': label_col},
+            color_discrete_map=colors,
+            template=template,
+        )
+        fig.update_layout(scene=dict(xaxis_title='Dim 0', yaxis_title='Dim 1', zaxis_title='Dim 2'))
+    else:
+        raise ValueError(f'Only visualization up to 3 dimensions supported, but {dims} requested')
+
+    # format and save plot
+    format_and_save_plot(
+        fig, data, title, output_img, save_csv, False, save_json, width, height, show_legend, show_plot,
+        **kwargs)
+
+    return fig
+
+
 def format_and_save_plot(fig: go.Figure,
                          data: Optional[pd.DataFrame] = None,
                          title: Optional[str] = None,
@@ -872,8 +958,8 @@ def format_and_save_plot(fig: go.Figure,
                          save_csv: bool = True,
                          save_index: bool = False,
                          save_json: bool = True,
-                         width: Optional[int] = 800,
-                         height: Optional[int] = 600,
+                         width: Optional[int] = 600,
+                         height: Optional[int] = 450,
                          show_legend: bool = True,
                          show_plot: bool = False,
                          margin: Optional[Dict[str, float]] = None,
