@@ -1,7 +1,7 @@
 import argparse
 import logging
 from enum import IntEnum
-from typing import Optional
+from typing import Optional, Type
 
 from .io import save_dict_json
 
@@ -58,6 +58,31 @@ def str2log_level(v: str or int) -> int:
         return logging.WARN if v == 0 else logging.INFO if v == 1 else logging.DEBUG if v == 2 else v
 
     raise argparse.ArgumentTypeError('Valid log level expected.')
+
+
+class EnumParser(object):
+    """
+    A command-line parser for IntEnum type variables.
+    """
+
+    def __init__(self, enum_type: Type[IntEnum]):
+        """
+        Creates a new enumeration parser.
+        :param IntEnum enum_type: an IntEnum subclass.
+        """
+        self.enum_type: Type[IntEnum] = enum_type
+
+    def parse(self, v: str) -> IntEnum:
+        """
+        Converts the given string parsed using `argparse` to an IntEnum instance.
+        :param str v: the argument value to be converted.
+        :rtype: IntEnum
+        :return: an `enum_type` instance.
+        """
+        try:
+            return self.enum_type[v.lower()]
+        except KeyError:
+            raise argparse.ArgumentTypeError('Valid enum type expected.')
 
 
 class ErrorMsgArgumentParser(argparse.ArgumentParser):
